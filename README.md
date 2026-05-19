@@ -1,2 +1,3 @@
-# dietex-produktionsmonitor
-DieTex Live Produktionsmonitor
+# DieTex Produktionsmonitor
+
+Live Produktionsmonitor mit Supabase, Tablets, Stationen und Monitoransichten.

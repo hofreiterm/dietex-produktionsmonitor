@@ -1,1 +1,469 @@
+import React, { useEffect, useMemo, useState } from "react";
+import ReactDOM from "react-dom/client";
+import { createClient } from "@supabase/supabase-js";
 
+const supabase = createClient(
+  "https://dkdusyigghttjxdpbofy.supabase.co",
+  "sb_publishable_Mr55Ge_ud02QSvXwWj0hTg_EQa19pPs"
+);
+
+const CATEGORIES = {
+  Bettwäsche: ["Deckenbezüge + Leintücher", "Polsterbezüge"],
+  Frottee: ["Frottee", "Spannleintücher", "Bademäntel"],
+  Tischwäsche: ["Tischtücher", "Deckservietten", "Mundservietten"],
+  Putzerei: ["Putzerei"],
+};
+
+const STATIONS = [
+  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["Polsterbezüge", "Mundservietten", "Tischtücher"] },
+  { key: "jenway-grossteile", name: "Jenway Großteile", items: ["Deckenbezüge + Leintücher", "Deckservietten"] },
+  { key: "jenway-frottee", name: "Jenway Frottee", items: ["Frottee"] },
+  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["Bademäntel", "Spannleintücher"] },
+  { key: "putzerei", name: "Putzerei", items: ["Putzerei"] },
+];
+
+const ROWS = [1, 2, 3, 4, 5];
+const PLACES = 10;
+
+function Button({ children, active, className = "", ...props }) {
+  return (
+    <button
+      type="button"
+      className={`rounded-xl border px-4 py-2 text-sm font-semibold transition active:scale-[0.98] ${
+        active ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white hover:bg-slate-50"
+      } ${className}`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Input(props) {
+  return <input {...props} className={`rounded-xl border border-slate-300 px-4 py-2 outline-none focus:ring-2 focus:ring-blue-300 ${props.className || ""}`} />;
+}
+
+function Logo() {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-red-600 font-black text-red-600">DIE</div>
+      <div>
+        <div className="text-2xl font-black text-sky-600">WÄSCHEREI</div>
+        <div className="text-xs font-bold text-sky-600">by <span className="text-red-600">♡</span> DieTex</div>
+      </div>
+    </div>
+  );
+}
+
+function categoryStyle(cat, selected) {
+  const styles = {
+    Bettwäsche: "border-blue-400 bg-blue-50 text-blue-900",
+    Frottee: "border-green-400 bg-green-50 text-green-900",
+    Tischwäsche: "border-orange-400 bg-orange-50 text-orange-900",
+    Putzerei: "border-violet-400 bg-violet-50 text-violet-900",
+  };
+  return `${styles[cat]} ${selected ? "scale-105 ring-4 ring-blue-200 shadow-lg" : "opacity-90"}`;
+}
+
+function getContainerPlan(selected) {
+  const plan = [];
+  if (selected.includes("Bettwäsche")) plan.push({ type: "Bettwäsche", items: ["Deckenbezüge + Leintücher", "Polsterbezüge"] });
+  if (selected.includes("Tischwäsche")) plan.push({ type: "Tischwäsche", items: ["Tischtücher", "Deckservietten", "Mundservietten"] });
+  if (selected.includes("Frottee")) {
+    plan.push({ type: "Frottee", items: ["Frottee"] });
+    plan.push({ type: "SPLT + BM", items: ["Spannleintücher", "Bademäntel"] });
+  }
+  return plan;
+}
+
+function orderState(order, items) {
+  const related = items.filter((i) => i.order_id === order.id);
+  if (!related.length) return "uebernommen";
+  const done = related.filter((i) => i.is_done).length;
+  if (done === 0) return "uebernommen";
+  if (done === related.length) return "fertig";
+  return "bearbeitung";
+}
+
+function fmtTime(ts) {
+  if (!ts) return "-";
+  return new Date(ts).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDateInput(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+
+function App() {
+  const [session, setSession] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const initialParams = new URLSearchParams(window.location.search);
+  const initialView = initialParams.get("view") || "uebernahme";
+  const initialStationKey = initialParams.get("station");
+  const initialStation = STATIONS.find((s) => s.key === initialStationKey) || STATIONS[0];
+
+  const [view, setView] = useState(initialView);
+  const [activeStation, setActiveStation] = useState(initialStation);
+  const [customers, setCustomers] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [items, setItems] = useState([]);
+  const [containers, setContainers] = useState([]);
+  const [history, setHistory] = useState([]);
+
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerNumber, setCustomerNumber] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [info, setInfo] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState([]);
+
+  const [stationSearch, setStationSearch] = useState("");
+  const [statsDate, setStatsDate] = useState(fmtDateInput());
+  const [statsFrom, setStatsFrom] = useState("00:00");
+  const [statsTo, setStatsTo] = useState("23:59");
+  const [tick, setTick] = useState(Date.now());
+  const [hiddenStationOrders, setHiddenStationOrders] = useState({});
+  const fixedView = initialParams.get("fixed") === "1";
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    loadAll();
+    const channel = supabase
+      .channel("dietex-live")
+      .on("postgres_changes", { event: "*", schema: "public" }, () => loadAll())
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [session]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    setHiddenStationOrders((prev) => {
+      const next = { ...prev };
+      orders.forEach((order) => {
+        STATIONS.forEach((station) => {
+          const relevant = items.filter((i) => i.order_id === order.id && station.items.includes(i.subcategory));
+          const key = `${order.id}-${station.key}`;
+          if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
+            next[key] = Date.now() + 10000;
+          }
+        });
+      });
+      return next;
+    });
+  }, [orders, items]);
+
+  async function loadAll() {
+    const [c, o, i, co, h] = await Promise.all([
+      supabase.from("customers").select("*").order("customer_number"),
+      supabase.from("orders").select("*").is("completed_at", null).order("created_at"),
+      supabase.from("order_categories").select("*").order("subcategory"),
+      supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number"),
+      supabase.from("order_history").select("*").order("completed_at", { ascending: false }),
+    ]);
+    if (!c.error) setCustomers(c.data || []);
+    if (!o.error) setOrders(o.data || []);
+    if (!i.error) setItems(i.data || []);
+    if (!co.error) setContainers(co.data || []);
+    if (!h.error) setHistory(h.data || []);
+  }
+
+  async function login() {
+    setLoginError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setLoginError("Login fehlgeschlagen. Bitte E-Mail und Passwort prüfen.");
+  }
+
+  async function logout() {
+    await supabase.auth.signOut();
+  }
+
+  function findFreeSlots(count) {
+    for (const row of ROWS) {
+      const used = containers.filter((c) => c.row_number === row).map((c) => c.place_number).sort((a, b) => a - b);
+      let start = 1;
+      for (const place of used) {
+        if (place === start) start += 1;
+        else break;
+      }
+      if (start + count - 1 <= PLACES) {
+        return Array.from({ length: count }, (_, i) => ({ row, place: start + i }));
+      }
+    }
+    return null;
+  }
+
+  async function addOrder() {
+    if (!customerNumber.trim() || !customerName.trim()) return alert("Kundennummer und Kundenname eingeben.");
+    if (!selectedCategories.length) return alert("Mindestens eine Kategorie auswählen.");
+
+    const plan = getContainerPlan(selectedCategories);
+    const slots = findFreeSlots(plan.length);
+    if (!slots) return alert("Kein freier Containerplatz verfügbar.");
+
+    let customer = customers.find((c) => c.customer_number === customerNumber.trim());
+    if (!customer) {
+      const { data, error } = await supabase.from("customers").insert({
+        customer_number: customerNumber.trim(),
+        customer_name: customerName.trim(),
+      }).select().single();
+      if (error) return alert("Kunde konnte nicht gespeichert werden.");
+      customer = data;
+    }
+
+    const sameDayOrders = orders.filter((o) => o.customer_number === customerNumber.trim()).length;
+    const { data: order, error } = await supabase.from("orders").insert({
+      customer_id: customer.id,
+      customer_number: customerNumber.trim(),
+      customer_name: customerName.trim(),
+      info: info.trim() || null,
+      sequence_number: sameDayOrders + 1,
+      status: "uebernommen",
+    }).select().single();
+    if (error) return alert("Auftrag konnte nicht erstellt werden.");
+
+    const rows = selectedCategories.flatMap((cat) => (CATEGORIES[cat] || []).map((sub) => ({ order_id: order.id, category: cat, subcategory: sub })));
+    if (rows.length) await supabase.from("order_categories").insert(rows);
+
+    if (plan.length) {
+      await supabase.from("containers").insert(plan.map((p, idx) => ({
+        order_id: order.id,
+        container_type: p.type,
+        row_number: slots[idx].row,
+        place_number: slots[idx].place,
+        status: "bearbeitung",
+      })));
+    }
+
+    setCustomerSearch("");
+    setCustomerNumber("");
+    setCustomerName("");
+    setInfo("");
+    setSelectedCategories([]);
+  }
+
+  async function toggleItem(item) {
+    const next = !item.is_done;
+    await supabase.from("order_categories").update({ is_done: next, done_at: next ? new Date().toISOString() : null }).eq("id", item.id);
+
+    const orderItems = items.filter((i) => i.order_id === item.order_id).map((i) => i.id === item.id ? { ...i, is_done: next } : i);
+    const allDone = orderItems.length > 0 && orderItems.every((i) => i.is_done);
+
+    if (allDone) {
+      const order = orders.find((o) => o.id === item.order_id);
+      const completedAt = new Date();
+      const acceptedAt = new Date(order.created_at);
+      const duration = Math.max(0, Math.round((completedAt - acceptedAt) / 60000));
+      await supabase.from("orders").update({ status: "fertig" }).eq("id", item.order_id);
+      await supabase.from("containers").update({ status: "fertig" }).eq("order_id", item.order_id);
+      await supabase.from("order_history").insert({
+        order_id: order.id,
+        customer_number: order.customer_number,
+        customer_name: order.customer_name,
+        accepted_at: order.created_at,
+        completed_at: completedAt.toISOString(),
+        duration_minutes: duration,
+      });
+      setHiddenStationOrders((p) => {
+        const nextHidden = { ...p };
+        STATIONS.forEach((station) => {
+          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory));
+          if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
+            nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
+          }
+        });
+        return nextHidden;
+      });
+    }
+  }
+
+  async function removeContainer(container) {
+    if (container.status !== "fertig") return;
+    await supabase.from("containers").update({ removed_at: new Date().toISOString() }).eq("id", container.id);
+  }
+
+  async function removeAllFinished() {
+    const finishedContainers = containers.filter((c) => c.status === "fertig");
+    if (!finishedContainers.length) return alert("Keine fertigen Container vorhanden.");
+    await supabase.from("containers").update({ removed_at: new Date().toISOString() }).in("id", finishedContainers.map((c) => c.id));
+  }
+
+  const customerSuggestions = customers.filter((c) => customerSearch && (
+    c.customer_number.includes(customerSearch) || c.customer_name.toLowerCase().includes(customerSearch.toLowerCase())
+  )).slice(0, 8);
+
+  const monitorRows = useMemo(() => {
+    const map = {};
+    for (const order of orders) {
+      const key = `${order.customer_number}-${order.customer_name}`;
+      const st = orderState(order, items);
+      const related = items.filter((i) => i.order_id === order.id);
+      if (!map[key]) map[key] = { ...order, progressDone: 0, progressTotal: 0, monitorState: "uebernommen" };
+      map[key].progressDone += related.filter((i) => i.is_done).length;
+      map[key].progressTotal += related.length;
+      if (st === "bearbeitung") map[key].monitorState = "bearbeitung";
+      if (st === "fertig" && map[key].monitorState !== "bearbeitung") map[key].monitorState = "fertig";
+    }
+    return Object.values(map).sort((a, b) => String(a.customer_number).localeCompare(String(b.customer_number), "de", { numeric: true }));
+  }, [orders, items]);
+
+  const stationOrders = useMemo(() => {
+    return [...orders]
+      .sort((a, b) => String(a.customer_number).localeCompare(String(b.customer_number), "de", { numeric: true }))
+      .filter((order) => {
+      const related = items.filter((i) => i.order_id === order.id && activeStation.items.includes(i.subcategory));
+      if (!related.length) return false;
+      if (stationSearch && !order.customer_number.includes(stationSearch) && !order.customer_name.toLowerCase().includes(stationSearch.toLowerCase())) return false;
+      const stationDone = related.every((i) => i.is_done);
+      const hiddenKey = `${order.id}-${activeStation.key}`;
+      if (stationDone && hiddenStationOrders[hiddenKey] && tick > hiddenStationOrders[hiddenKey]) return false;
+      return true;
+    });
+  }, [orders, items, activeStation, stationSearch, hiddenStationOrders, tick]);
+
+  const statsRows = history.filter((h) => {
+    const d = h.completed_at ? h.completed_at.slice(0, 10) : "";
+    const t = h.completed_at ? fmtTime(h.completed_at) : "";
+    return d === statsDate && t >= statsFrom && t <= statsTo;
+  });
+
+  if (!session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6">
+        <div className="w-full max-w-md rounded-3xl border bg-white p-8 shadow-sm">
+          <Logo />
+          <h1 className="mt-8 text-3xl font-black">Login Produktionsmonitor</h1>
+          <p className="mt-2 text-slate-500">Bitte mit dem Admin-Zugang anmelden.</p>
+          <div className="mt-6 space-y-3">
+            <Input className="w-full" placeholder="E-Mail" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Input className="w-full" type="password" placeholder="Passwort" value={password} onChange={(e) => setPassword(e.target.value)} />
+            {loginError && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{loginError}</div>}
+            <button
+            type="button"
+            onClick={login}
+            className="w-full rounded-2xl bg-blue-700 py-4 text-lg font-black text-white shadow-md hover:bg-blue-800"
+          >
+            Einloggen / bestätigen
+          </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b bg-white px-8 py-4">
+        <div className="grid grid-cols-3 items-center">
+          <Logo />
+          <div className="text-center text-3xl font-black">DieTex Produktionsmonitor</div>
+          <div className="flex items-center justify-end gap-3"><span className="text-2xl font-bold">◷ {fmtTime(new Date())}</span><Button onClick={logout}>Logout</Button></div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-[1800px] p-5">
+        {!fixedView && (
+          <nav className="mb-5 flex flex-wrap justify-center gap-2">
+            {[["uebernahme", "Übernahme"], ["station", "Station"], ["monitor", "Verpackungsmonitor"], ["luftbild", "Luftbild"], ["stats", "Statistiken"], ["leitung", "Produktionsleitung"]].map(([key, label]) => (
+              <Button key={key} active={view === key} onClick={() => setView(key)}>{label}</Button>
+            ))}          </nav>
+        )}
+
+        {view === "uebernahme" && (
+          <section className="rounded-3xl border bg-white p-4 shadow-sm">
+            <div className="mb-3 flex justify-end"><Button className="border-blue-200 bg-blue-50 text-blue-800">📄 Kunden Excel importieren</Button></div>
+            <Input className="mb-2 w-full" placeholder="Kundennummer oder Name suchen" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
+            {customerSuggestions.length > 0 && <div className="mb-3 rounded-xl border bg-white">{customerSuggestions.map((c) => <button key={c.id} type="button" className="grid w-full grid-cols-[120px_1fr] border-b p-2 text-left" onClick={() => { setCustomerNumber(c.customer_number); setCustomerName(c.customer_name); setCustomerSearch(`${c.customer_number} ${c.customer_name}`); }}><span>{c.customer_number}</span><b>{c.customer_name}</b></button>)}</div>}
+            <div className="grid gap-3 md:grid-cols-[220px_1fr]"><Input placeholder="Kundennummer" value={customerNumber} onChange={(e) => setCustomerNumber(e.target.value)} /><Input placeholder="Kundenname" value={customerName} onChange={(e) => setCustomerName(e.target.value)} /></div>
+            <Input className="mt-2 w-full" placeholder="Optionale Info für Verpackung / Produktion" value={info} onChange={(e) => setInfo(e.target.value)} />
+            <h2 className="my-3 text-center text-xl font-black text-blue-700">Überkategorie wählen</h2>
+            <div className="grid gap-5 md:grid-cols-4">
+              {Object.keys(CATEGORIES).map((cat) => {
+                const icons = { Bettwäsche: "🛏️", Frottee: "🥋", Tischwäsche: "🍽️", Putzerei: "P" };
+                return <button key={cat} type="button" onClick={() => setSelectedCategories((p) => p.includes(cat) ? p.filter((x) => x !== cat) : [...p, cat])} className={`rounded-3xl border-4 p-4 text-center ${categoryStyle(cat, selectedCategories.includes(cat))}`}><div className="text-4xl">{icons[cat]}</div><b className="mt-2 block text-xl">{cat}</b><small>{CATEGORIES[cat].join(", ")}</small></button>;
+              })}
+            </div>
+            <div className="mt-5 flex justify-center border-t pt-4"><button type="button" onClick={addOrder} className="rounded-2xl bg-blue-700 px-8 py-3 text-base font-black text-white shadow-lg hover:bg-blue-800">Kunde übernehmen</button></div>
+          </section>
+        )}
+
+        {view === "station" && (
+          <section className="grid gap-5 lg:grid-cols-[300px_1fr]">
+            <aside className="space-y-2 rounded-3xl border bg-white p-4"><b>Station auswählen</b>{STATIONS.map((s) => <Button key={s.key} className="w-full text-left" active={activeStation.key === s.key} onClick={() => setActiveStation(s)}><div>{s.name}</div><small>{s.items.join(" • ")}</small></Button>)}</aside>
+            <div className="rounded-3xl border bg-white p-4">
+              <div className="mb-4 flex items-center justify-between"><h2 className="text-2xl font-black">{activeStation.name}</h2><Input placeholder="Suchen" value={stationSearch} onChange={(e) => setStationSearch(e.target.value)} /></div>
+              <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
+                {stationOrders.map((order) => {
+                  const relevant = items
+                    .filter((i) => i.order_id === order.id && activeStation.items.includes(i.subcategory))
+                    .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
+                  const cont = containers.find((c) => c.order_id === order.id && relevant.some((i) => {
+                    if (c.container_type === "Bettwäsche") return ["Deckenbezüge + Leintücher", "Polsterbezüge"].includes(i.subcategory);
+                    if (c.container_type === "Tischwäsche") return ["Tischtücher", "Deckservietten", "Mundservietten"].includes(i.subcategory);
+                    if (c.container_type === "Frottee") return i.subcategory === "Frottee";
+                    if (c.container_type === "SPLT + BM") return ["Spannleintücher", "Bademäntel"].includes(i.subcategory);
+                    return false;
+                  }));
+                  return <div key={order.id} className="rounded-xl border bg-white p-3"><div className="mb-2"><span className="text-sm">{order.customer_number}</span> <b>{order.customer_name}</b><div className="text-xs text-blue-700">{cont ? `Reihe ${cont.row_number}, Platz ${cont.place_number}` : "Putzerei / kein Container"}</div></div><div className="flex flex-wrap gap-2">{relevant.map((item) => <button key={item.id} type="button" onClick={() => toggleItem(item)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${item.is_done ? "bg-green-100" : "bg-yellow-50"}`}>{item.is_done ? "✅" : "⭕"} {item.subcategory}</button>)}</div></div>;
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {view === "monitor" && (
+          <section className="grid gap-5 lg:grid-cols-3">
+            {[["uebernommen", "ÜBERNOMMEN", "blue"], ["bearbeitung", "IN BEARBEITUNG", "orange"], ["fertig", "FERTIG", "green"]].map(([st, title, color]) => { const panelClass = color === "blue" ? "bg-blue-50/40 border-blue-100" : color === "orange" ? "bg-orange-50/40 border-orange-100" : "bg-green-50/40 border-green-100"; const headerClass = color === "blue" ? "border-blue-400" : color === "orange" ? "border-orange-400" : "border-green-500"; const rowClass = color === "blue" ? "border-blue-200 bg-white" : color === "orange" ? "border-orange-200 bg-white" : "border-green-200 bg-white"; return <div key={st} className={`rounded-3xl border p-4 ${panelClass}`}><h2 className={`mb-3 border-b-2 pb-2 text-center font-black ${headerClass}`}>{title}</h2><div className="space-y-2">{monitorRows.filter((r) => r.monitorState === st).map((r) => <div key={`${r.customer_number}-${r.customer_name}`} className={`grid grid-cols-[90px_1fr_70px] rounded-lg border px-3 py-2 text-sm ${rowClass}`}><span>{r.customer_number}</span><b className="truncate">{r.customer_name}</b><b className="text-right">{r.progressDone}/{r.progressTotal}</b>{r.info && <div className="col-span-3 mt-1 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">ℹ {r.info}</div>}</div>)}</div></div>; })}
+          </section>
+        )}
+
+        {view === "luftbild" && (
+          <section className="rounded-3xl border bg-white p-5"><div className="mb-4 flex justify-between"><div><h2 className="text-2xl font-black">Luftbild Container</h2><p className="text-slate-500">Gelb = in Bearbeitung, Grün = fertig</p></div><Button onClick={removeAllFinished}>Fertige Aufträge entfernen</Button></div><div className="grid grid-cols-5 gap-4">{ROWS.map((row) => <div key={row} className="rounded-2xl border bg-slate-50 p-3"><h3 className="mb-3 text-center font-black">Reihe {row}</h3><div className="grid gap-2">{Array.from({ length: PLACES }, (_, i) => { const place = i + 1; const cont = containers.find((c) => c.row_number === row && c.place_number === place); const order = cont ? orders.find((o) => o.id === cont.order_id) : null; const color = !cont ? "bg-white border-dashed text-slate-400" : cont.status === "fertig" ? "bg-green-50 border-green-300 cursor-pointer" : "bg-yellow-50 border-yellow-300"; return <div key={place} onClick={() => cont?.status === "fertig" && removeContainer(cont)} className={`min-h-24 rounded-xl border p-2 text-xs ${color}`}>{cont && order ? <><b>{order.customer_number}</b><b className="block break-words">{order.customer_name}</b><div className="mt-1 rounded bg-white/60 px-1">{cont.container_type}</div>{cont.status === "fertig" && <div className="mt-1 text-center text-[10px] font-bold text-green-700">Antippen zum Entfernen</div>}</> : <div className="text-center">{place}</div>}</div>; })}</div></div>)}</div></section>
+        )}
+
+        {view === "stats" && (
+          <section className="rounded-3xl border bg-white p-6"><div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-black">Statistiken</h2><p className="text-slate-500">Verpackungszeit je Kunde</p></div><div className="flex gap-2"><Input type="date" value={statsDate} onChange={(e) => setStatsDate(e.target.value)} /><Input type="time" value={statsFrom} onChange={(e) => setStatsFrom(e.target.value)} /><Input type="time" value={statsTo} onChange={(e) => setStatsTo(e.target.value)} /></div></div><table className="w-full text-left text-sm"><thead className="bg-slate-100"><tr><th className="p-3">Datum</th><th className="p-3">Nr.</th><th className="p-3">Kunde</th><th className="p-3">Übernahme</th><th className="p-3">Fertig</th><th className="p-3">Zeit</th></tr></thead><tbody>{statsRows.map((r) => <tr key={r.id} className="border-t"><td className="p-3">{new Date(r.completed_at).toLocaleDateString("de-AT")}</td><td className="p-3">{r.customer_number}</td><td className="p-3 font-semibold">{r.customer_name}</td><td className="p-3">{fmtTime(r.accepted_at)}</td><td className="p-3">{fmtTime(r.completed_at)}</td><td className="p-3 font-semibold">{r.duration_minutes} Min.</td></tr>)}</tbody></table></section>
+        )}
+
+        {view === "leitung" && (
+          <section className="space-y-5">
+            <div className="grid gap-5 md:grid-cols-4">
+              <div className="rounded-2xl border bg-white p-5"><small>Übernommen</small><div className="text-3xl font-black">{monitorRows.filter((r) => r.monitorState === "uebernommen").length}</div></div>
+              <div className="rounded-2xl border bg-white p-5"><small>In Bearbeitung</small><div className="text-3xl font-black">{monitorRows.filter((r) => r.monitorState === "bearbeitung").length}</div></div>
+              <div className="rounded-2xl border bg-white p-5"><small>Fertig</small><div className="text-3xl font-black">{monitorRows.filter((r) => r.monitorState === "fertig").length}</div></div>
+              <div className="rounded-2xl border bg-white p-5"><small>Container sichtbar</small><div className="text-3xl font-black">{containers.length}</div></div>
+            </div>
+
+            <div className="rounded-3xl border bg-white p-5 shadow-sm">
+              <h2 className="mb-3 text-xl font-black">Fixe Geräte-Links</h2>
+              <p className="mb-4 text-sm text-slate-500">Diese Links auf den Tablets/Monitoren als Favorit speichern. Mit fixed=1 wird das Menü ausgeblendet.</p>
+              <div className="grid gap-2 text-sm md:grid-cols-2">
+                <code className="rounded bg-slate-100 p-2">?view=uebernahme&fixed=1</code>
+                <code className="rounded bg-slate-100 p-2">?view=station&station=jenway-kleinteile&fixed=1</code>
+                <code className="rounded bg-slate-100 p-2">?view=station&station=jenway-grossteile&fixed=1</code>
+                <code className="rounded bg-slate-100 p-2">?view=station&station=jenway-frottee&fixed=1</code>
+                <code className="rounded bg-slate-100 p-2">?view=station&station=frottee-splt-bm&fixed=1</code>
+                <code className="rounded bg-slate-100 p-2">?view=station&station=putzerei&fixed=1</code>
+                <code className="rounded bg-slate-100 p-2">?view=monitor&fixed=1</code>
+                <code className="rounded bg-slate-100 p-2">?view=luftbild&fixed=1</code>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
