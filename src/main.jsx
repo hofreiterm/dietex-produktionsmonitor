@@ -24,8 +24,8 @@ const CAT_ICON = {
 };
 
 const STATIONS = [
-  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["Polsterbezüge", "Mundservietten", "Tischtücher"] },
-  { key: "jenway-grossteile", name: "Jenway Großteile", items: ["Deckenbezüge + Leintücher", "Deckservietten"] },
+ { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["Polsterbezüge", "Mundservietten", "Tischtücher"] },
+{ key: "jenway-grossteile", name: "Jenway Großteile", items: ["Deckenbezüge + Leintücher", "Deckservietten"] },
   { key: "jenway-frottee", name: "Jenway Frottee", items: ["Frottee"] },
   { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["Bademäntel", "Spannleintücher"] },
   { key: "putzerei", name: "Putzerei", items: ["Putzerei"] },
