@@ -87,133 +87,14 @@ const PERSONNEL_EMPLOYEES = [
   { name: "Brigitte", hours: 27 },
 ];
 
-
 function Button({ children, active, className = "", ...props }) {
-
-  const getPersonalKey = (date = personalDate, shift = personalShift) => `${date}_${shift}`;
-
-  const getCurrentPersonalPlan = () => personalPlan[getPersonalKey()] || {};
-
-  const getEmployeesInSection = (sectionName) => getCurrentPersonalPlan()[sectionName] || [];
-
-  const getEmployeeAssignment = (employeeName) => {
-    const plan = getCurrentPersonalPlan();
-    for (const sectionName of Object.keys(plan)) {
-      if ((plan[sectionName] || []).includes(employeeName)) return sectionName;
-    }
-    return null;
-  };
-
-  const setEmployeeToSection = (employeeName, sectionName) => {
-    setPersonalPlan((prev) => {
-      const key = getPersonalKey();
-      const current = prev[key] || {};
-      const next = {};
-      PERSONNEL_SECTIONS.forEach((section) => {
-        next[section.name] = (current[section.name] || []).filter((name) => name !== employeeName);
-      });
-      if (sectionName !== "pool") {
-        next[sectionName] = [...(next[sectionName] || []), employeeName];
-      }
-      return { ...prev, [key]: next };
-    });
-  };
-
-  const getSectionTarget = (section) => {
-    if (section.target.flexible) return null;
-    return section.target[personalShift] ?? section.target.default ?? 0;
-  };
-
-  const getSectionColor = (section) => {
-    const target = getSectionTarget(section);
-    if (target === null) return "border-slate-300 bg-slate-50";
-    const actual = getEmployeesInSection(section.name).length;
-    if (actual < target) return "border-red-300 bg-red-50";
-    if (actual > target) return "border-yellow-300 bg-yellow-50";
-    return "border-green-300 bg-green-50";
-  };
-
-  const getEmployeeStatus = (name) => employeeStatus[name] || "anwesend";
-
-  const cycleEmployeeStatus = (name) => {
-    const values = ["anwesend", "krank", "urlaub", "frei"];
-    const current = getEmployeeStatus(name);
-    const next = values[(values.indexOf(current) + 1) % values.length];
-    setEmployeeStatus((prev) => ({ ...prev, [name]: next }));
-  };
-
-  const getActiveEmployees = () => PERSONNEL_EMPLOYEES.filter((e) => getEmployeeStatus(e.name) === "anwesend");
-
-  const getUnassignedEmployees = () => getActiveEmployees().filter((e) => !getEmployeeAssignment(e.name));
-
-  const clearPersonalPlanSafe = () => {
-    if (!window.confirm("Personalplanung für diese Schicht wirklich leeren?")) return;
-    setPersonalPlan((prev) => {
-      const next = { ...prev };
-      delete next[getPersonalKey()];
-      return next;
-    });
-  };
-
-  const copyPreviousShiftSafe = () => {
-    const idx = PERSONNEL_SHIFTS.findIndex((s) => s.key === personalShift);
-    const previousShift = idx > 0 ? PERSONNEL_SHIFTS[idx - 1].key : "07-12";
-    const source = personalPlan[getPersonalKey(personalDate, previousShift)];
-    if (!source) {
-      window.alert("Für die vorherige Schicht ist kein Plan vorhanden.");
-      return;
-    }
-    setPersonalPlan((prev) => ({ ...prev, [getPersonalKey()]: source }));
-  };
-
-  const printPersonalPlanSafe = () => {
-    const plan = getCurrentPersonalPlan();
-    const shiftLabel = PERSONNEL_SHIFTS.find((s) => s.key === personalShift)?.label || personalShift;
-    const rows = PERSONNEL_SECTIONS.map((section) => {
-      const names = plan[section.name] || [];
-      const target = getSectionTarget(section);
-      return `<tr><td>${section.name}</td><td>${target === null ? "bei Bedarf" : target}</td><td>${names.join(", ")}</td></tr>`;
-    }).join("");
-
-    const html = `
-      <html>
-        <head>
-          <title>Personalplanung</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 22px; color: #111827; }
-            h1 { margin: 0 0 8px 0; }
-            .meta { margin-bottom: 18px; color: #4b5563; }
-            table { width: 100%; border-collapse: collapse; font-size: 13px; }
-            th { background: #e5e7eb; text-align: left; }
-            th, td { border: 1px solid #cbd5e1; padding: 8px; vertical-align: top; }
-          </style>
-        </head>
-        <body>
-          <h1>DieTex Personalplanung</h1>
-          <div class="meta">Datum: ${personalDate} | Schicht: ${shiftLabel}</div>
-          <table>
-            <thead><tr><th>Bereich</th><th>Soll</th><th>Mitarbeiter</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <script>window.onload = () => window.print();</script>
-        </body>
-      </html>
-    `;
-    const win = window.open("", "_blank");
-    if (!win) {
-      window.alert("Druckfenster wurde vom Browser blockiert.");
-      return;
-    }
-    win.document.open();
-    win.document.write(html);
-    win.document.close();
-  };
-
   return (
     <button
       type="button"
       className={`rounded-xl border px-4 py-2 text-sm font-semibold transition active:scale-[0.98] ${
-        active ? "border-blue-700 bg-blue-700 text-white" : "border-slate-300 bg-white hover:bg-slate-50"
+        active
+          ? "border-blue-700 bg-blue-700 text-white"
+          : "border-slate-300 bg-white hover:bg-slate-50"
       } ${className}`}
       {...props}
     >
