@@ -1360,7 +1360,7 @@ const tourColumns = Object.entries(
                   </div>
                 </aside>
 
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6">
                   {PERSONNEL_SECTIONS.map((section) => {
                     const target = getSectionTarget(section);
                     const assigned = getEmployeesInSection(section.name);
@@ -1369,7 +1369,7 @@ const tourColumns = Object.entries(
                         key={section.name}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, section.name)}
-                        className={`min-h-[160px] rounded-3xl border-4 p-4 ${getSectionColor(section)}`}
+                        className={`min-h-[90px] rounded-2xl border-2 p-2 ${getSectionColor(section)}`}
                       >
                         <div className="mb-3 flex items-start justify-between gap-2">
                           <div>
