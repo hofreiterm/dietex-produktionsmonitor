@@ -1369,7 +1369,7 @@ const tourColumns = Object.entries(
                         key={section.name}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, section.name)}
-                        className={`min-h-[90px] rounded-2xl border-2 p-2 ${getSectionColor(section)}`}
+                        className={`min-h-[55px] rounded-xl border-2 p-2 ${getSectionColor(section)}`}
                       >
                         <div className="mb-3 flex items-start justify-between gap-2">
                           <div>
@@ -1383,7 +1383,7 @@ const tourColumns = Object.entries(
                           </div>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-1">
                           {assigned.map((name) => {
                             const emp = PERSONNEL_EMPLOYEES.find((e) => e.name === name);
                             return (
@@ -1391,7 +1391,7 @@ const tourColumns = Object.entries(
                                 key={name}
                                 draggable
                                 onDragStart={() => setDragEmployee(name)}
-                                className="cursor-grab rounded-lg border bg-white px-2 py-1 shadow-sm"
+                                className="cursor-grab rounded-lg border bg-white px-2 py-[3px] shadow-sm"
                               >
                                 <div className="text-sm font-black leading-tight">{name}</div>
                                 <div className="text-xs text-slate-500">{emp?.hours ? `${emp.hours} h/Woche` : "Chef"}</div>
