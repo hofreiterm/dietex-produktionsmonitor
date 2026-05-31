@@ -1326,7 +1326,7 @@ const tourColumns = Object.entries(
                           className="cursor-grab rounded-xl border bg-white px-3 py-2 shadow-sm"
                         >
                           <div className="font-black">{emp.name}</div>
-                          <div className="text-xs text-slate-500">{emp.hours ? `${emp.hours} h/Woche` : "Chef"}</div>
+                         <div className="text-[9px] text-slate-500 leading-none">{emp.hours ? `${emp.hours} h/Woche` : "Chef"}</div>
                         </div>
                       ))}
                     </div>
@@ -1369,12 +1369,12 @@ const tourColumns = Object.entries(
                         key={section.name}
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, section.name)}
-                        className={`min-h-[55px] rounded-xl border-2 p-2 ${getSectionColor(section)}`}
+                        className={`min-h-[20px] rounded-xl border p-1 ${getSectionColor(section)}`}
                       >
-                        <div className="mb-3 flex items-start justify-between gap-2">
+                        <div className="mb-1 flex items-start justify-between gap-1">
                           <div>
-                            <h3 className="text-[15px] font-black leading-tight">{section.name}</h3>
-                            <div className="text-xs font-bold">
+                            <h3 className="text-[13px] font-black leading-tight">{section.name}</h3>
+                            <div className="text-[10px] font-bold leading-tight">
                               Soll: {target === null ? "bei Bedarf" : target} | Ist: {assigned.length}
                             </div>
                           </div>
@@ -1391,9 +1391,9 @@ const tourColumns = Object.entries(
                                 key={name}
                                 draggable
                                 onDragStart={() => setDragEmployee(name)}
-                                className="cursor-grab rounded-lg border bg-white px-2 py-[3px] shadow-sm"
+                                className="cursor-grab rounded-md border bg-white px-1 py-[1px]"
                               >
-                                <div className="text-sm font-black leading-tight">{name}</div>
+                               <div className="text-[11px] font-black leading-tight">{name}</div>
                                 <div className="text-xs text-slate-500">{emp?.hours ? `${emp.hours} h/Woche` : "Chef"}</div>
                               </div>
                             );
