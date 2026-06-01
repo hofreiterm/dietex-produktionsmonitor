@@ -1320,57 +1320,65 @@ const tourColumns = Object.entries(
               </div>
 
               <div className="grid gap-5 lg:grid-cols-[310px_1fr]">
-                <aside
-                  className="rounded-3xl border bg-slate-50 p-4"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, "pool")}
-                >
-                  <h3 className="mb-3 text-xl font-black">Mitarbeiterpool</h3>
+                <aside className="rounded-3xl border bg-slate-50 p-3">
+  <h3 className="mb-2 text-lg font-black">
+    Mitarbeiterpool
+  </h3>
 
-                  <div className="mb-4 rounded-2xl border bg-white p-3">
-                    <div className="mb-2 text-sm font-bold text-slate-500">Nicht eingeteilt</div>
-                    <div className="space-y-2">
-                      {getUnassignedEmployees().map((emp) => (
-                        <div
-                          key={emp.name}
-                          draggable
-                          onDragStart={() => setDragEmployee(emp.name)}
-                          className="cursor-grab rounded-lg border bg-white px-2 py-1 shadow-sm"
-                        >
-                          <div className="text-sm font-black leading-tight">{emp.name}</div>
-                          <div className="text-[10px] text-slate-500 leading-none">{emp.hours ? `${emp.hours} h/Woche` : "Chef"}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+  <div className="space-y-2">
 
-                  <h4 className="mb-2 font-black">Status</h4>
-                  <div className="max-h-[520px] space-y-1 overflow-auto">
-                    {PERSONNEL_EMPLOYEES.map((emp) => {
-                      const status = getEmployeeStatus(emp.name);
-                      const cls =
-                        status === "anwesend"
-                          ? "bg-green-50 border-green-200"
-                          : status === "krank"
-                          ? "bg-red-50 border-red-200"
-                          : status === "urlaub"
-                          ? "bg-yellow-50 border-yellow-200"
-                          : "bg-slate-100 border-slate-200";
+    {[
+      { key: "pool", title: "Nicht eingeteilt" },
+      { key: "urlaub", title: "Urlaub" },
+      { key: "za", title: "Zeitausgleich" },
+      { key: "krank", title: "Krank" },
+    ].map((zone) => (
+      <div
+        key={zone.key}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={() =>
+          dragEmployee &&
+          setEmployeeToSection(dragEmployee, zone.key)
+        }
+        className="rounded-xl border bg-white p-2"
+      >
+        <div className="mb-2 text-sm font-black">
+          {zone.title}
+        </div>
 
-                      return (
-                        <button
-                          key={emp.name}
-                          type="button"
-                          onClick={() => cycleEmployeeStatus(emp.name)}
-                          className={`grid w-full grid-cols-[1fr_auto] rounded-lg border px-2 py-1 text-left text-sm ${cls}`}
-                        >
-                          <span className="font-semibold">{emp.name}</span>
-                          <span className="text-xs">{status}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </aside>
+        <div className="space-y-1">
+          {PERSONNEL_EMPLOYEES.filter((emp) => {
+            const assignment = getEmployeeAssignment(emp.name);
+
+            if (zone.key === "pool") {
+              return !assignment;
+            }
+
+            return assignment === zone.key;
+          }).map((emp) => (
+            <div
+              key={emp.name}
+              draggable
+              onDragStart={() => setDragEmployee(emp.name)}
+              className="cursor-grab rounded-md border bg-slate-50 px-2 py-1"
+            >
+              <div className="text-[11px] font-black leading-tight">
+                {emp.name}
+              </div>
+
+              <div className="text-[9px] text-slate-500 leading-none">
+                {emp.hours
+                  ? `${emp.hours} h`
+                  : "Chef"}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))}
+
+  </div>
+</aside>
 
                 <div className="space-y-3">
                   {PERSONNEL_GROUPS.map((group) => (
