@@ -1673,8 +1673,7 @@ const tourColumns = Object.entries(
                     <div key={order.id} className="rounded-xl border bg-white p-3">
                       <div className="mb-2">
                         <span className="text-sm">{order.customer_number}</span> <b>{order.customer_name}</b>
-                        <div className="text-xs text-blue-700">{cont ? `Reihe ${cont.row_number}, Platz ${cont.place_number}` : "Putzerei / kein Container"}</div>
-                      </div>
+                      
                       <div className="flex flex-wrap gap-2">
                         {relevant.map((item) => (
                           <button key={item.id} type="button" onClick={() => toggleItem(item)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${item.is_done ? "bg-green-100" : "bg-yellow-50"}`}>
