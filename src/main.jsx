@@ -2165,7 +2165,7 @@ const tourColumns = Object.entries(
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border">
+              <div className=" rounded-2xl border">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-slate-100">
                     <tr>
