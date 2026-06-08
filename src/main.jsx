@@ -1731,7 +1731,7 @@ const tourColumns = Object.entries(
     );
   }
 
-  function WashCard({ row, category }) {
+  function WashCard({ row, category, compact = false }) {
     const washKey = getWashKey(row.id, category);
     const isPending = Boolean(pendingWash[washKey]);
     const categoryIcons = categoryIconsForRow(row);
@@ -1751,26 +1751,26 @@ const tourColumns = Object.entries(
           e.preventDefault();
           reorderOrder(dragOrderId, row.id);
         }}
-        className={`w-full rounded-xl border px-3 py-2 text-left shadow-sm transition ${
+        className={`w-full rounded-xl border ${compact ? "px-2 py-1.5" : "px-3 py-2"} text-left shadow-sm transition ${
           isPending ? "border-emerald-500 bg-emerald-100 ring-2 ring-emerald-300" : "bg-white hover:ring-2 hover:ring-blue-300"
         } ${dragOrderId === row.id ? "ring-2 ring-blue-400 opacity-70" : ""}`}
       >
-        <div className="grid grid-cols-[28px_84px_1fr_auto] items-center gap-3">
+        <div className={`grid ${compact ? "grid-cols-[20px_62px_1fr_auto] gap-1.5" : "grid-cols-[28px_84px_1fr_auto] gap-3"} items-center`}>
           <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">â†•</div>
-          <div className="font-mono text-[15px] leading-tight">{row.customer_number}</div>
+          <div className={`font-mono ${compact ? "text-[12px]" : "text-[15px]"} leading-tight`}>{row.customer_number}</div>
           <button
             type="button"
             onClick={() => washCategory(row, category)}
-            className="text-left font-bold text-[16px] leading-tight break-words whitespace-normal"
+            className={`text-left font-bold ${compact ? "text-[13px]" : "text-[16px]"} leading-tight break-words whitespace-normal`}
             title={isPending ? "Nochmals antippen = rueckgaengig" : "Antippen = gewaschen"}
           >
             {row.customer_name}
           </button>
-          <div className="flex min-w-[72px] justify-end gap-1">
+          <div className={`${compact ? "min-w-[50px]" : "min-w-[72px]"} flex justify-end gap-1`}>
             {categoryIcons.map(({ cat, icon }) => (
               <span
                 key={cat}
-                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-base font-black"
+                className={`${compact ? "h-5 w-5 text-xs" : "h-7 w-7 text-base"} flex items-center justify-center rounded-full bg-slate-100 font-black`}
                 title={cat}
               >
                 {icon}
@@ -1828,10 +1828,10 @@ const tourColumns = Object.entries(
   */
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b bg-white px-8 py-4">
+      <header className={`border-b bg-white px-8 ${fixedView ? "py-2" : "py-4"}`}>
         <div className="grid grid-cols-3 items-center">
           <Logo />
-          <div className="text-center text-3xl font-black">{expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}</div>
+          <div className={`${fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>{expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}</div>
           <div className="flex items-center justify-end gap-3">
             {adminUnlocked ? (
               <Button className="border-emerald-200 bg-emerald-50 text-emerald-800" onClick={lockAdminArea}>
@@ -1966,7 +1966,7 @@ const tourColumns = Object.entries(
         </div>
       )}
 
-      <main className="mx-auto max-w-[1800px] p-5">
+      <main className={`mx-auto max-w-[1800px] ${fixedView ? "p-2" : "p-5"}`}>
         {!fixedView && (
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
             {(expeditMode
@@ -2055,18 +2055,18 @@ const tourColumns = Object.entries(
         )}
 
         {view === "waschplan" && (
-          <section className="grid gap-5 lg:grid-cols-3">
+          <section className={`grid ${fixedView ? "grid-cols-3 gap-2" : "gap-5 lg:grid-cols-3"}`}>
             {WASH_CATEGORIES.map((cat) => {
               const rows = washRowsForCategory(cat);
 
               return (
-                <div key={cat} className={`rounded-3xl border-4 p-4 ${categoryStyle(cat, false)}`}>
-                  <h2 className="mb-4 border-b-2 border-current pb-2 text-center text-2xl font-black">
+                <div key={cat} className={`${fixedView ? "rounded-2xl p-2" : "rounded-3xl p-4"} border-4 ${categoryStyle(cat, false)}`}>
+                  <h2 className={`${fixedView ? "mb-2 text-xl" : "mb-4 text-2xl"} border-b-2 border-current pb-2 text-center font-black`}>
                     <span className="mr-2">{CAT_ICON[cat]}</span>{cat}
                   </h2>
                   <div className="grid gap-2">
                     {rows.map((row) => (
-                      <WashCard key={`${row.id}-${cat}`} row={row} category={cat} />
+                      <WashCard key={`${row.id}-${cat}`} row={row} category={cat} compact={fixedView} />
                     ))}
                   </div>
                 </div>
