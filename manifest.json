@@ -3,6 +3,7 @@
   "short_name": "DieTex",
   "start_url": "/",
   "display": "standalone",
+  "orientation": "landscape",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
   "icons": [
