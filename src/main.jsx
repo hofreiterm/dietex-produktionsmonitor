@@ -1,5 +1,5 @@
 import "./index.css";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
@@ -9,6 +9,21 @@ const supabase = createClient(
   "sb_publishable_Mr55Ge_ud02QSvXwWj0hTg_EQa19pPs"
 );
 
+const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || "";
+const PROTECTED_VIEWS = new Set(["stats", "stammdaten", "leitung", "personalplanung"]);
+
+function isProtectedView(view) {
+  return PROTECTED_VIEWS.has(view);
+}
+
+function isAdminSessionUnlocked() {
+  try {
+    return sessionStorage.getItem("dietexAdminUnlocked") === "1";
+  } catch {
+    return false;
+  }
+}
+
 const CATEGORIES = {
   Bettwäsche: ["Deckenbezüge + Leintücher", "Polsterbezüge"],
   Frottee: ["Frottee", "Spannleintücher", "Bademäntel"],
@@ -17,6 +32,25 @@ const CATEGORIES = {
 };
 
 const WASH_CATEGORIES = ["Bettwäsche", "Frottee", "Tischwäsche"];
+
+const WASH_STREETS = [
+  {
+    key: "ws-1",
+    name: "Waschstrasse 1",
+    capacity: "25 kg",
+    description: "Frottee, Spannleintuecher, Bademaentel",
+    categories: ["Frottee"],
+    className: "border-emerald-400 bg-emerald-50 text-emerald-950",
+  },
+  {
+    key: "ws-2",
+    name: "Waschstrasse 2",
+    capacity: "50 kg",
+    description: "Alles andere",
+    categories: ["BettwÃ¤sche", "TischwÃ¤sche"],
+    className: "border-blue-400 bg-blue-50 text-blue-950",
+  },
+];
 
 const ALL_SUBCATEGORIES = [
   "Deckenbezüge + Leintücher",
@@ -254,8 +288,16 @@ function App() {
   const initialStation = STATIONS.find((s) => s.key === initialStationKey) || STATIONS[0];
   const fixedView = params.get("fixed") === "1";
   const expeditMode = params.get("view") === "expedit";
+  const requestedInitialView = expeditMode ? "monitor" : initialView === "uebernahme" ? "annahme" : initialView;
+  const initialAdminUnlocked = isAdminSessionUnlocked();
 
-  const [view, setView] = useState(expeditMode ? "monitor" : initialView === "uebernahme" ? "annahme" : initialView);
+  const [view, setView] = useState(() => (isProtectedView(requestedInitialView) && !initialAdminUnlocked ? "annahme" : requestedInitialView));
+  const [adminUnlocked, setAdminUnlocked] = useState(initialAdminUnlocked);
+  const [pinModal, setPinModal] = useState(() =>
+    isProtectedView(requestedInitialView) && !initialAdminUnlocked ? { nextView: requestedInitialView } : null
+  );
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
   const [activeStation, setActiveStation] = useState(initialStation);
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -323,6 +365,9 @@ function App() {
   const [tourContainerCount, setTourContainerCount] = useState("");
   const [tourNumberInput, setTourNumberInput] = useState("");
   const [dragOrderId, setDragOrderId] = useState(null);
+  const [pendingWash, setPendingWash] = useState({});
+  const [monitorDetailOrder, setMonitorDetailOrder] = useState(null);
+  const washTimers = useRef({});
 
   useEffect(() => {
     loadAll();
@@ -346,6 +391,12 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelEmployeesByDept", JSON.stringify(personnelEmployeesByDept));
   }, [personnelEmployeesByDept]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(washTimers.current).forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
 
 
   useEffect(() => {
@@ -520,6 +571,12 @@ function App() {
   }
 
   async function importCustomersExcel(event) {
+    if (!adminUnlocked) {
+      event.target.value = "";
+      openPinModal(null);
+      return;
+    }
+
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -762,12 +819,50 @@ function App() {
     loadAll();
   }
 
+  function getWashKey(orderId, category) {
+    return `${orderId}-${category}`;
+  }
+
+  function categoryIconsForRow(row) {
+    return (row.categories || [])
+      .filter((cat) => cat !== "Putzerei")
+      .map((cat) => ({ cat, icon: CAT_ICON[cat] || cat.slice(0, 1) }));
+  }
+
   async function washCategory(order, category) {
-    if (!confirm(`${order.customer_name} - ${category} als gewaschen entfernen?`)) return;
-    const relatedIds = items.filter((i) => i.order_id === order.id && i.category === category).map((i) => i.id);
+    const washKey = getWashKey(order.id, category);
+
+    if (pendingWash[washKey]) {
+      clearTimeout(washTimers.current[washKey]);
+      delete washTimers.current[washKey];
+      setPendingWash((prev) => {
+        const next = { ...prev };
+        delete next[washKey];
+        return next;
+      });
+      return;
+    }
+
+    const relatedIds = items
+      .filter((i) => i.order_id === order.id && i.category === category && !i.washed_at)
+      .map((i) => i.id);
     if (!relatedIds.length) return;
-    await supabase.from("order_categories").update({ washed_at: new Date().toISOString() }).in("id", relatedIds);
-    loadAll();
+
+    setPendingWash((prev) => ({ ...prev, [washKey]: true }));
+    washTimers.current[washKey] = window.setTimeout(async () => {
+      await supabase
+        .from("order_categories")
+        .update({ washed_at: new Date().toISOString() })
+        .in("id", relatedIds);
+
+      delete washTimers.current[washKey];
+      setPendingWash((prev) => {
+        const next = { ...prev };
+        delete next[washKey];
+        return next;
+      });
+      loadAll();
+    }, 5000);
   }
 
   async function moveOrder(order, direction) {
@@ -858,6 +953,30 @@ function App() {
       .filter((row) => row.washOpen > 0);
   }
 
+  function washRowsForStreet(street) {
+    return sortedOrders
+      .map((order) => {
+        const relevant = enabledItemsForOrder(order).filter((i) => {
+          if (street.key === "ws-2") {
+            return WASH_CATEGORIES.includes(i.category) && i.category !== "Frottee";
+          }
+
+          return street.categories.includes(i.category);
+        });
+        const open = order.status === "auf_tour" ? [] : relevant.filter((i) => !i.washed_at);
+        const labels = [...new Set(open.map((i) => displaySubcategory(i.subcategory)))];
+        return {
+          ...order,
+          washTotal: relevant.length,
+          washOpen: open.length,
+          openItemIds: open.map((i) => i.id),
+          washLabels: labels,
+          categories: getOrderCategories(order.id),
+        };
+      })
+      .filter((row) => row.washOpen > 0);
+  }
+
   const monitorRows = useMemo(() => {
     return sortedOrders
       .map((order) => {
@@ -893,6 +1012,22 @@ function App() {
   const finishedRows = monitorRows.filter((r) => r.monitorState === "fertig" && r.status !== "auf_tour");
   const tourRows = monitorRows.filter((r) => r.monitorState === "auf_tour");
   const todayKey = new Date().toISOString().slice(0, 10);
+
+  function monitorDetailItems(order) {
+    if (!order) return [];
+    return enabledItemsForOrder(order).filter((item) => item.category !== "Putzerei");
+  }
+
+  function monitorDetailGroups(order) {
+    return Object.values(
+      monitorDetailItems(order).reduce((acc, item) => {
+        const key = item.category || "Sonstiges";
+        if (!acc[key]) acc[key] = { category: key, items: [] };
+        acc[key].items.push(item);
+        return acc;
+      }, {})
+    );
+  }
   
   async function removeTourCustomer(orderId) {
     if (!window.confirm("Kunde von der Tour entfernen?")) return;
@@ -1522,6 +1657,57 @@ const tourColumns = Object.entries(
     win.document.close();
   };
 
+  function openPinModal(nextView = null) {
+    setPinInput("");
+    setPinError("");
+    setPinModal({ nextView });
+  }
+
+  function goToView(nextView) {
+    if (isProtectedView(nextView) && !adminUnlocked) {
+      openPinModal(nextView);
+      return;
+    }
+
+    setView(nextView);
+  }
+
+  function confirmPin() {
+    if (!ADMIN_PIN) {
+      setPinError("PIN ist noch nicht in Vercel konfiguriert.");
+      return;
+    }
+
+    if (pinInput.trim() !== ADMIN_PIN) {
+      setPinError("PIN ist falsch.");
+      return;
+    }
+
+    setAdminUnlocked(true);
+    try {
+      sessionStorage.setItem("dietexAdminUnlocked", "1");
+    } catch {}
+
+    if (pinModal?.nextView) {
+      setView(pinModal.nextView);
+    }
+
+    setPinModal(null);
+    setPinInput("");
+    setPinError("");
+  }
+
+  function lockAdminArea() {
+    setAdminUnlocked(false);
+    try {
+      sessionStorage.removeItem("dietexAdminUnlocked");
+    } catch {}
+
+    if (isProtectedView(view)) {
+      setView("annahme");
+    }
+  }
+
 
   function SmallCustomerCard({ row, onClick }) {
     return (
@@ -1546,6 +1732,10 @@ const tourColumns = Object.entries(
   }
 
   function WashCard({ row, category }) {
+    const washKey = getWashKey(row.id, category);
+    const isPending = Boolean(pendingWash[washKey]);
+    const categoryIcons = categoryIconsForRow(row);
+
     return (
       <div
         draggable
@@ -1561,23 +1751,71 @@ const tourColumns = Object.entries(
           e.preventDefault();
           reorderOrder(dragOrderId, row.id);
         }}
-        className={`w-full rounded-xl border bg-white px-3 py-2 text-left shadow-sm hover:ring-2 hover:ring-blue-300 ${
-          dragOrderId === row.id ? "ring-2 ring-blue-400 opacity-70" : ""
-        }`}
+        className={`w-full rounded-xl border px-3 py-2 text-left shadow-sm transition ${
+          isPending ? "border-emerald-500 bg-emerald-100 ring-2 ring-emerald-300" : "bg-white hover:ring-2 hover:ring-blue-300"
+        } ${dragOrderId === row.id ? "ring-2 ring-blue-400 opacity-70" : ""}`}
       >
-        <div className="grid grid-cols-[22px_72px_1fr_28px] items-start gap-2">
-          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">↕</div>
+        <div className="grid grid-cols-[28px_84px_1fr_auto] items-center gap-3">
+          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">â†•</div>
           <div className="font-mono text-[15px] leading-tight">{row.customer_number}</div>
           <button
             type="button"
             onClick={() => washCategory(row, category)}
             className="text-left font-bold text-[16px] leading-tight break-words whitespace-normal"
+            title={isPending ? "Nochmals antippen = rueckgaengig" : "Antippen = gewaschen"}
+          >
+            {row.customer_name}
+          </button>
+          <div className="flex min-w-[72px] justify-end gap-1">
+            {categoryIcons.map(({ cat, icon }) => (
+              <span
+                key={cat}
+                className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-base font-black"
+                title={cat}
+              >
+                {icon}
+              </span>
+            ))}
+          </div>
+        </div>
+        {isPending && (
+          <div className="mt-2 rounded-lg bg-emerald-600 px-3 py-1 text-center text-xs font-black text-white">
+            Wird in 5 Sekunden ausgeblendet - erneut antippen zum Abbrechen
+          </div>
+        )}
+        {row.info && (
+          <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
+            â„¹ {row.info}
+          </div>
+        )}
+      </div>
+    );
+  }
+  /*
+        }`}
+      >
+        <div className="grid grid-cols-[28px_92px_1fr_54px] items-start gap-3">
+          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">↕</div>
+          <div className="font-mono text-xl font-black leading-tight">{row.customer_number}</div>
+          <button
+            type="button"
+            onClick={handleWash}
+            className="text-left text-xl font-black leading-tight break-words whitespace-normal"
             title="Antippen = gewaschen"
           >
             {row.customer_name}
           </button>
-          <div className="text-right text-sm font-black">{row.washOpen}</div>
+          <div className="rounded-xl bg-slate-100 px-2 py-1 text-center text-2xl font-black">{row.washOpen}</div>
         </div>
+        {row.washLabels?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2 pl-10">
+            {row.washLabels.map((label) => (
+              <span key={label} className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
         {row.info && (
           <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
             ℹ {row.info}
@@ -1587,6 +1825,7 @@ const tourColumns = Object.entries(
     );
   }
 
+  */
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white px-8 py-4">
@@ -1594,10 +1833,58 @@ const tourColumns = Object.entries(
           <Logo />
           <div className="text-center text-3xl font-black">{expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}</div>
           <div className="flex items-center justify-end gap-3">
+            {adminUnlocked ? (
+              <Button className="border-emerald-200 bg-emerald-50 text-emerald-800" onClick={lockAdminArea}>
+                Admin sperren
+              </Button>
+            ) : (
+              <Button className="border-slate-300 bg-slate-100 text-slate-700" onClick={() => openPinModal(null)}>
+                Admin entsperren
+              </Button>
+            )}
             <span className="text-2xl font-bold">◷ {fmtTime(new Date())}</span>
           </div>
         </div>
       </header>
+
+      {pinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
+            <h2 className="text-2xl font-black">Admin-PIN</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Dieser Bereich ist geschuetzt.
+            </p>
+
+            <form
+              className="mt-5 space-y-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                confirmPin();
+              }}
+            >
+              <Input
+                className="w-full text-center text-2xl tracking-[0.35em]"
+                inputMode="numeric"
+                type="password"
+                value={pinInput}
+                onChange={(e) => {
+                  setPinInput(e.target.value);
+                  setPinError("");
+                }}
+                autoFocus
+              />
+              {pinError && <div className="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{pinError}</div>}
+
+              <div className="flex justify-end gap-3">
+                <Button onClick={() => setPinModal(null)}>Abbrechen</Button>
+                <Button type="submit" className="bg-blue-700 text-white">
+                  Entsperren
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {tourModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -1633,6 +1920,52 @@ const tourColumns = Object.entries(
         </div>
       )}
 
+      {monitorDetailOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-black">
+                  {monitorDetailOrder.customer_number} {monitorDetailOrder.customer_name}
+                </h2>
+                <p className="text-slate-500">Artikelstatus Verpackung</p>
+              </div>
+              <Button onClick={() => setMonitorDetailOrder(null)}>Schliessen</Button>
+            </div>
+
+            <div className="space-y-4">
+              {monitorDetailGroups(monitorDetailOrder).map((group) => (
+                <div key={group.category} className="rounded-2xl border bg-slate-50 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-lg font-black">
+                      <span className="mr-2">{CAT_ICON[group.category]}</span>{group.category}
+                    </h3>
+                    <div className="text-sm font-bold text-slate-500">
+                      {group.items.filter((item) => item.is_done).length}/{group.items.length}
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {group.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className={`rounded-xl border px-3 py-2 text-sm font-bold ${
+                          item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{displaySubcategory(item.subcategory)}</span>
+                          <span>{item.is_done ? "Fertig" : "Offen"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto max-w-[1800px] p-5">
         {!fixedView && (
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
@@ -1652,7 +1985,7 @@ const tourColumns = Object.entries(
                   ["leitung", "Produktionsleitung"],
                   ["personalplanung", "Personalplanung"],
                 ]).map(([key, label]) => (
-              <Button key={key} active={view === key} onClick={() => setView(key)}>
+              <Button key={key} active={view === key} onClick={() => goToView(key)}>
                 {label}
               </Button>
             ))}
@@ -1723,16 +2056,22 @@ const tourColumns = Object.entries(
 
         {view === "waschplan" && (
           <section className="grid gap-5 lg:grid-cols-3">
-            {WASH_CATEGORIES.map((cat) => (
-              <div key={cat} className={`rounded-3xl border-4 p-4 ${categoryStyle(cat, false)}`}>
-                <h2 className="mb-4 border-b-2 border-current pb-2 text-center text-2xl font-black">
-                  <span className="mr-2">{CAT_ICON[cat]}</span>{cat}
-                </h2>
-                <div className="grid gap-2 xl:grid-cols-2">
-                  {washRowsForCategory(cat).map((row) => <WashCard key={`${row.id}-${cat}`} row={row} category={cat} />)}
+            {WASH_CATEGORIES.map((cat) => {
+              const rows = washRowsForCategory(cat);
+
+              return (
+                <div key={cat} className={`rounded-3xl border-4 p-4 ${categoryStyle(cat, false)}`}>
+                  <h2 className="mb-4 border-b-2 border-current pb-2 text-center text-2xl font-black">
+                    <span className="mr-2">{CAT_ICON[cat]}</span>{cat}
+                  </h2>
+                  <div className="grid gap-2">
+                    {rows.map((row) => (
+                      <WashCard key={`${row.id}-${cat}`} row={row} category={cat} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </section>
         )}
 
@@ -1803,7 +2142,7 @@ const tourColumns = Object.entries(
             {splitIntoColumns(workingRows, 2).map((col, idx) => (
               <div key={`work-${idx}`} className="rounded-3xl border border-orange-100 bg-orange-50/40 p-4">
                 <h2 className="mb-3 border-b-2 border-orange-400 pb-2 text-center font-black">IN BEARBEITUNG</h2>
-                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} />)}</div>
+                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} onClick={() => setMonitorDetailOrder(r)} />)}</div>
               </div>
             ))}
             {splitIntoColumns(finishedRows, 2).map((col, idx) => (
