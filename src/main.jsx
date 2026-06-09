@@ -201,6 +201,7 @@ const PERSONNEL_MAPS = {
   waescherei: {
     title: "Gesamtuebersicht Waescherei",
     image: "/plan-skizze-waescherei.jpg",
+    imageFallbacks: ["/plan skizze wäscherei.jpg", "/plan%20skizze%20w%C3%A4scherei.jpg"],
     aspect: "aspect-[715/720]",
     zones: [
       { section: "Ãœbernahme", x: 10, y: 80, w: 18 },
@@ -223,6 +224,7 @@ const PERSONNEL_MAPS = {
   putzerei: {
     title: "Gesamtuebersicht Putzerei",
     image: "/plan-skizze-putzerei.jpg",
+    imageFallbacks: ["/plan skizze Putzerei.jpg", "/plan%20skizze%20Putzerei.jpg"],
     aspect: "aspect-[715/522]",
     zones: [
       { section: "Ãœbernahme", x: 8, y: 82, w: 18 },
@@ -1170,10 +1172,6 @@ function App() {
 
 const tourColumns = Object.entries(
     tourRows
-      .filter((r) => {
-        const d = r.completed_at || r.created_at;
-        return d ? String(d).slice(0, 10) === todayKey : true;
-      })
       .reduce((acc, row) => {
         const tour = row.tour_number || "Ohne Tour";
         if (!acc[tour]) acc[tour] = [];
@@ -1960,6 +1958,15 @@ const tourColumns = Object.entries(
             src={map.image}
             alt={map.title}
             className="absolute inset-0 h-full w-full object-contain"
+            data-fallback-index="0"
+            onError={(e) => {
+              const fallbacks = map.imageFallbacks || [];
+              const index = Number(e.currentTarget.dataset.fallbackIndex || "0");
+              if (index < fallbacks.length) {
+                e.currentTarget.dataset.fallbackIndex = String(index + 1);
+                e.currentTarget.src = fallbacks[index];
+              }
+            }}
           />
 
           {map.zones.map((zone, index) => {
@@ -2443,7 +2450,7 @@ const tourColumns = Object.entries(
               <div className="mb-4 flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-black">Touren</h2>
-                  <p className="text-slate-500">Heute auf Tour gesetzte Kunden, nach Tourennummer aufsteigend sortiert.</p>
+                  <p className="text-slate-500">Alle Kunden mit Status Auf der Tour, nach Tourennummer aufsteigend sortiert.</p>
                 </div>
                 <div className="text-sm font-semibold text-slate-500">
                   {new Date().toLocaleDateString("de-AT")}
