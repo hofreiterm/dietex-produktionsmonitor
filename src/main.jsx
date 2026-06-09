@@ -1935,25 +1935,25 @@ const tourColumns = Object.entries(
     );
   }
 
-  function PersonnelMapOverview() {
+  function PersonnelMapOverview({ compact = false }) {
     const map = PERSONNEL_MAPS[personalDepartment];
     if (!map) return null;
 
     return (
-      <div className="rounded-3xl border bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="rounded-2xl border bg-white p-3 shadow-sm">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-xl font-black">{map.title}</h3>
-            <p className="text-sm text-slate-500">
+            <h3 className="text-lg font-black">{map.title}</h3>
+            {!compact && <p className="text-sm text-slate-500">
               Mitarbeiter werden dort angezeigt, wo sie in der aktuellen Schicht eingeteilt sind.
-            </p>
+            </p>}
           </div>
           <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
             {personalDate} | {PERSONNEL_SHIFTS.find((s) => s.key === personalShift)?.label || personalShift}
           </div>
         </div>
 
-        <div className={`relative overflow-hidden rounded-2xl border bg-slate-100 ${map.aspect}`}>
+        <div className={`relative overflow-hidden rounded-xl border bg-slate-100 ${compact ? "h-[calc(100vh-250px)] min-h-[460px]" : "h-[calc(100vh-320px)] min-h-[520px]"}`}>
           <img
             src={map.image}
             alt={map.title}
@@ -1972,12 +1972,13 @@ const tourColumns = Object.entries(
           {map.zones.map((zone, index) => {
             const sectionName = currentSections()[index]?.name || zone.section;
             const names = getEmployeesInSection(sectionName);
-            if (!names.length) return null;
 
             return (
               <div
                 key={sectionName}
-                className="absolute rounded-xl border border-blue-300 bg-white/90 p-1 shadow-lg backdrop-blur-sm"
+                className={`absolute rounded-lg border p-1 shadow-md backdrop-blur-sm ${
+                  names.length ? "border-blue-300 bg-white/90" : "border-slate-300 bg-white/50"
+                }`}
                 style={{
                   left: `${zone.x}%`,
                   top: `${zone.y}%`,
@@ -1987,14 +1988,14 @@ const tourColumns = Object.entries(
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, sectionName)}
               >
-                <div className="mb-1 truncate text-[10px] font-black text-blue-900">{sectionName}</div>
+                <div className="mb-1 truncate text-[9px] font-black text-blue-900">{sectionName}</div>
                 <div className="flex flex-wrap gap-1">
                   {names.map((name) => (
                     <span
                       key={name}
                       draggable
                       onDragStart={() => setDragEmployee(name)}
-                      className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[10px] font-black leading-tight text-white"
+                      className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[9px] font-black leading-tight text-white"
                     >
                       {name}
                     </span>
@@ -2005,6 +2006,87 @@ const tourColumns = Object.entries(
           })}
         </div>
       </div>
+    );
+  }
+
+  function PersonnelSidePanel() {
+    const absenceZones = [
+      { key: "urlaub", title: "Urlaub" },
+      { key: "za", title: "ZA" },
+      { key: "krank", title: "Krank" },
+    ];
+
+    return (
+      <aside className="rounded-2xl border bg-slate-50 p-2">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-base font-black">Mitarbeiter</h3>
+          <div className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold">
+            {currentEmployees().length}
+          </div>
+        </div>
+
+        <div
+          className="mb-2 rounded-xl border bg-white p-2"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, "pool")}
+        >
+          <div className="mb-1 flex items-center justify-between">
+            <div className="text-xs font-black">Nicht eingeteilt</div>
+            <div className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold">
+              {getUnassignedEmployees().length}
+            </div>
+          </div>
+          <div className="grid max-h-[28vh] grid-cols-2 gap-1 overflow-auto">
+            {getUnassignedEmployees().map((emp) => (
+              <div
+                key={emp.name}
+                draggable
+                onDragStart={() => setDragEmployee(emp.name)}
+                className="cursor-grab rounded-md border bg-slate-50 px-2 py-1"
+              >
+                <div className="text-[11px] font-black leading-tight">{emp.name}</div>
+                <div className="text-[9px] text-slate-500 leading-none">{emp.hours ? `${emp.hours} h` : "Chef"}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-2">
+          {absenceZones.map((zone) => {
+            const zoneEmployees = getSortedEmployees(
+              currentEmployees().filter((emp) => getEmployeeAssignment(emp.name) === zone.key)
+            );
+
+            return (
+              <div
+                key={zone.key}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, zone.key)}
+                className="rounded-xl border bg-white p-2"
+              >
+                <div className="mb-1 flex items-center justify-between">
+                  <div className="text-xs font-black">{zone.title}</div>
+                  <div className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold">
+                    {zoneEmployees.length}
+                  </div>
+                </div>
+                <div className="flex min-h-8 flex-wrap gap-1">
+                  {zoneEmployees.map((emp) => (
+                    <span
+                      key={emp.name}
+                      draggable
+                      onDragStart={() => setDragEmployee(emp.name)}
+                      className="cursor-grab rounded-md border bg-slate-50 px-2 py-1 text-[10px] font-black"
+                    >
+                      {emp.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </aside>
     );
   }
   /*
@@ -2510,14 +2592,13 @@ const tourColumns = Object.entries(
         )}
 
         {view === "personalplanung" && (
-          <section className="space-y-5">
-            <div className="rounded-3xl border bg-white p-5 shadow-sm">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <section className="space-y-2">
+            <div className="rounded-2xl border bg-white p-3 shadow-sm">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-2xl font-black">Personalplanung</h2>
-                  <p className="text-slate-500">Phase 1: Tagesplanung per Drag & Drop.</p>
+                  <h2 className="text-xl font-black">Personalplanung</h2>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {Object.entries(PERSONNEL_DEPARTMENTS).map(([deptKey, dept]) => (
                     <Button
                       key={deptKey}
@@ -2553,7 +2634,12 @@ const tourColumns = Object.entries(
                 </div>
               </div>
 
-              <div className="mb-4 rounded-2xl border bg-slate-50 p-3">
+              <div className="grid gap-3 xl:grid-cols-[310px_1fr]">
+                <PersonnelSidePanel />
+                <PersonnelMapOverview compact />
+              </div>
+
+              {false && <div className="mb-4 rounded-2xl border bg-slate-50 p-3">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="font-black">Personalstatistik Urlaub / ZA / Krank</h3>
@@ -2586,11 +2672,11 @@ const tourColumns = Object.entries(
                     </div>
                   </div>
                 </div>
-              </div>
+              </div>}
 
-              <PersonnelMapOverview />
+              {false && <PersonnelMapOverview />}
 
-              <div className="grid gap-5 lg:grid-cols-[310px_1fr]">
+              {false && <div className="grid gap-5 lg:grid-cols-[310px_1fr]">
                 <aside className="rounded-3xl border bg-slate-50 p-3">
                   <h3 className="mb-2 text-lg font-black">Mitarbeiter</h3>
 
@@ -2770,7 +2856,7 @@ const tourColumns = Object.entries(
                     </div>
                   ))}
                 </div>
-              </div>
+              </div>}
             </div>
           </section>
         )}
