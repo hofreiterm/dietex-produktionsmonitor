@@ -204,21 +204,21 @@ const PERSONNEL_MAPS = {
     imageFallbacks: ["/plan skizze wäscherei.jpg", "/plan%20skizze%20w%C3%A4scherei.jpg"],
     aspect: "aspect-[715/720]",
     zones: [
-      { section: "Ãœbernahme", x: 10, y: 80, w: 18 },
-      { section: "WaschstraÃŸen", x: 18, y: 28, w: 18 },
-      { section: "Waschmaschinen", x: 11, y: 40, w: 18 },
-      { section: "Absortierung", x: 48, y: 18, w: 18 },
-      { section: "Mangel 1", x: 60, y: 24, w: 18 },
-      { section: "Mangel 2", x: 60, y: 48, w: 18 },
-      { section: "Frottee 1", x: 83, y: 15, w: 15 },
-      { section: "Frottee 2", x: 84, y: 45, w: 15 },
-      { section: "BM + SPLT", x: 86, y: 80, w: 15 },
-      { section: "Jenway GroÃŸteile", x: 41, y: 25, w: 17 },
-      { section: "Jenway Kleinteile", x: 42, y: 48, w: 17 },
-      { section: "Jenway Frottee", x: 41, y: 63, w: 17 },
-      { section: "PoolwÃ¤sche", x: 66, y: 82, w: 16 },
-      { section: "Expedit", x: 73, y: 72, w: 16 },
-      { section: "WÃ¤sche auspacken", x: 18, y: 88, w: 18 },
+      { section: "Ãœbernahme", x: 12, y: 88, w: 14 },
+      { section: "WaschstraÃŸen", x: 18, y: 32, w: 14 },
+      { section: "Waschmaschinen", x: 13, y: 43, w: 14 },
+      { section: "Absortierung", x: 48, y: 22, w: 15 },
+      { section: "Mangel 1", x: 64, y: 29, w: 14 },
+      { section: "Mangel 2", x: 64, y: 50, w: 14 },
+      { section: "Frottee 1", x: 86, y: 20, w: 12 },
+      { section: "Frottee 2", x: 86, y: 48, w: 12 },
+      { section: "BM + SPLT", x: 88, y: 82, w: 12 },
+      { section: "Jenway GroÃŸteile", x: 42, y: 34, w: 14 },
+      { section: "Jenway Kleinteile", x: 42, y: 52, w: 14 },
+      { section: "Jenway Frottee", x: 42, y: 68, w: 14 },
+      { section: "PoolwÃ¤sche", x: 70, y: 84, w: 13 },
+      { section: "Expedit", x: 74, y: 75, w: 13 },
+      { section: "WÃ¤sche auspacken", x: 25, y: 92, w: 14 },
     ],
   },
   putzerei: {
@@ -227,15 +227,15 @@ const PERSONNEL_MAPS = {
     imageFallbacks: ["/plan skizze Putzerei.jpg", "/plan%20skizze%20Putzerei.jpg"],
     aspect: "aspect-[715/522]",
     zones: [
-      { section: "Ãœbernahme", x: 8, y: 82, w: 18 },
-      { section: "Waschmaschinen", x: 20, y: 40, w: 18 },
-      { section: "Putzmaschinen", x: 44, y: 45, w: 18 },
-      { section: "Tunnelfinisher", x: 70, y: 30, w: 18 },
-      { section: "Hemdenabteilung", x: 76, y: 70, w: 18 },
-      { section: "BÃ¼geltische", x: 58, y: 56, w: 18 },
-      { section: "Verpackung", x: 88, y: 45, w: 16 },
-      { section: "KleinwÃ¤scheabteilung", x: 24, y: 72, w: 18 },
-      { section: "Expedit", x: 10, y: 58, w: 16 },
+      { section: "Ãœbernahme", x: 10, y: 90, w: 15 },
+      { section: "Waschmaschinen", x: 22, y: 38, w: 14 },
+      { section: "Putzmaschinen", x: 43, y: 43, w: 14 },
+      { section: "Tunnelfinisher", x: 71, y: 25, w: 14 },
+      { section: "Hemdenabteilung", x: 77, y: 78, w: 14 },
+      { section: "BÃ¼geltische", x: 60, y: 58, w: 14 },
+      { section: "Verpackung", x: 88, y: 45, w: 14 },
+      { section: "KleinwÃ¤scheabteilung", x: 28, y: 80, w: 15 },
+      { section: "Expedit", x: 10, y: 57, w: 13 },
     ],
   },
 };
@@ -1953,11 +1953,11 @@ const tourColumns = Object.entries(
           </div>
         </div>
 
-        <div className={`relative overflow-hidden rounded-xl border bg-slate-100 ${compact ? "h-[calc(100vh-250px)] min-h-[460px]" : "h-[calc(100vh-320px)] min-h-[520px]"}`}>
+        <div className={`relative overflow-hidden rounded-xl border bg-slate-100 ${compact ? "h-[calc(100vh-280px)] min-h-[390px]" : "h-[calc(100vh-320px)] min-h-[520px]"}`}>
           <img
             src={map.image}
             alt={map.title}
-            className="absolute inset-0 h-full w-full object-contain"
+            className="absolute inset-0 h-full w-full object-contain p-6"
             data-fallback-index="0"
             onError={(e) => {
               const fallbacks = map.imageFallbacks || [];
