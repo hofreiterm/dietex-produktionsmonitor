@@ -288,7 +288,14 @@ function App() {
   const initialStation = STATIONS.find((s) => s.key === initialStationKey) || STATIONS[0];
   const fixedView = params.get("fixed") === "1";
   const expeditMode = params.get("view") === "expedit";
-  const requestedInitialView = expeditMode ? "monitor" : initialView === "uebernahme" ? "annahme" : initialView;
+  const takeoverMode = fixedView && (initialView === "annahme" || initialView === "uebernahme" || params.get("mode") === "uebernahme");
+  const requestedInitialView = takeoverMode
+    ? "annahme"
+    : expeditMode
+      ? "monitor"
+      : initialView === "uebernahme"
+        ? "annahme"
+        : initialView;
   const initialAdminUnlocked = isAdminSessionUnlocked();
 
   const [view, setView] = useState(() => (isProtectedView(requestedInitialView) && !initialAdminUnlocked ? "annahme" : requestedInitialView));
@@ -1664,6 +1671,11 @@ const tourColumns = Object.entries(
   }
 
   function goToView(nextView) {
+    if (takeoverMode && !["annahme", "station"].includes(nextView)) {
+      setView("annahme");
+      return;
+    }
+
     if (isProtectedView(nextView) && !adminUnlocked) {
       openPinModal(nextView);
       return;
@@ -1833,7 +1845,7 @@ const tourColumns = Object.entries(
           <Logo />
           <div className={`${fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>{expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}</div>
           <div className="flex items-center justify-end gap-3">
-            {adminUnlocked ? (
+            {!fixedView && (adminUnlocked ? (
               <Button className="border-emerald-200 bg-emerald-50 text-emerald-800" onClick={lockAdminArea}>
                 Admin sperren
               </Button>
@@ -1841,7 +1853,7 @@ const tourColumns = Object.entries(
               <Button className="border-slate-300 bg-slate-100 text-slate-700" onClick={() => openPinModal(null)}>
                 Admin entsperren
               </Button>
-            )}
+            ))}
             <span className="text-2xl font-bold">◷ {fmtTime(new Date())}</span>
           </div>
         </div>
@@ -1967,9 +1979,14 @@ const tourColumns = Object.entries(
       )}
 
       <main className={`mx-auto max-w-[1800px] ${fixedView ? "p-2" : "p-5"}`}>
-        {!fixedView && (
+        {(!fixedView || takeoverMode) && (
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
-            {(expeditMode
+            {(takeoverMode
+              ? [
+                  ["annahme", "Kunden Ã¼bernehmen"],
+                  ["station", "Station"],
+                ]
+              : expeditMode
               ? [
                   ["monitor", "Verpackungsmonitor"],
                   ["touren", "Touren"],
@@ -2077,7 +2094,7 @@ const tourColumns = Object.entries(
 
         {view === "station" && (
           <section className="grid gap-5 lg:grid-cols-[300px_1fr]">
-            {!fixedView && (
+            {(!fixedView || takeoverMode) && (
               <aside className="space-y-2 rounded-3xl border bg-white p-4">
                 <b>Station auswählen</b>
                 {STATIONS.map((s) => (
@@ -2088,7 +2105,7 @@ const tourColumns = Object.entries(
               </aside>
             )}
 
-            <div className={`rounded-3xl border bg-white p-4 ${fixedView ? "lg:col-span-2" : ""}`}>
+            <div className={`rounded-3xl border bg-white p-4 ${fixedView && !takeoverMode ? "lg:col-span-2" : ""}`}>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-2xl font-black">{activeStation.name}</h2>
                 <Input placeholder="Suchen" value={stationSearch} onChange={(e) => setStationSearch(e.target.value)} />
