@@ -331,6 +331,7 @@ function App() {
   const [customerName, setCustomerName] = useState("");
   const [info, setInfo] = useState("");
   const [selectedCategories, setSelectedCategories] = useState([]);
+  const [excludedOrderArticles, setExcludedOrderArticles] = useState({});
 
   const [stationSearch, setStationSearch] = useState("");
   const [masterSearch, setMasterSearch] = useState("");
@@ -467,6 +468,47 @@ function App() {
   function isArticleEnabled(customerNumber, subcategory) {
     const setting = articleSettings.find((s) => String(s.customer_number) === String(customerNumber) && s.subcategory === subcategory);
     return setting ? setting.is_enabled : true;
+  }
+
+  function orderArticleKey(category, subcategory) {
+    return `${category}__${subcategory}`;
+  }
+
+  function isOrderArticleIncluded(category, subcategory) {
+    return !excludedOrderArticles[orderArticleKey(category, subcategory)];
+  }
+
+  function selectedOrderRows() {
+    return selectedCategories.flatMap((cat) =>
+      (CATEGORIES[cat] || [])
+        .filter((sub) => isOrderArticleIncluded(cat, sub))
+        .map((sub) => ({ category: cat, subcategory: sub }))
+    );
+  }
+
+  function toggleOrderCategory(category) {
+    setSelectedCategories((prev) => {
+      if (prev.includes(category)) {
+        setExcludedOrderArticles((old) => {
+          const next = { ...old };
+          (CATEGORIES[category] || []).forEach((sub) => delete next[orderArticleKey(category, sub)]);
+          return next;
+        });
+        return prev.filter((cat) => cat !== category);
+      }
+
+      return [...prev, category];
+    });
+  }
+
+  function toggleOrderArticle(category, subcategory) {
+    setExcludedOrderArticles((prev) => {
+      const key = orderArticleKey(category, subcategory);
+      const next = { ...prev };
+      if (next[key]) delete next[key];
+      else next[key] = true;
+      return next;
+    });
   }
 
   function enabledItemsForOrder(order) {
@@ -660,9 +702,12 @@ function App() {
   async function addOrder() {
     const number = customerNumber.trim();
     const name = customerName.trim();
+    const orderRows = selectedOrderRows();
 
     if (!number || !name) return alert("Kundennummer und Kundenname eingeben.");
     if (!selectedCategories.length) return alert("Mindestens eine Kategorie auswählen.");
+
+    if (!orderRows.length) return alert("Mindestens einen Artikel fuer diesen Auftrag auswaehlen.");
 
     let customer = customers.find((c) => String(c.customer_number) === String(number));
     if (!customer) {
@@ -689,11 +734,9 @@ function App() {
       const existingItems = items.filter((i) => i.order_id === existingOrder.id);
       const existingSubcategories = new Set(existingItems.map((i) => i.subcategory));
 
-      const rowsToAdd = selectedCategories.flatMap((cat) =>
-        (CATEGORIES[cat] || [])
-          .filter((sub) => !existingSubcategories.has(sub))
-          .map((sub) => ({ order_id: existingOrder.id, category: cat, subcategory: sub }))
-      );
+      const rowsToAdd = orderRows
+        .filter((row) => !existingSubcategories.has(row.subcategory))
+        .map((row) => ({ order_id: existingOrder.id, category: row.category, subcategory: row.subcategory }));
 
       if (rowsToAdd.length) {
         await supabase.from("order_categories").insert(rowsToAdd);
@@ -735,6 +778,7 @@ function App() {
       setCustomerName("");
       setInfo("");
       setSelectedCategories([]);
+      setExcludedOrderArticles({});
       loadAll();
       return;
     }
@@ -761,9 +805,7 @@ function App() {
 
     if (error) return alert("Auftrag konnte nicht erstellt werden: " + error.message);
 
-    const rows = selectedCategories.flatMap((cat) =>
-      (CATEGORIES[cat] || []).map((sub) => ({ order_id: order.id, category: cat, subcategory: sub }))
-    );
+    const rows = orderRows.map((row) => ({ order_id: order.id, category: row.category, subcategory: row.subcategory }));
     if (rows.length) await supabase.from("order_categories").insert(rows);
 
     if (plan.length) {
@@ -783,6 +825,7 @@ function App() {
     setCustomerName("");
     setInfo("");
     setSelectedCategories([]);
+    setExcludedOrderArticles({});
     loadAll();
   }
 
@@ -2101,7 +2144,7 @@ const tourColumns = Object.entries(
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => setSelectedCategories((p) => (p.includes(cat) ? p.filter((x) => x !== cat) : [...p, cat]))}
+                  onClick={() => toggleOrderCategory(cat)}
                   className={`rounded-3xl border-4 p-4 text-center transition-all ${categoryStyle(cat, selectedCategories.includes(cat))}`}
                 >
                   <div className="text-4xl">{CAT_ICON[cat]}</div>
@@ -2110,6 +2153,40 @@ const tourColumns = Object.entries(
                 </button>
               ))}
             </div>
+
+            {selectedCategories.length > 0 && (
+              <div className="mt-4 rounded-2xl border bg-slate-50 p-4">
+                <h3 className="mb-3 text-center text-lg font-black">Artikel fuer diesen Auftrag</h3>
+                <div className="grid gap-3 md:grid-cols-3">
+                  {selectedCategories.map((cat) => (
+                    <div key={cat} className="rounded-xl border bg-white p-3">
+                      <div className="mb-2 font-black">
+                        <span className="mr-2">{CAT_ICON[cat]}</span>{cat}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(CATEGORIES[cat] || []).map((sub) => {
+                          const active = isOrderArticleIncluded(cat, sub);
+                          return (
+                            <button
+                              key={sub}
+                              type="button"
+                              onClick={() => toggleOrderArticle(cat, sub)}
+                              className={`rounded-xl border px-3 py-2 text-sm font-bold ${
+                                active
+                                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                                  : "border-slate-200 bg-slate-100 text-slate-400"
+                              }`}
+                            >
+                              {sub}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-5 flex justify-center border-t pt-4">
               <button type="button" onClick={addOrder} className="rounded-2xl bg-blue-700 px-8 py-3 text-base font-black text-white shadow-lg hover:bg-blue-800">
