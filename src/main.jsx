@@ -10,7 +10,7 @@ const supabase = createClient(
 );
 
 const ADMIN_PIN = import.meta.env.VITE_ADMIN_PIN || "";
-const PROTECTED_VIEWS = new Set(["stats", "stammdaten", "leitung", "personalplanung"]);
+const PROTECTED_VIEWS = new Set(["stammdaten", "leitung", "personalplanung"]);
 
 function isProtectedView(view) {
   return PROTECTED_VIEWS.has(view);
@@ -264,6 +264,17 @@ function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit" });
 }
 
+function fmtDateTime(ts) {
+  if (!ts) return "-";
+  return new Date(ts).toLocaleString("de-AT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function fmtDateInput(d = new Date()) {
   return d.toISOString().slice(0, 10);
 }
@@ -293,7 +304,9 @@ function App() {
     ? "annahme"
     : expeditMode
       ? "monitor"
-      : initialView === "uebernahme"
+      : initialView === "stats"
+        ? "leitung"
+        : initialView === "uebernahme"
         ? "annahme"
         : initialView;
   const initialAdminUnlocked = isAdminSessionUnlocked();
@@ -324,6 +337,9 @@ function App() {
   const [statsDate, setStatsDate] = useState(fmtDateInput());
   const [statsFrom, setStatsFrom] = useState("00:00");
   const [statsTo, setStatsTo] = useState("23:59");
+  const [leitungStatusFilter, setLeitungStatusFilter] = useState("alle");
+  const [leitungDateFrom, setLeitungDateFrom] = useState(fmtDateInput());
+  const [leitungDateTo, setLeitungDateTo] = useState(fmtDateInput());
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
 
@@ -1183,6 +1199,39 @@ const tourColumns = Object.entries(
     };
   }
 
+  function getCustomerProductionStatusWithTime(order) {
+    const enabled = enabledItemsForOrder(order);
+    const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
+    const packDone = laundryEnabled.length > 0 && laundryEnabled.every((i) => i.is_done);
+    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
+    const washDone = washRelevant.length === 0 || washRelevant.every((i) => i.washed_at);
+    const latestWashedAt = washRelevant.map((i) => i.washed_at).filter(Boolean).sort().at(-1);
+    const latestDoneAt = laundryEnabled.map((i) => i.done_at).filter(Boolean).sort().at(-1);
+    const finishedAt = order.completed_at || latestDoneAt;
+
+    if (order.status === "auf_tour") return { key: "auf_tour", label: "Auf der Tour", changedAt: finishedAt || latestWashedAt || order.created_at, className: "bg-violet-100 text-violet-800 border-violet-300" };
+    if (packDone) return { key: "fertig", label: "Fertig", changedAt: finishedAt || order.created_at, className: "bg-green-100 text-green-800 border-green-300" };
+    if (washDone) return { key: "gewaschen", label: "Gewaschen", changedAt: latestWashedAt || order.created_at, className: "bg-blue-100 text-blue-800 border-blue-300" };
+    return { key: "uebernommen", label: "Uebernommen", changedAt: order.created_at, className: "bg-yellow-100 text-yellow-800 border-yellow-300" };
+  }
+
+  const productionRows = sortedOrders
+    .map((order) => ({ order, status: getCustomerProductionStatusWithTime(order), details: getCustomerStatusDetails(order) }))
+    .filter(({ status }) => {
+      if (leitungStatusFilter !== "alle" && status.key !== leitungStatusFilter) return false;
+
+      const dateKey = status.changedAt ? String(status.changedAt).slice(0, 10) : "";
+      const from = leitungDateFrom || "0000-01-01";
+      const to = leitungDateTo || "9999-12-31";
+      return dateKey >= from && dateKey <= to;
+    })
+    .sort((a, b) => {
+      const aTime = a.status.changedAt ? new Date(a.status.changedAt).getTime() : 0;
+      const bTime = b.status.changedAt ? new Date(b.status.changedAt).getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return String(a.order.customer_number).localeCompare(String(b.order.customer_number), "de", { numeric: true });
+    });
+
 
   const currentDepartmentConfig = () => PERSONNEL_DEPARTMENTS[personalDepartment] || PERSONNEL_DEPARTMENTS.waescherei;
 
@@ -1997,7 +2046,6 @@ const tourColumns = Object.entries(
                   ["station", "Station"],
                   ["monitor", "Verpackungsmonitor"],
                   ["touren", "Touren"],
-                  ["stats", "Statistiken"],
                   ["stammdaten", "Stammdaten"],
                   ["leitung", "Produktionsleitung"],
                   ["personalplanung", "Personalplanung"],
@@ -2602,6 +2650,104 @@ const tourColumns = Object.entries(
         )}
 
         {view === "leitung" && (
+          <section className="space-y-5">
+            <div className="rounded-3xl border bg-white p-5 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-black">Produktionsleitung</h2>
+                  <p className="text-slate-500">Kunden nach letztem Produktionsstatus und Zeitraum filtern.</p>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Status</label>
+                    <select
+                      className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold"
+                      value={leitungStatusFilter}
+                      onChange={(e) => setLeitungStatusFilter(e.target.value)}
+                    >
+                      <option value="alle">Alle</option>
+                      <option value="uebernommen">Uebernommen</option>
+                      <option value="gewaschen">Gewaschen</option>
+                      <option value="fertig">Fertig</option>
+                      <option value="auf_tour">Auf der Tour</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Von</label>
+                    <Input type="date" value={leitungDateFrom} onChange={(e) => setLeitungDateFrom(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Bis</label>
+                    <Input type="date" value={leitungDateTo} onChange={(e) => setLeitungDateTo(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      <th className="p-3">Kundennummer</th>
+                      <th className="p-3">Kunde</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Letzter Status</th>
+                      <th className="p-3">Waschen</th>
+                      <th className="p-3">Verpacken</th>
+                      <th className="p-3">Container/Packerl</th>
+                      <th className="p-3">Zusatz</th>
+                      <th className="p-3">Tour</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productionRows.map(({ order, status, details }) => (
+                      <tr key={order.id} className="border-t">
+                        <td className="p-3 font-mono font-semibold">{order.customer_number}</td>
+                        <td className="p-3">
+                          <b>{order.customer_name}</b>
+                          {order.info && (
+                            <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
+                              i {order.info}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span className={`inline-flex rounded-full border px-3 py-1 font-black ${status.className}`}>
+                            {status.label}
+                          </span>
+                        </td>
+                        <td className="p-3 font-semibold">{fmtDateTime(status.changedAt)}</td>
+                        <td className="p-3 font-semibold">{details.washed}/{details.washTotal}</td>
+                        <td className="p-3 font-semibold">{details.packed}/{details.packTotal}</td>
+                        <td className="p-3 font-black">{order.container_count || "-"}</td>
+                        <td className="p-3">
+                          {details.putzereiOpen ? (
+                            <span className="rounded-full bg-violet-100 px-3 py-1 font-black text-violet-800">P</span>
+                          ) : "-"}
+                        </td>
+                        <td className="p-3">
+                          {order.status === "auf_tour" ? (
+                            <span className="rounded-full bg-violet-100 px-3 py-1 font-black text-violet-800">
+                              Tour {order.tour_number || "-"}
+                            </span>
+                          ) : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                    {!productionRows.length && (
+                      <tr>
+                        <td className="p-6 text-center font-semibold text-slate-500" colSpan="9">
+                          Keine Kunden im gewaehlten Zeitraum.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {false && view === "leitung" && (
           <section className="space-y-5">
             <div className="grid gap-5 md:grid-cols-4">
               <div className="rounded-2xl border bg-white p-5">
