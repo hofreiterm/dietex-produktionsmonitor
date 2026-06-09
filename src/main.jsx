@@ -197,6 +197,47 @@ const PERSONNEL_DEPARTMENTS = {
 };
 
 
+const PERSONNEL_MAPS = {
+  waescherei: {
+    title: "Gesamtuebersicht Waescherei",
+    image: "/plan-skizze-waescherei.jpg",
+    aspect: "aspect-[715/720]",
+    zones: [
+      { section: "Ãœbernahme", x: 10, y: 80, w: 18 },
+      { section: "WaschstraÃŸen", x: 18, y: 28, w: 18 },
+      { section: "Waschmaschinen", x: 11, y: 40, w: 18 },
+      { section: "Absortierung", x: 48, y: 18, w: 18 },
+      { section: "Mangel 1", x: 60, y: 24, w: 18 },
+      { section: "Mangel 2", x: 60, y: 48, w: 18 },
+      { section: "Frottee 1", x: 83, y: 15, w: 15 },
+      { section: "Frottee 2", x: 84, y: 45, w: 15 },
+      { section: "BM + SPLT", x: 86, y: 80, w: 15 },
+      { section: "Jenway GroÃŸteile", x: 41, y: 25, w: 17 },
+      { section: "Jenway Kleinteile", x: 42, y: 48, w: 17 },
+      { section: "Jenway Frottee", x: 41, y: 63, w: 17 },
+      { section: "PoolwÃ¤sche", x: 66, y: 82, w: 16 },
+      { section: "Expedit", x: 73, y: 72, w: 16 },
+      { section: "WÃ¤sche auspacken", x: 18, y: 88, w: 18 },
+    ],
+  },
+  putzerei: {
+    title: "Gesamtuebersicht Putzerei",
+    image: "/plan-skizze-putzerei.jpg",
+    aspect: "aspect-[715/522]",
+    zones: [
+      { section: "Ãœbernahme", x: 8, y: 82, w: 18 },
+      { section: "Waschmaschinen", x: 20, y: 40, w: 18 },
+      { section: "Putzmaschinen", x: 44, y: 45, w: 18 },
+      { section: "Tunnelfinisher", x: 70, y: 30, w: 18 },
+      { section: "Hemdenabteilung", x: 76, y: 70, w: 18 },
+      { section: "BÃ¼geltische", x: 58, y: 56, w: 18 },
+      { section: "Verpackung", x: 88, y: 45, w: 16 },
+      { section: "KleinwÃ¤scheabteilung", x: 24, y: 72, w: 18 },
+      { section: "Expedit", x: 10, y: 58, w: 16 },
+    ],
+  },
+};
+
 function Button({ children, active, className = "", ...props }) {
   return (
     <button
@@ -1895,6 +1936,70 @@ const tourColumns = Object.entries(
       </div>
     );
   }
+
+  function PersonnelMapOverview() {
+    const map = PERSONNEL_MAPS[personalDepartment];
+    if (!map) return null;
+
+    return (
+      <div className="rounded-3xl border bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-xl font-black">{map.title}</h3>
+            <p className="text-sm text-slate-500">
+              Mitarbeiter werden dort angezeigt, wo sie in der aktuellen Schicht eingeteilt sind.
+            </p>
+          </div>
+          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+            {personalDate} | {PERSONNEL_SHIFTS.find((s) => s.key === personalShift)?.label || personalShift}
+          </div>
+        </div>
+
+        <div className={`relative overflow-hidden rounded-2xl border bg-slate-100 ${map.aspect}`}>
+          <img
+            src={map.image}
+            alt={map.title}
+            className="absolute inset-0 h-full w-full object-contain"
+          />
+
+          {map.zones.map((zone, index) => {
+            const sectionName = currentSections()[index]?.name || zone.section;
+            const names = getEmployeesInSection(sectionName);
+            if (!names.length) return null;
+
+            return (
+              <div
+                key={sectionName}
+                className="absolute rounded-xl border border-blue-300 bg-white/90 p-1 shadow-lg backdrop-blur-sm"
+                style={{
+                  left: `${zone.x}%`,
+                  top: `${zone.y}%`,
+                  width: `${zone.w}%`,
+                  transform: "translate(-50%, -50%)",
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, sectionName)}
+              >
+                <div className="mb-1 truncate text-[10px] font-black text-blue-900">{sectionName}</div>
+                <div className="flex flex-wrap gap-1">
+                  {names.map((name) => (
+                    <span
+                      key={name}
+                      draggable
+                      onDragStart={() => setDragEmployee(name)}
+                      className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[10px] font-black leading-tight text-white"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
   /*
         }`}
       >
@@ -2475,6 +2580,8 @@ const tourColumns = Object.entries(
                   </div>
                 </div>
               </div>
+
+              <PersonnelMapOverview />
 
               <div className="grid gap-5 lg:grid-cols-[310px_1fr]">
                 <aside className="rounded-3xl border bg-slate-50 p-3">
