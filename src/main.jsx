@@ -558,6 +558,7 @@ function App() {
     let existing = enabledItemsForOrder(order).filter((item) => isStationItemMatch(station, item.subcategory));
     if (station.key !== "frottee-splt-bm") return existing;
     if (!existing.length) return existing;
+    if (existing.every((item) => item.is_done)) return existing;
     existing = existing.filter(
       (item) =>
         !isSplitSheetArticle(item.subcategory) ||
@@ -696,6 +697,18 @@ function App() {
       ids,
       customerName: firstOrder?.customer_name || "",
       customerNumber: firstOrder?.customer_number || "",
+    });
+    setTourContainerCount("");
+    setTourNumberInput("");
+  }
+
+  function openTourModalForOrder(order) {
+    if (!order) return;
+    setMonitorDetailOrder(null);
+    setTourModal({
+      ids: [order.id],
+      customerName: order.customer_name || "",
+      customerNumber: order.customer_number || "",
     });
     setTourContainerCount("");
     setTourNumberInput("");
@@ -2632,9 +2645,13 @@ const tourColumns = Object.entries(
             </div>
             {monitorDetailOrder.monitorState === "fertig" && (
               <div className="mt-5 flex justify-end border-t pt-4">
-                <Button className="border-green-700 bg-green-600 text-white" onClick={() => archiveFinishedOrders([monitorDetailOrder.id])}>
-                  Fertigen Auftrag entfernen
-                </Button>
+                <button
+                  type="button"
+                  className="rounded-xl border border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-800"
+                  onClick={() => openTourModalForOrder(monitorDetailOrder)}
+                >
+                  Auf Tour geben
+                </button>
               </div>
             )}
           </div>
