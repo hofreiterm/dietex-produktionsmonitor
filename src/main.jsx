@@ -494,7 +494,7 @@ function App() {
     const [c, o, i, co, h, s] = await Promise.all([
       supabase.from("customers").select("*").order("customer_number"),
       supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
-      supabase.from("order_categories").select("*").order("subcategory"),
+      supabase.from("order_categories").select("*").order("subcategory").range(0, 9999),
       supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number"),
       supabase.from("order_history").select("*").order("completed_at", { ascending: false }),
       supabase.from("customer_article_settings").select("*"),
