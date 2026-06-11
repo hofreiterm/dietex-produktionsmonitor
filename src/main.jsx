@@ -620,7 +620,14 @@ function App() {
       return isStationItemMatch(station, item.subcategory);
     });
 
-    return stationWashItems.length > 0 && stationWashItems.every((item) => item.washed_at);
+    if (stationWashItems.length > 0 && stationWashItems.every((item) => item.washed_at)) return true;
+    if (station.key === "frottee-splt-bm") return false;
+
+    const stationCategories = [...new Set(stationWashItems.map((item) => categoryKey(item.category)))];
+    return stationCategories.some((cat) => {
+      const categoryItems = enabledItemsForOrder(order).filter((item) => categoryKey(item.category) === cat);
+      return categoryItems.some((item) => item.washed_at);
+    });
   }
 
   function orderArticleKey(category, subcategory) {
@@ -1158,9 +1165,10 @@ function App() {
     return Object.values(
       relevant.reduce((acc, item) => {
         const label = displaySubcategory(item.subcategory);
+        const quantityOrderId = item.source_order_id || item.order_id || order.id;
         acc[label] = {
           label,
-          quantity: getStationQuantity(order.id, item.subcategory),
+          quantity: getStationQuantity(quantityOrderId, item.subcategory),
         };
         return acc;
       }, {})
@@ -1176,7 +1184,7 @@ function App() {
           order_id: item.order_id || order.id,
           category: item.category || "Frottee",
           subcategory: item.subcategory,
-          quantity: getStationQuantity(order.id, item.subcategory),
+          quantity: getStationQuantity(item.source_order_id || item.order_id || order.id, item.subcategory),
           is_done: false,
           done_at: null,
         }))
@@ -1187,7 +1195,7 @@ function App() {
       relevant.filter((item) => !item.virtual).map((item) =>
         supabase
           .from("order_categories")
-          .update({ quantity: getStationQuantity(order.id, item.subcategory) })
+          .update({ quantity: getStationQuantity(item.source_order_id || item.order_id || order.id, item.subcategory) })
           .eq("id", item.id)
           .then(() => null)
           .catch(() => null)
@@ -2575,14 +2583,15 @@ const tourColumns = Object.entries(
               <div className="grid gap-3 md:grid-cols-3">
                 {groupedRelevant.map((group) => {
                   const item = group.item;
-                  const qty = getStationQuantity(stationDetailOrder.id, item.subcategory);
+                  const quantityOrderId = item.source_order_id || item.order_id || stationDetailOrder.id;
+                  const qty = getStationQuantity(quantityOrderId, item.subcategory);
                   const step = getStationArticleStep(item.subcategory);
-                  const padKey = stationQuantityPadKey(stationDetailOrder.id, item.subcategory);
+                  const padKey = stationQuantityPadKey(quantityOrderId, item.subcategory);
                   return (
                     <div key={group.label} className={`rounded-2xl border p-3 ${qty > 0 ? "border-green-300 bg-green-50" : "bg-yellow-50"}`}>
                       <div className="text-lg font-black">{group.label}</div>
                       <div className="mt-2 grid grid-cols-[48px_1fr_48px] gap-2">
-                        <Button className="px-2 text-xl text-red-700" onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, -1)}>v</Button>
+                        <Button className="px-2 text-xl text-red-700" onClick={() => addStationQuantity(quantityOrderId, item.subcategory, -1)}>v</Button>
                         <button
                           type="button"
                           onClick={() => setStationQuantityPad(padKey)}
@@ -2590,19 +2599,19 @@ const tourColumns = Object.entries(
                         >
                           {qty}
                         </button>
-                        <Button className="px-2 text-xl" onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, 1)}>^</Button>
+                        <Button className="px-2 text-xl" onClick={() => addStationQuantity(quantityOrderId, item.subcategory, 1)}>^</Button>
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-2">
-                        <Button onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, step)}>+{step}</Button>
-                        <Button className="text-red-700" onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, -step)}>-{step}</Button>
+                        <Button onClick={() => addStationQuantity(quantityOrderId, item.subcategory, step)}>+{step}</Button>
+                        <Button className="text-red-700" onClick={() => addStationQuantity(quantityOrderId, item.subcategory, -step)}>-{step}</Button>
                       </div>
                       {stationQuantityPad === padKey && (
                         <div className="mt-2 grid grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-2">
                           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
-                            <Button key={digit} className="py-3 text-xl" onClick={() => appendStationQuantityDigit(stationDetailOrder.id, item.subcategory, digit)}>{digit}</Button>
+                            <Button key={digit} className="py-3 text-xl" onClick={() => appendStationQuantityDigit(quantityOrderId, item.subcategory, digit)}>{digit}</Button>
                           ))}
-                          <Button className="py-3 text-xl text-red-700" onClick={() => clearStationQuantity(stationDetailOrder.id, item.subcategory)}>C</Button>
-                          <Button className="py-3 text-xl" onClick={() => appendStationQuantityDigit(stationDetailOrder.id, item.subcategory, 0)}>0</Button>
+                          <Button className="py-3 text-xl text-red-700" onClick={() => clearStationQuantity(quantityOrderId, item.subcategory)}>C</Button>
+                          <Button className="py-3 text-xl" onClick={() => appendStationQuantityDigit(quantityOrderId, item.subcategory, 0)}>0</Button>
                           <Button className="py-3 text-xl" onClick={() => setStationQuantityPad(null)}>OK</Button>
                         </div>
                       )}
