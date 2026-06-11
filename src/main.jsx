@@ -479,7 +479,7 @@ function App() {
       const next = { ...prev };
       orders.forEach((order) => {
         STATIONS.forEach((station) => {
-          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory) && i.washed_at);
+          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory));
           const key = `${order.id}-${station.key}`;
           if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
             next[key] = Date.now() + 10000;
@@ -903,7 +903,7 @@ function App() {
       setHiddenStationOrders((p) => {
         const nextHidden = { ...p };
         STATIONS.forEach((station) => {
-          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory) && i.washed_at);
+          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory));
           if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
             nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
           }
@@ -1213,8 +1213,8 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory) && i.washed_at);
-      if (!related.length) return false;
+      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory));
+      if (!related.some((i) => i.washed_at)) return false;
 
       if (
         stationSearch &&
@@ -2433,7 +2433,7 @@ const tourColumns = Object.entries(
               <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
                 {stationOrders.map((order) => {
                   const relevant = enabledItemsForOrder(order)
-                    .filter((i) => activeStation.items.includes(i.subcategory) && i.washed_at)
+                    .filter((i) => activeStation.items.includes(i.subcategory))
                     .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
                   const groupedRelevant = Object.values(
