@@ -25,13 +25,13 @@ function isAdminSessionUnlocked() {
 }
 
 const CATEGORIES = {
-  Bettwäsche: ["Deckenbezüge + Leintücher", "Polsterbezüge"],
-  Frottee: ["Frottee", "Spannleintücher", "Bademäntel"],
-  Tischwäsche: ["Tischtücher + Deckservietten", "Mundservietten"],
-  Putzerei: ["Putzerei"],
+  "BettwÃ¤sche": ["DeckenbezÃ¼ge + LeintÃ¼cher", "PolsterbezÃ¼ge"],
+  "Frottee": ["Frottee", "SpannleintÃ¼cher", "BademÃ¤ntel"],
+  "TischwÃ¤sche": ["TischtÃ¼cher + Deckservietten", "Mundservietten"],
+  "Putzerei": ["Putzerei"],
 };
 
-const WASH_CATEGORIES = ["Bettwäsche", "Frottee", "Tischwäsche"];
+const WASH_CATEGORIES = ["BettwÃ¤sche", "Frottee", "TischwÃ¤sche"];
 
 const WASH_STREETS = [
   {
@@ -47,49 +47,49 @@ const WASH_STREETS = [
     name: "Waschstrasse 2",
     capacity: "50 kg",
     description: "Alles andere",
-    categories: ["BettwÃ¤sche", "TischwÃ¤sche"],
+    categories: ["BettwÃƒÂ¤sche", "TischwÃƒÂ¤sche"],
     className: "border-blue-400 bg-blue-50 text-blue-950",
   },
 ];
 
 const ALL_SUBCATEGORIES = [
-  "Deckenbezüge + Leintücher",
-  "Polsterbezüge",
+  "DeckenbezÃ¼ge + LeintÃ¼cher",
+  "PolsterbezÃ¼ge",
   "Frottee",
-  "Spannleintücher",
-  "Bademäntel",
-  "Tischtücher + Deckservietten",
-  "Tischtücher + Deckservietten",
+  "SpannleintÃ¼cher",
+  "BademÃ¤ntel",
+  "TischtÃ¼cher + Deckservietten",
+  "TischtÃ¼cher + Deckservietten",
   "Mundservietten",
   "Putzerei",
 ];
 
 const CAT_ICON = {
-  Bettwäsche: "🛏️",
-  Frottee: "🥋",
-  Tischwäsche: "🍽️",
-  Putzerei: "P",
+  "BettwÃ¤sche": "ðŸ›ï¸",
+  "Frottee": "ðŸ¥‹",
+  "TischwÃ¤sche": "ðŸ½ï¸",
+  "Putzerei": "P",
 };
 
 const STATIONS = [
-  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["Polsterbezüge", "Mundservietten", "Tischtücher", "Deckservietten", "Tischtücher + Deckservietten"] },
-  { key: "jenway-grossteile", name: "Jenway Großteile", items: ["Deckenbezüge + Leintücher"] },
+  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["PolsterbezÃ¼ge", "Mundservietten", "TischtÃ¼cher", "Deckservietten", "TischtÃ¼cher + Deckservietten"] },
+  { key: "jenway-grossteile", name: "Jenway GroÃŸteile", items: ["DeckenbezÃ¼ge + LeintÃ¼cher"] },
   { key: "jenway-frottee", name: "Jenway Frottee", items: ["Frottee"] },
-  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["Bademäntel", "Spannleintücher"] },
+  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["BademÃ¤ntel", "SpannleintÃ¼cher"] },
 ];
 
 const ROWS = [1, 2, 3, 4, 5];
 const PLACES = 10;
 
 const PERSONNEL_SHIFTS = [
-  { key: "07-12", label: "07:00–12:00" },
-  { key: "12-15", label: "12:00–15:00" },
-  { key: "15-schluss", label: "15:00–Schluss" },
+  { key: "07-12", label: "07:00â€“12:00" },
+  { key: "12-15", label: "12:00â€“15:00" },
+  { key: "15-schluss", label: "15:00â€“Schluss" },
 ];
 
 const PERSONNEL_SECTIONS = [
-  { name: "Übernahme", target: { default: 4 } },
-  { name: "Waschstraßen", target: { default: 1 } },
+  { name: "Ãœbernahme", target: { default: 4 } },
+  { name: "WaschstraÃŸen", target: { default: 1 } },
   { name: "Waschmaschinen", target: { "07-12": 1, default: 0 } },
   { name: "Absortierung", target: { default: 2 } },
   { name: "Mangel 1", target: { default: 4 } },
@@ -97,19 +97,19 @@ const PERSONNEL_SECTIONS = [
   { name: "Frottee 1", target: { default: 1 } },
   { name: "Frottee 2", target: { default: 1 } },
   { name: "BM + SPLT", target: { default: 1 } },
-  { name: "Jenway Großteile", target: { default: 1 } },
+  { name: "Jenway GroÃŸteile", target: { default: 1 } },
   { name: "Jenway Kleinteile", target: { default: 1 } },
   { name: "Jenway Frottee", target: { default: 1 } },
-  { name: "Poolwäsche", target: { default: 2 } },
+  { name: "PoolwÃ¤sche", target: { default: 2 } },
   { name: "Expedit", target: { default: 1 } },
-  { name: "Wäsche auspacken", target: { flexible: true } },
+  { name: "WÃ¤sche auspacken", target: { flexible: true } },
 ];
 
 
 const PERSONNEL_GROUPS = [
   {
-    name: "Schmutzwäsche",
-    sections: ["Übernahme", "Waschstraßen", "Waschmaschinen"],
+    name: "SchmutzwÃ¤sche",
+    sections: ["Ãœbernahme", "WaschstraÃŸen", "Waschmaschinen"],
   },
   {
     name: "Finishbereich",
@@ -117,7 +117,7 @@ const PERSONNEL_GROUPS = [
   },
   {
     name: "Verpackung",
-    sections: ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"],
+    sections: ["Jenway GroÃŸteile", "Jenway Kleinteile", "Jenway Frottee", "PoolwÃ¤sche", "Expedit"],
   },
 ];
 
@@ -138,29 +138,29 @@ const PERSONNEL_EMPLOYEES = [
 
 
 const PUTZEREI_SECTIONS = [
-  { name: "Übernahme", target: { default: 1 } },
+  { name: "Ãœbernahme", target: { default: 1 } },
   { name: "Waschmaschinen", target: { default: 1 } },
   { name: "Putzmaschinen", target: { default: 1 } },
   { name: "Tunnelfinisher", target: { default: 1 } },
   { name: "Hemdenabteilung", target: { default: 2 } },
-  { name: "Bügeltische", target: { default: 5 } },
+  { name: "BÃ¼geltische", target: { default: 5 } },
   { name: "Verpackung", target: { default: 1 } },
-  { name: "Kleinwäscheabteilung", target: { default: 1 } },
+  { name: "KleinwÃ¤scheabteilung", target: { default: 1 } },
   { name: "Expedit", target: { default: 1 } },
 ];
 
 const PUTZEREI_GROUPS = [
   {
     name: "Annahme / Waschen",
-    sections: ["Übernahme", "Waschmaschinen", "Putzmaschinen"],
+    sections: ["Ãœbernahme", "Waschmaschinen", "Putzmaschinen"],
   },
   {
     name: "Finish",
-    sections: ["Tunnelfinisher", "Hemdenabteilung", "Bügeltische"],
+    sections: ["Tunnelfinisher", "Hemdenabteilung", "BÃ¼geltische"],
   },
   {
     name: "Verpackung",
-    sections: ["Verpackung", "Kleinwäscheabteilung", "Expedit"],
+    sections: ["Verpackung", "KleinwÃ¤scheabteilung", "Expedit"],
   },
 ];
 
@@ -183,7 +183,7 @@ const PUTZEREI_EMPLOYEES = [
 
 const PERSONNEL_DEPARTMENTS = {
   waescherei: {
-    label: "Wäscherei",
+    label: "WÃ¤scherei",
     sections: PERSONNEL_SECTIONS,
     groups: PERSONNEL_GROUPS,
     employees: PERSONNEL_EMPLOYEES,
@@ -201,11 +201,11 @@ const PERSONNEL_MAPS = {
   waescherei: {
     title: "Gesamtuebersicht Waescherei",
     image: "/plan-skizze-waescherei.jpg",
-    imageFallbacks: ["/plan skizze wäscherei.jpg", "/plan%20skizze%20w%C3%A4scherei.jpg"],
+    imageFallbacks: ["/plan skizze wÃ¤scherei.jpg", "/plan%20skizze%20w%C3%A4scherei.jpg"],
     aspect: "aspect-[715/720]",
     zones: [
-      { section: "Ãœbernahme", x: 12, y: 88, w: 14 },
-      { section: "WaschstraÃŸen", x: 18, y: 32, w: 14 },
+      { section: "ÃƒÅ“bernahme", x: 12, y: 88, w: 14 },
+      { section: "WaschstraÃƒÅ¸en", x: 18, y: 32, w: 14 },
       { section: "Waschmaschinen", x: 13, y: 43, w: 14 },
       { section: "Absortierung", x: 48, y: 22, w: 15 },
       { section: "Mangel 1", x: 64, y: 29, w: 14 },
@@ -213,12 +213,12 @@ const PERSONNEL_MAPS = {
       { section: "Frottee 1", x: 86, y: 20, w: 12 },
       { section: "Frottee 2", x: 86, y: 48, w: 12 },
       { section: "BM + SPLT", x: 88, y: 82, w: 12 },
-      { section: "Jenway GroÃŸteile", x: 42, y: 34, w: 14 },
+      { section: "Jenway GroÃƒÅ¸teile", x: 42, y: 34, w: 14 },
       { section: "Jenway Kleinteile", x: 42, y: 52, w: 14 },
       { section: "Jenway Frottee", x: 42, y: 68, w: 14 },
-      { section: "PoolwÃ¤sche", x: 70, y: 84, w: 13 },
+      { section: "PoolwÃƒÂ¤sche", x: 70, y: 84, w: 13 },
       { section: "Expedit", x: 74, y: 75, w: 13 },
-      { section: "WÃ¤sche auspacken", x: 25, y: 92, w: 14 },
+      { section: "WÃƒÂ¤sche auspacken", x: 25, y: 92, w: 14 },
     ],
   },
   putzerei: {
@@ -227,14 +227,14 @@ const PERSONNEL_MAPS = {
     imageFallbacks: ["/plan skizze Putzerei.jpg", "/plan%20skizze%20Putzerei.jpg"],
     aspect: "aspect-[715/522]",
     zones: [
-      { section: "Ãœbernahme", x: 10, y: 90, w: 15 },
+      { section: "ÃƒÅ“bernahme", x: 10, y: 90, w: 15 },
       { section: "Waschmaschinen", x: 22, y: 38, w: 14 },
       { section: "Putzmaschinen", x: 43, y: 43, w: 14 },
       { section: "Tunnelfinisher", x: 71, y: 25, w: 14 },
       { section: "Hemdenabteilung", x: 77, y: 78, w: 14 },
-      { section: "BÃ¼geltische", x: 60, y: 58, w: 14 },
+      { section: "BÃƒÂ¼geltische", x: 60, y: 58, w: 14 },
       { section: "Verpackung", x: 88, y: 45, w: 14 },
-      { section: "KleinwÃ¤scheabteilung", x: 28, y: 80, w: 15 },
+      { section: "KleinwÃƒÂ¤scheabteilung", x: 28, y: 80, w: 15 },
       { section: "Expedit", x: 10, y: 57, w: 13 },
     ],
   },
@@ -272,30 +272,40 @@ function Logo() {
         DIE
       </div>
       <div>
-        <div className="text-2xl font-black text-sky-600">WÄSCHEREI</div>
+        <div className="text-2xl font-black text-sky-600">WÃ„SCHEREI</div>
         <div className="text-xs font-bold text-sky-600">
-          by <span className="text-red-600">♡</span> DieTex
+          by <span className="text-red-600">â™¡</span> DieTex
         </div>
       </div>
     </div>
   );
 }
 
+function categoryKey(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("bettw")) return "bettwaesche";
+  if (text.includes("frottee")) return "frottee";
+  if (text.includes("tischw")) return "tischwaesche";
+  if (text.includes("putzerei")) return "putzerei";
+  return text;
+}
+
 function categoryStyle(cat, selected) {
   const styles = {
-    Bettwäsche: "border-blue-400 bg-blue-50 text-blue-900",
-    Frottee: "border-green-400 bg-green-50 text-green-900",
-    Tischwäsche: "border-orange-400 bg-orange-50 text-orange-900",
-    Putzerei: "border-violet-400 bg-violet-50 text-violet-900",
+    bettwaesche: "border-blue-400 bg-blue-50 text-blue-900",
+    frottee: "border-green-400 bg-green-50 text-green-900",
+    tischwaesche: "border-orange-400 bg-orange-50 text-orange-900",
+    putzerei: "border-violet-400 bg-violet-50 text-violet-900",
   };
-  return `${styles[cat]} ${selected ? "scale-105 ring-4 ring-blue-200 shadow-lg" : "opacity-90 hover:opacity-100"}`;
+  return `${styles[categoryKey(cat)] || "border-slate-300 bg-white text-slate-900"} ${selected ? "scale-105 ring-4 ring-blue-200 shadow-lg" : "opacity-90 hover:opacity-100"}`;
 }
 
 function getContainerPlan(selected) {
   const plan = [];
-  if (selected.includes("Bettwäsche")) plan.push({ type: "Bettwäsche" });
-  if (selected.includes("Tischwäsche")) plan.push({ type: "Tischwäsche" });
-  if (selected.includes("Frottee")) {
+  const selectedKeys = selected.map(categoryKey);
+  if (selectedKeys.includes("bettwaesche")) plan.push({ type: "Bettwäsche" });
+  if (selectedKeys.includes("tischwaesche")) plan.push({ type: "Tischwäsche" });
+  if (selectedKeys.includes("frottee")) {
     plan.push({ type: "Frottee" });
     plan.push({ type: "SPLT + BM" });
   }
@@ -329,8 +339,8 @@ function splitIntoColumns(rows, count) {
 }
 
 function displaySubcategory(subcategory) {
-  if (subcategory === "Tischtücher" || subcategory === "Deckservietten") {
-    return "Tischtücher + Deckservietten";
+  if (subcategory === "TischtÃ¼cher" || subcategory === "Deckservietten") {
+    return "TischtÃ¼cher + Deckservietten";
   }
   return subcategory;
 }
@@ -479,7 +489,7 @@ function App() {
       const next = { ...prev };
       orders.forEach((order) => {
         STATIONS.forEach((station) => {
-          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory));
+          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory) && i.washed_at);
           const key = `${order.id}-${station.key}`;
           if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
             next[key] = Date.now() + 10000;
@@ -716,7 +726,7 @@ function App() {
       alert(`${imported.length} Kunden wurden importiert.`);
       loadAll();
     } catch (err) {
-      alert("Excel-Import fehlgeschlagen. Bitte Datei prüfen.");
+      alert("Excel-Import fehlgeschlagen. Bitte Datei prÃ¼fen.");
     }
 
     event.target.value = "";
@@ -748,7 +758,7 @@ function App() {
     const orderRows = selectedOrderRows();
 
     if (!number || !name) return alert("Kundennummer und Kundenname eingeben.");
-    if (!selectedCategories.length) return alert("Mindestens eine Kategorie auswählen.");
+    if (!selectedCategories.length) return alert("Mindestens eine Kategorie auswÃ¤hlen.");
 
     if (!orderRows.length) return alert("Mindestens einen Artikel fuer diesen Auftrag auswaehlen.");
 
@@ -795,7 +805,7 @@ function App() {
 
       if (newContainerPlan.length) {
         const slots = findFreeSlots(newContainerPlan.length);
-        if (!slots) return alert("Kein freier Containerplatz verfügbar.");
+        if (!slots) return alert("Kein freier Containerplatz verfÃ¼gbar.");
 
         await supabase.from("containers").insert(
           newContainerPlan.map((p, idx) => ({
@@ -828,7 +838,7 @@ function App() {
 
     const plan = getContainerPlan(selectedCategories);
     const slots = findFreeSlots(plan.length);
-    if (!slots) return alert("Kein freier Containerplatz verfügbar.");
+    if (!slots) return alert("Kein freier Containerplatz verfÃ¼gbar.");
 
     const maxSort = Math.max(0, ...orders.map((o) => Number(o.sort_order || 0)));
 
@@ -903,7 +913,7 @@ function App() {
       setHiddenStationOrders((p) => {
         const nextHidden = { ...p };
         STATIONS.forEach((station) => {
-          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory));
+          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory) && i.washed_at);
           if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
             nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
           }
@@ -1025,10 +1035,10 @@ function App() {
   }
 
   async function deleteMasterCustomer(customer) {
-    if (!confirm(`Kunde wirklich löschen?\n${customer.customer_number} ${customer.customer_name}`)) return;
+    if (!confirm(`Kunde wirklich lÃ¶schen?\n${customer.customer_number} ${customer.customer_name}`)) return;
     const { error } = await supabase.from("customers").delete().eq("id", customer.id);
     if (error) {
-      alert("Kunde konnte nicht gelöscht werden: " + error.message);
+      alert("Kunde konnte nicht gelÃ¶scht werden: " + error.message);
       return;
     }
     loadAll();
@@ -1152,7 +1162,7 @@ function App() {
   }
 
   async function removeWholeTour(tourNumber) {
-    if (!window.confirm(`Gesamte Tour ${tourNumber} löschen?`)) return;
+    if (!window.confirm(`Gesamte Tour ${tourNumber} lÃ¶schen?`)) return;
 
     const ids = tourRows
       .filter((r) => String(r.tour_number || "") === String(tourNumber))
@@ -1213,7 +1223,7 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory));
+      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory) && i.washed_at);
       if (!related.length) return false;
 
       if (
@@ -1258,7 +1268,7 @@ const tourColumns = Object.entries(
     if (order.status === "auf_tour") return { label: "Auf der Tour", className: "bg-violet-100 text-violet-800 border-violet-300" };
     if (packDone) return { label: "Fertig", className: "bg-green-100 text-green-800 border-green-300" };
     if (washDone) return { label: "Gewaschen", className: "bg-blue-100 text-blue-800 border-blue-300" };
-    return { label: "Übernommen", className: "bg-yellow-100 text-yellow-800 border-yellow-300" };
+    return { label: "Ãœbernommen", className: "bg-yellow-100 text-yellow-800 border-yellow-300" };
   }
 
   function getCustomerStatusDetails(order) {
@@ -1389,7 +1399,7 @@ const tourColumns = Object.entries(
 
   const copyWholePersonalDay = () => {
     if (!copyPersonalDate) {
-      window.alert("Bitte Kopierdatum auswählen.");
+      window.alert("Bitte Kopierdatum auswÃ¤hlen.");
       return;
     }
 
@@ -1501,7 +1511,7 @@ const tourColumns = Object.entries(
   };
 
   const deletePersonnelEmployee = (name) => {
-    if (!window.confirm(`${name} wirklich löschen?`)) return;
+    if (!window.confirm(`${name} wirklich lÃ¶schen?`)) return;
 
     setPersonnelEmployeesByDept((prev) => ({
       ...prev,
@@ -1528,12 +1538,12 @@ const tourColumns = Object.entries(
 
   const exchangeEmployeeDepartment = () => {
     if (!exchangeEmployeeName) {
-      window.alert("Bitte Mitarbeiter auswählen.");
+      window.alert("Bitte Mitarbeiter auswÃ¤hlen.");
       return;
     }
 
     if (!exchangeTargetDept || exchangeTargetDept === personalDepartment) {
-      window.alert("Bitte andere Abteilung auswählen.");
+      window.alert("Bitte andere Abteilung auswÃ¤hlen.");
       return;
     }
 
@@ -1727,7 +1737,7 @@ const tourColumns = Object.entries(
 
 
   const clearPersonalPlanSafe = () => {
-    if (!window.confirm("Personalplanung für diese Schicht wirklich leeren?")) return;
+    if (!window.confirm("Personalplanung fÃ¼r diese Schicht wirklich leeren?")) return;
 
     setPersonalPlan((prev) => {
       const next = { ...prev };
@@ -1742,7 +1752,7 @@ const tourColumns = Object.entries(
     const source = personalPlan[getPersonalKey(personalDate, previousShift)];
 
     if (!source) {
-      window.alert("Für die vorherige Schicht ist kein Plan vorhanden.");
+      window.alert("FÃ¼r die vorherige Schicht ist kein Plan vorhanden.");
       return;
     }
 
@@ -1869,7 +1879,7 @@ const tourColumns = Object.entries(
             P
           </div>
         )}
-        {row.info && <div className="col-span-3 mt-1 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">ℹ {row.info}</div>}
+        {row.info && <div className="col-span-3 mt-1 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">â„¹ {row.info}</div>}
       </button>
     );
   }
@@ -1899,7 +1909,7 @@ const tourColumns = Object.entries(
         } ${dragOrderId === row.id ? "ring-2 ring-blue-400 opacity-70" : ""}`}
       >
         <div className={`grid ${compact ? "grid-cols-[20px_62px_1fr_auto] gap-1.5" : "grid-cols-[28px_84px_1fr_auto] gap-3"} items-center`}>
-          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">â†•</div>
+          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">Ã¢â€ â€¢</div>
           <div className={`font-mono ${compact ? "text-[12px]" : "text-[15px]"} leading-tight`}>{row.customer_number}</div>
           <button
             type="button"
@@ -1928,7 +1938,7 @@ const tourColumns = Object.entries(
         )}
         {row.info && (
           <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
-            â„¹ {row.info}
+            Ã¢â€žÂ¹ {row.info}
           </div>
         )}
       </div>
@@ -2093,7 +2103,7 @@ const tourColumns = Object.entries(
         }`}
       >
         <div className="grid grid-cols-[28px_92px_1fr_54px] items-start gap-3">
-          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">↕</div>
+          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">â†•</div>
           <div className="font-mono text-xl font-black leading-tight">{row.customer_number}</div>
           <button
             type="button"
@@ -2116,7 +2126,7 @@ const tourColumns = Object.entries(
         )}
         {row.info && (
           <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
-            ℹ {row.info}
+            â„¹ {row.info}
           </div>
         )}
       </div>
@@ -2140,7 +2150,7 @@ const tourColumns = Object.entries(
                 Admin entsperren
               </Button>
             ))}
-            <span className="text-2xl font-bold">◷ {fmtTime(new Date())}</span>
+            <span className="text-2xl font-bold">â—· {fmtTime(new Date())}</span>
           </div>
         </div>
       </header>
@@ -2269,7 +2279,7 @@ const tourColumns = Object.entries(
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
             {(takeoverMode
               ? [
-                  ["annahme", "Kunden Ã¼bernehmen"],
+                  ["annahme", "Kunden ÃƒÂ¼bernehmen"],
                   ["station", "Station"],
                 ]
               : expeditMode
@@ -2278,7 +2288,7 @@ const tourColumns = Object.entries(
                   ["touren", "Touren"],
                 ]
               : [
-                  ["annahme", "Kunden übernehmen"],
+                  ["annahme", "Kunden Ã¼bernehmen"],
                   ["waschplan", "Waschplan"],
                   ["station", "Station"],
                   ["monitor", "Verpackungsmonitor"],
@@ -2299,7 +2309,7 @@ const tourColumns = Object.entries(
             <div className="mb-3 flex justify-end">
               <input id="customer-excel-import" type="file" accept=".xlsx,.xls" className="hidden" onChange={importCustomersExcel} />
               <label htmlFor="customer-excel-import" className="cursor-pointer rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
-                📄 Kunden Excel importieren
+                ðŸ“„ Kunden Excel importieren
               </label>
             </div>
 
@@ -2329,9 +2339,9 @@ const tourColumns = Object.entries(
               <Input placeholder="Kundenname" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
             </div>
 
-            <Input className="mt-2 w-full" placeholder="Optionale Info für Verpackung / Produktion" value={info} onChange={(e) => setInfo(e.target.value)} />
+            <Input className="mt-2 w-full" placeholder="Optionale Info fÃ¼r Verpackung / Produktion" value={info} onChange={(e) => setInfo(e.target.value)} />
 
-            <h2 className="my-3 text-center text-xl font-black text-blue-700">Überkategorie wählen</h2>
+            <h2 className="my-3 text-center text-xl font-black text-blue-700">Ãœberkategorie wÃ¤hlen</h2>
 
             <div className="grid gap-5 md:grid-cols-4">
               {Object.keys(CATEGORIES).map((cat) => (
@@ -2384,7 +2394,7 @@ const tourColumns = Object.entries(
 
             <div className="mt-5 flex justify-center border-t pt-4">
               <button type="button" onClick={addOrder} className="rounded-2xl bg-blue-700 px-8 py-3 text-base font-black text-white shadow-lg hover:bg-blue-800">
-                Kunde übernehmen
+                Kunde Ã¼bernehmen
               </button>
             </div>
           </section>
@@ -2415,10 +2425,10 @@ const tourColumns = Object.entries(
           <section className="grid gap-5 lg:grid-cols-[300px_1fr]">
             {(!fixedView || takeoverMode) && (
               <aside className="space-y-2 rounded-3xl border bg-white p-4">
-                <b>Station auswählen</b>
+                <b>Station auswÃ¤hlen</b>
                 {STATIONS.map((s) => (
                   <Button key={s.key} className="w-full text-left" active={activeStation.key === s.key} onClick={() => setActiveStation(s)}>
-                    <div>{s.name}</div><small>{s.items.join(" • ")}</small>
+                    <div>{s.name}</div><small>{s.items.join(" â€¢ ")}</small>
                   </Button>
                 ))}
               </aside>
@@ -2433,7 +2443,7 @@ const tourColumns = Object.entries(
               <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
                 {stationOrders.map((order) => {
                   const relevant = enabledItemsForOrder(order)
-                    .filter((i) => activeStation.items.includes(i.subcategory))
+                    .filter((i) => activeStation.items.includes(i.subcategory) && i.washed_at)
                     .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
                   const groupedRelevant = Object.values(
@@ -2460,7 +2470,7 @@ const tourColumns = Object.entries(
                               onClick={() => toggleStationGroup(group.items)}
                               className={`rounded-lg border px-3 py-2 text-xs font-bold ${done ? "bg-green-100" : "bg-yellow-50"}`}
                             >
-                              {done ? "✅" : "⭕"} {group.label}
+                              {done ? "âœ…" : "â­•"} {group.label}
                             </button>
                           );
                         })}
@@ -2493,8 +2503,8 @@ const tourColumns = Object.entries(
         {view === "luftbild" && (
           <section className="rounded-3xl border bg-white p-5">
             <div className="mb-4 flex justify-between">
-              <div><h2 className="text-2xl font-black">Luftbild Container</h2><p className="text-slate-500">Gelb = in Bearbeitung, Grün = fertig</p></div>
-              <Button onClick={removeAllFinished}>Fertige Aufträge entfernen</Button>
+              <div><h2 className="text-2xl font-black">Luftbild Container</h2><p className="text-slate-500">Gelb = in Bearbeitung, GrÃ¼n = fertig</p></div>
+              <Button onClick={removeAllFinished}>Fertige AuftrÃ¤ge entfernen</Button>
             </div>
             <div className="grid grid-cols-5 gap-4">
               {ROWS.map((row) => (
@@ -2555,7 +2565,7 @@ const tourColumns = Object.entries(
                           onClick={() => removeWholeTour(col.tour)}
                           className="mt-2 w-full rounded-xl bg-red-100 px-3 py-2 text-sm font-black text-red-700 hover:bg-red-200"
                         >
-                          Ganze Tour löschen
+                          Ganze Tour lÃ¶schen
                         </button>
                       </div>
                       <div className="space-y-2">
@@ -2628,7 +2638,7 @@ const tourColumns = Object.entries(
                       {shift.label}
                     </Button>
                   ))}
-                  <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
+                  <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht Ã¼bernehmen</Button>
                   <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
                   <Button className="bg-blue-700 text-white" onClick={printPersonalPlanSafe}>Drucken</Button>
                 </div>
@@ -2758,7 +2768,7 @@ const tourColumns = Object.entries(
                       value={exchangeEmployeeName}
                       onChange={(e) => setExchangeEmployeeName(e.target.value)}
                     >
-                      <option value="">Mitarbeiter wählen</option>
+                      <option value="">Mitarbeiter wÃ¤hlen</option>
                       {getSortedEmployees(currentEmployees()).map((emp) => (
                         <option key={emp.name} value={emp.name}>{emp.name}</option>
                       ))}
@@ -2796,7 +2806,7 @@ const tourColumns = Object.entries(
                       />
                     </div>
                     <Button className="mt-2 w-full py-1" onClick={addPersonnelEmployee}>
-                      Mitarbeiter hinzufügen
+                      Mitarbeiter hinzufÃ¼gen
                     </Button>
                   </div>
                 </aside>
@@ -2829,7 +2839,7 @@ const tourColumns = Object.entries(
                                   </div>
                                 </div>
                                 <div className="text-lg leading-none">
-                                  {target === null ? "⚪" : assigned.length < target ? "🔴" : assigned.length > target ? "🟡" : "🟢"}
+                                  {target === null ? "âšª" : assigned.length < target ? "ðŸ”´" : assigned.length > target ? "ðŸŸ¡" : "ðŸŸ¢"}
                                 </div>
                               </div>
 
@@ -2873,7 +2883,7 @@ const tourColumns = Object.entries(
             </div>
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-100">
-                <tr><th className="p-3">Datum</th><th className="p-3">Nr.</th><th className="p-3">Kunde</th><th className="p-3">Übernahme</th><th className="p-3">Fertig</th><th className="p-3">Zeit</th></tr>
+                <tr><th className="p-3">Datum</th><th className="p-3">Nr.</th><th className="p-3">Kunde</th><th className="p-3">Ãœbernahme</th><th className="p-3">Fertig</th><th className="p-3">Zeit</th></tr>
               </thead>
               <tbody>
                 {statsRows.map((r) => (
@@ -2917,7 +2927,7 @@ const tourColumns = Object.entries(
                           ))}
                         </div>
                       </td>
-                      <td className="p-3 text-right"><Button className="border-red-200 bg-red-50 text-red-700" onClick={() => deleteMasterCustomer(c)}>Löschen</Button></td>
+                      <td className="p-3 text-right"><Button className="border-red-200 bg-red-50 text-red-700" onClick={() => deleteMasterCustomer(c)}>LÃ¶schen</Button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -3052,7 +3062,7 @@ const tourColumns = Object.entries(
                 <div>
                   <h2 className="text-2xl font-black">Produktionsstatus je Kunde</h2>
                   <p className="text-slate-500">
-                    Übernommen → Gewaschen → Fertig → Auf der Tour. Mit ↑ ↓ kann die Reihenfolge geändert werden.
+                    Ãœbernommen â†’ Gewaschen â†’ Fertig â†’ Auf der Tour. Mit â†‘ â†“ kann die Reihenfolge geÃ¤ndert werden.
                   </p>
                 </div>
               </div>
@@ -3085,7 +3095,7 @@ const tourColumns = Object.entries(
                             <b>{order.customer_name}</b>
                             {order.info && (
                               <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
-                                ℹ {order.info}
+                                â„¹ {order.info}
                               </div>
                             )}
                           </td>
@@ -3123,8 +3133,8 @@ const tourColumns = Object.entries(
                           </td>
                           <td className="p-3">
                             <div className="flex justify-end gap-2">
-                              <Button onClick={() => moveOrder(order, -1)}>↑</Button>
-                              <Button onClick={() => moveOrder(order, 1)}>↓</Button>
+                              <Button onClick={() => moveOrder(order, -1)}>â†‘</Button>
+                              <Button onClick={() => moveOrder(order, 1)}>â†“</Button>
                             </div>
                           </td>
                         </tr>
@@ -3142,3 +3152,5 @@ const tourColumns = Object.entries(
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+
