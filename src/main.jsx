@@ -602,16 +602,13 @@ function App() {
   function stationItemsForOrder(order, station) {
     let existing = enabledItemsForOrder(order).filter((item) => isStationItemMatch(station, item.subcategory));
     if (station.key !== "frottee-splt-bm") {
-      const allOrderItems = enabledItemsForOrder(order);
-      const orderCategoryKeys = new Set(allOrderItems.map((item) => categoryKey(item.category)));
       const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
 
       station.items.forEach((subcategory) => {
         if (!isArticleEnabled(order.customer_number, subcategory)) return;
         const category = categoryForSubcategory(subcategory);
-        const matchingCategoryExists = orderCategoryKeys.has(categoryKey(category));
         const explicitArticle = hasExplicitArticleSetting(order.customer_number, subcategory);
-        if (!matchingCategoryExists && !explicitArticle) return;
+        if (!explicitArticle) return;
 
         const label = displaySubcategory(subcategory);
         if (byLabel.has(label)) return;
@@ -626,7 +623,7 @@ function App() {
         });
       });
 
-      return Array.from(byLabel.values()).filter((item) => !item.is_done);
+      return Array.from(byLabel.values());
     }
     if (!existing.length) return existing;
     existing = existing.filter(
@@ -634,7 +631,7 @@ function App() {
         !isSplitSheetArticle(item.subcategory) ||
         station.items.includes(item.subcategory)
     );
-    if (existing.every((item) => item.is_done)) return [];
+    if (existing.every((item) => item.is_done)) return existing;
 
     const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
     station.items.forEach((subcategory) => {
@@ -653,7 +650,7 @@ function App() {
       }
     });
 
-    return Array.from(byLabel.values()).filter((item) => !item.is_done);
+    return Array.from(byLabel.values());
   }
 
   function isOrderWashedForStation(order, station) {
@@ -665,6 +662,15 @@ function App() {
 
     if (stationWashItems.length > 0 && stationWashItems.every((item) => item.washed_at)) return true;
     if (station.key === "frottee-splt-bm") return false;
+
+    const activeExplicitWashed = station.items.some((subcategory) => {
+      if (!hasExplicitArticleSetting(order.customer_number, subcategory)) return false;
+      const category = categoryForSubcategory(subcategory);
+      return enabledItemsForOrder(order).some(
+        (item) => categoryKey(item.category) === categoryKey(category) && item.washed_at
+      );
+    });
+    if (activeExplicitWashed) return true;
 
     const stationCategories = [...new Set(stationWashItems.map((item) => categoryKey(item.category)))];
     return stationCategories.some((cat) => {
@@ -1091,11 +1097,41 @@ function App() {
     if (!groupItems.length) return;
 
     const next = !groupItems.every((item) => item.is_done);
+    const fallbackOrderId = groupItems[0].source_order_id || groupItems[0].order_id;
+    const order = orders.find((entry) => entry.id === fallbackOrderId);
 
-    await supabase
-      .from("order_categories")
-      .update({ is_done: next, done_at: next ? new Date().toISOString() : null })
-      .in("id", groupItems.map((item) => item.id));
+    if (!order) return;
+
+    try {
+      await saveStationQuantities(order, groupItems);
+
+      const realIds = groupItems
+        .filter((item) => !item.virtual && item.id)
+        .map((item) => item.id);
+
+      if (realIds.length) {
+        const { error } = await supabase
+          .from("order_categories")
+          .update({ is_done: next, done_at: next ? new Date().toISOString() : null })
+          .in("id", realIds);
+        if (error) throw error;
+      }
+
+      await Promise.all(
+        groupItems.filter((item) => item.virtual).map(async (item) => {
+          const orderId = item.source_order_id || item.order_id || order.id;
+          const { error } = await supabase
+            .from("order_categories")
+            .update({ is_done: next, done_at: next ? new Date().toISOString() : null })
+            .eq("order_id", orderId)
+            .eq("subcategory", item.subcategory);
+          if (error) throw error;
+        })
+      );
+    } catch (error) {
+      alert("Artikel konnte nicht gespeichert werden: " + error.message);
+      return;
+    }
 
     loadAll();
   }
@@ -2640,10 +2676,22 @@ const tourColumns = Object.entries(
           relevant.reduce((acc, item) => {
             const label = displaySubcategory(item.subcategory);
             if (!acc[label]) acc[label] = { label, item, items: [] };
+            const currentOrderId = acc[label].item.source_order_id || acc[label].item.order_id || stationDetailOrder.id;
+            const itemOrderId = item.source_order_id || item.order_id || stationDetailOrder.id;
+            const currentQty = getStationQuantity(currentOrderId, acc[label].item.subcategory);
+            const itemQty = getStationQuantity(itemOrderId, item.subcategory);
+            if (
+              itemQty > currentQty ||
+              (!item.virtual && acc[label].item.virtual) ||
+              (!item.is_done && acc[label].item.is_done)
+            ) {
+              acc[label].item = item;
+            }
             acc[label].items.push(item);
             return acc;
           }, {})
         ).sort((a, b) => activeStation.items.indexOf(a.item.subcategory) - activeStation.items.indexOf(b.item.subcategory));
+        const actionRelevant = groupedRelevant.map((group) => group.item);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -2701,14 +2749,14 @@ const tourColumns = Object.entries(
                 <Button onClick={() => { setStationDetailOrder(null); setStationQuantityPad(null); }}>Abbrechen</Button>
                 <button
                   type="button"
-                  onClick={() => printStationLabel(stationDetailOrder, relevant)}
+                  onClick={() => printStationLabel(stationDetailOrder, actionRelevant)}
                   className="rounded-xl border border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-800"
                 >
                   Abschliessen
                 </button>
                 <button
                   type="button"
-                  onClick={() => confirmStationOrder(stationDetailOrder, relevant)}
+                  onClick={() => confirmStationOrder(stationDetailOrder, actionRelevant)}
                   className="rounded-xl border border-green-700 bg-green-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-green-700"
                 >
                   Bestaetigen / speichern
