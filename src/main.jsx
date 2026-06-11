@@ -335,8 +335,35 @@ function splitIntoColumns(rows, count) {
   return cols;
 }
 
+function articleKey(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("polster")) return "polster";
+  if (text.includes("mundserv")) return "mundservietten";
+  if (text.includes("tisch") || text.includes("deckserv")) return "tischwaesche-kleinteile";
+  if (text.includes("1-fach")) return "splt1";
+  if (text.includes("2-fach")) return "splt2";
+  if (text.includes("spannleint")) return "splt";
+  if (text.includes("deckenbez") || text.includes("leint")) return "bettwaesche-grossteile";
+  if (text.includes("frottee")) return "frottee";
+  if (text.includes("badem")) return "bademantel";
+  return text;
+}
+
+function categoryKey(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("bettw")) return "bettwaesche";
+  if (text.includes("tischw")) return "tischwaesche";
+  if (text.includes("frottee")) return "frottee";
+  if (text.includes("putzerei")) return "putzerei";
+  return text;
+}
+
+function isWashCategory(category) {
+  return ["bettwaesche", "frottee", "tischwaesche"].includes(categoryKey(category));
+}
+
 function displaySubcategory(subcategory) {
-  if (subcategory === "Tischtücher" || subcategory === "Deckservietten") {
+  if (articleKey(subcategory) === "tischwaesche-kleinteile") {
     return "Tischtücher + Deckservietten";
   }
   return subcategory;
@@ -348,7 +375,8 @@ function isSplitSheetArticle(subcategory) {
 
 function isStationItemMatch(station, subcategory) {
   if (station.key === "frottee-splt-bm" && isSplitSheetArticle(subcategory)) return true;
-  return station.items.includes(subcategory);
+  const subKey = articleKey(subcategory);
+  return station.items.some((item) => articleKey(item) === subKey);
 }
 
 function App() {
@@ -587,8 +615,8 @@ function App() {
 
   function isOrderWashedForStation(order, station) {
     const stationWashItems = enabledItemsForOrder(order).filter((item) => {
-      if (!WASH_CATEGORIES.includes(item.category)) return false;
-      if (station.key === "frottee-splt-bm") return item.category === "Frottee";
+      if (!isWashCategory(item.category)) return false;
+      if (station.key === "frottee-splt-bm") return categoryKey(item.category) === "frottee";
       return isStationItemMatch(station, item.subcategory);
     });
 
@@ -1352,10 +1380,10 @@ function App() {
       .map((order) => {
         const relevant = enabledItemsForOrder(order).filter((i) => {
           if (street.key === "ws-2") {
-            return WASH_CATEGORIES.includes(i.category) && i.category !== "Frottee";
+            return isWashCategory(i.category) && categoryKey(i.category) !== "frottee";
           }
 
-          return street.categories.includes(i.category);
+          return street.categories.some((category) => categoryKey(category) === categoryKey(i.category));
         });
         const open = order.status === "auf_tour" ? [] : relevant.filter((i) => !i.washed_at);
         const labels = [...new Set(open.map((i) => displaySubcategory(i.subcategory)))];
@@ -1539,7 +1567,7 @@ const tourColumns = Object.entries(
     const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
     const packDone = laundryEnabled.length > 0 && laundryEnabled.every((i) => i.is_done);
 
-    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
+    const washRelevant = laundryEnabled.filter((i) => isWashCategory(i.category));
     const washDone = washRelevant.length === 0 || washRelevant.every((i) => i.washed_at);
 
     if (order.status === "auf_tour") return { label: "Auf der Tour", className: "bg-violet-100 text-violet-800 border-violet-300" };
@@ -1552,7 +1580,7 @@ const tourColumns = Object.entries(
     const enabled = enabledItemsForOrder(order);
     const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
     const putzereiItems = enabled.filter((i) => i.category === "Putzerei");
-    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
+    const washRelevant = laundryEnabled.filter((i) => isWashCategory(i.category));
     const washed = washRelevant.filter((i) => i.washed_at).length;
     const packed = laundryEnabled.filter((i) => i.is_done).length;
     const putzereiDone = putzereiItems.filter((i) => i.is_done).length;
@@ -1572,7 +1600,7 @@ const tourColumns = Object.entries(
     const enabled = enabledItemsForOrder(order);
     const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
     const packDone = laundryEnabled.length > 0 && laundryEnabled.every((i) => i.is_done);
-    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
+    const washRelevant = laundryEnabled.filter((i) => isWashCategory(i.category));
     const washDone = washRelevant.length === 0 || washRelevant.every((i) => i.washed_at);
     const latestWashedAt = washRelevant.map((i) => i.washed_at).filter(Boolean).sort().at(-1);
     const latestDoneAt = laundryEnabled.map((i) => i.done_at).filter(Boolean).sort().at(-1);
