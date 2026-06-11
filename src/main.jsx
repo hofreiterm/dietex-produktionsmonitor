@@ -337,8 +337,8 @@ function articleKey(value) {
   if (text.includes("2-fach")) return "splt2";
   if (text.includes("spannleint")) return "spannleint";
   if (text.includes("frottee")) return "frottee";
-  if (text.includes("tischt")) return "tischtuecher";
   if (text.includes("deckserv")) return "deckservietten";
+  if (text.includes("tischt")) return "tischtuecher";
   if (text.includes("mundserv")) return "mundservietten";
   return text;
 }
@@ -353,8 +353,17 @@ function categoryKey(value) {
 }
 
 function stationMatchesItem(station, item) {
-  const key = articleKey(item.subcategory);
-  return station.items.some((stationItem) => articleKey(stationItem) === key);
+  const itemKey = articleKey(item.subcategory);
+  const stationKeys = station.items.map((stationItem) => articleKey(stationItem));
+  if (stationKeys.includes(itemKey)) return true;
+
+  const text = String(item.subcategory || "").toLowerCase();
+  const isLegacyTischDeck = text.includes("tischt") && text.includes("deckserv");
+  if (isLegacyTischDeck && stationKeys.some((key) => key === "tischtuecher" || key === "deckservietten")) {
+    return true;
+  }
+
+  return false;
 }
 
 function isCountingItem(subcategory) {
@@ -416,13 +425,7 @@ function App() {
   const [leitungDateTo, setLeitungDateTo] = useState(fmtDateInput());
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
-  const [stationQuantities, setStationQuantities] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("dietexStationQuantities") || "{}");
-    } catch {
-      return {};
-    }
-  });
+  const [stationQuantities, setStationQuantities] = useState({});
 
   const [personalDate, setPersonalDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [personalDepartment, setPersonalDepartment] = useState("waescherei");
@@ -519,7 +522,7 @@ function App() {
           const relevant = stationItemsForOrder(order, station);
           const key = `${order.id}-${station.key}`;
           if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
-            next[key] = Date.now() + 10000;
+            next[key] = Date.now() + 5000;
           }
         });
       });
@@ -564,9 +567,7 @@ function App() {
     const nextValue = Math.max(0, Number(value) || 0);
     const key = stationQuantityKey(orderId, subcategory);
     setStationQuantities((prev) => {
-      const next = { ...prev, [key]: nextValue };
-      localStorage.setItem("dietexStationQuantities", JSON.stringify(next));
-      return next;
+      return { ...prev, [key]: nextValue };
     });
 
     const matching = items.filter((entry) => entry.order_id === orderId && articleKey(entry.subcategory) === articleKey(subcategory));
@@ -992,7 +993,7 @@ function App() {
         STATIONS.forEach((station) => {
           const relevant = orderItems.filter((i) => stationMatchesItem(station, i));
           if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
-            nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
+            nextHidden[`${order.id}-${station.key}`] = Date.now() + 5000;
           }
         });
         return nextHidden;
@@ -1039,17 +1040,21 @@ function App() {
       return;
     }
 
-    const relatedIds = items
-      .filter((i) => i.order_id === order.id && i.category === category && !i.washed_at)
-      .map((i) => i.id);
-    if (!relatedIds.length) return;
+    const related = items.filter((i) => i.order_id === order.id && i.category === category && !i.washed_at);
+    if (!related.length) return;
 
     setPendingWash((prev) => ({ ...prev, [washKey]: true }));
     washTimers.current[washKey] = window.setTimeout(async () => {
-      await supabase
+      const { error } = await supabase
         .from("order_categories")
         .update({ washed_at: new Date().toISOString() })
-        .in("id", relatedIds);
+        .eq("order_id", order.id)
+        .eq("category", category)
+        .is("washed_at", null);
+
+      if (error) {
+        alert("Waschstatus konnte nicht gespeichert werden: " + error.message);
+      }
 
       delete washTimers.current[washKey];
       setPendingWash((prev) => {
