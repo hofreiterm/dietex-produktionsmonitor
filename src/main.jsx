@@ -558,12 +558,15 @@ function App() {
     let existing = enabledItemsForOrder(order).filter((item) => isStationItemMatch(station, item.subcategory));
     if (station.key !== "frottee-splt-bm") return existing;
     if (!existing.length) return existing;
-    if (existing.every((item) => item.is_done)) return existing;
     existing = existing.filter(
       (item) =>
         !isSplitSheetArticle(item.subcategory) ||
         station.items.includes(item.subcategory)
     );
+    const hasLocalStationEntry = station.items.some(
+      (subcategory) => getStationQuantity(order.id, subcategory) > 0
+    );
+    if (existing.every((item) => item.is_done) && !hasLocalStationEntry) return [];
 
     const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
     station.items.forEach((subcategory) => {
@@ -582,7 +585,7 @@ function App() {
       }
     });
 
-    return Array.from(byLabel.values());
+    return Array.from(byLabel.values()).filter((item) => !item.is_done);
   }
 
   function orderArticleKey(category, subcategory) {
@@ -1127,6 +1130,8 @@ function App() {
           category: item.category || "Frottee",
           subcategory: item.subcategory,
           quantity: getStationQuantity(order.id, item.subcategory),
+          is_done: false,
+          done_at: null,
         }))
       ).then(() => null).catch(() => null);
     }
