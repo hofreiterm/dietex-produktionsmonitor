@@ -1070,9 +1070,13 @@ function App() {
   function getStationArticleStep(subcategory) {
     const label = displaySubcategory(subcategory);
     const key = stationArticleStepKey(subcategory);
-    const legacyBadem = stationArticleSteps["BademÃ¤ntel"] || stationArticleSteps["Bademäntel"];
-    if (key === "bademantel" && legacyBadem) return Number(legacyBadem);
-    return Number(stationArticleSteps[key] || stationArticleSteps[label] || stationQuantityStep(subcategory));
+    const legacyBadem = stationArticleSteps["BademÃƒÂ¤ntel"] || stationArticleSteps["BademÃ¤ntel"];
+    return Number(
+      stationArticleSteps[key] ||
+      stationArticleSteps[label] ||
+      (key === "bademantel" ? legacyBadem : null) ||
+      stationQuantityStep(subcategory)
+    );
   }
 
   function setStationArticleStep(subcategory, value) {
@@ -1143,13 +1147,22 @@ function App() {
     if (!relevant.length) return;
     await saveStationQuantities(order, relevant);
 
-    await supabase
-      .from("order_categories")
-      .update({ is_done: true, done_at: new Date().toISOString() })
-      .in("id", relevant.filter((item) => !item.virtual).map((item) => item.id));
+    const completedItems = relevant.filter(
+      (item) => getStationQuantity(order.id, item.subcategory) > 0
+    );
+    const completedExistingIds = completedItems
+      .filter((item) => !item.virtual)
+      .map((item) => item.id);
+
+    if (completedExistingIds.length) {
+      await supabase
+        .from("order_categories")
+        .update({ is_done: true, done_at: new Date().toISOString() })
+        .in("id", completedExistingIds);
+    }
 
     await Promise.all(
-      relevant.filter((item) => item.virtual).map((item) =>
+      completedItems.filter((item) => item.virtual).map((item) =>
         supabase
           .from("order_categories")
           .update({ is_done: true, done_at: new Date().toISOString() })
