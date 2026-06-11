@@ -1142,7 +1142,7 @@ function App() {
 
   function getStationQuantity(orderId, subcategory) {
     const item = items.find((entry) => entry.order_id === orderId && displaySubcategory(entry.subcategory) === displaySubcategory(subcategory));
-    return Number(item?.quantity ?? stationQuantities[stationQuantityKey(orderId, subcategory)] ?? 0);
+    return Number(stationQuantities[stationQuantityKey(orderId, subcategory)] ?? item?.quantity ?? 0);
   }
 
   function setStationQuantity(orderId, subcategory, value) {
