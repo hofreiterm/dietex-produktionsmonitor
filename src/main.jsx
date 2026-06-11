@@ -1437,7 +1437,40 @@ function App() {
 
   function monitorDetailItems(order) {
     if (!order) return [];
-    return enabledItemsForOrder(order).filter((item) => item.category !== "Putzerei");
+    const rawItems = enabledItemsForOrder(order).filter((item) => categoryKey(item.category) !== "putzerei");
+    const byArticle = new Map();
+
+    rawItems.forEach((item) => {
+      const key = `${categoryKey(item.category)}-${articleKey(item.subcategory)}`;
+      const existing = byArticle.get(key);
+      if (
+        !existing ||
+        Number(item.quantity || 0) > Number(existing.quantity || 0) ||
+        (item.is_done && !existing.is_done)
+      ) {
+        byArticle.set(key, item);
+      }
+    });
+
+    const hasFrottee = rawItems.some((item) => categoryKey(item.category) === "frottee");
+    if (hasFrottee) {
+      ["Bademäntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"].forEach((subcategory) => {
+        if (!isArticleEnabled(order.customer_number, subcategory)) return;
+        const key = `frottee-${articleKey(subcategory)}`;
+        if (byArticle.has(key)) return;
+        byArticle.set(key, {
+          id: `monitor-virtual-${order.id}-${subcategory}`,
+          order_id: order.id,
+          category: "Frottee",
+          subcategory,
+          quantity: getStationQuantity(order.id, subcategory),
+          is_done: order.monitorState === "fertig",
+          virtual: true,
+        });
+      });
+    }
+
+    return Array.from(byArticle.values());
   }
 
   function monitorDetailGroups(order) {
