@@ -588,6 +588,16 @@ function App() {
     return Array.from(byLabel.values()).filter((item) => !item.is_done);
   }
 
+  function isOrderWashedForStation(order, station) {
+    const stationWashItems = enabledItemsForOrder(order).filter((item) => {
+      if (!WASH_CATEGORIES.includes(item.category)) return false;
+      if (station.key === "frottee-splt-bm") return item.category === "Frottee";
+      return isStationItemMatch(station, item.subcategory);
+    });
+
+    return stationWashItems.length > 0 && stationWashItems.every((item) => item.washed_at);
+  }
+
   function orderArticleKey(category, subcategory) {
     return `${category}__${subcategory}`;
   }
@@ -1188,18 +1198,9 @@ function App() {
     await saveStationQuantities(order, relevant);
     await closeStationOrder(order, relevant);
 
-    setStationLabel({
-      customerNumber: order.customer_number,
-      customerName: order.customer_name,
-      station: activeStation.name,
-      printedAt: new Date().toISOString(),
-      items: stationLabelItems(order, relevant),
-    });
     setStationQuantityPad(null);
     setStationDetailOrder(null);
     loadAll();
-
-    setTimeout(() => window.print(), 250);
   }
 
   function getWashKey(orderId, category) {
@@ -1487,6 +1488,8 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
+      if (!isOrderWashedForStation(order, activeStation)) return false;
+
       const related = stationItemsForOrder(order, activeStation);
       if (!related.length) return false;
 
@@ -2544,7 +2547,7 @@ const tourColumns = Object.entries(
                   onClick={() => printStationLabel(stationDetailOrder, relevant)}
                   className="rounded-xl border border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-800"
                 >
-                  Etikett drucken + abschliessen
+                  Abschliessen
                 </button>
                 <button
                   type="button"
