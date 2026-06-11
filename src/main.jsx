@@ -563,10 +563,7 @@ function App() {
         !isSplitSheetArticle(item.subcategory) ||
         station.items.includes(item.subcategory)
     );
-    const hasLocalStationEntry = station.items.some(
-      (subcategory) => getStationQuantity(order.id, subcategory) > 0
-    );
-    if (existing.every((item) => item.is_done) && !hasLocalStationEntry) return [];
+    if (existing.every((item) => item.is_done)) return [];
 
     const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
     station.items.forEach((subcategory) => {
@@ -1117,6 +1114,18 @@ function App() {
     setStationQuantityPad(stationQuantityPadKey(orderId, subcategory));
   }
 
+  function clearStationQuantitiesForItems(relevant) {
+    if (!relevant.length) return;
+    setStationQuantities((prev) => {
+      const next = { ...prev };
+      relevant.forEach((item) => {
+        delete next[stationQuantityKey(item.source_order_id || item.order_id, item.subcategory)];
+      });
+      localStorage.setItem("dietexStationQuantities", JSON.stringify(next));
+      return next;
+    });
+  }
+
   function stationLabelItems(order, relevant) {
     return Object.values(
       relevant.reduce((acc, item) => {
@@ -1197,6 +1206,7 @@ function App() {
     if (!relevant.length) return;
     await saveStationQuantities(order, relevant);
     await closeStationOrder(order, relevant);
+    clearStationQuantitiesForItems(relevant);
 
     setStationQuantityPad(null);
     setStationDetailOrder(null);
