@@ -1039,9 +1039,8 @@ function App() {
     setStationQuantityPad(stationQuantityPadKey(orderId, subcategory));
   }
 
-  async function finishFrotteeStationOrder(order, relevant) {
-    if (!relevant.length) return;
-    const printedItems = Object.values(
+  function stationLabelItems(order, relevant) {
+    return Object.values(
       relevant.reduce((acc, item) => {
         const label = displaySubcategory(item.subcategory);
         acc[label] = {
@@ -1051,7 +1050,10 @@ function App() {
         return acc;
       }, {})
     );
+  }
 
+  async function saveStationQuantities(order, relevant) {
+    if (!relevant.length) return;
     await Promise.all(
       relevant.map((item) =>
         supabase
@@ -1062,24 +1064,36 @@ function App() {
           .catch(() => null)
       )
     );
+  }
+
+  async function confirmStationOrder(order, relevant) {
+    if (!relevant.length) return;
+    await saveStationQuantities(order, relevant);
 
     await supabase
       .from("order_categories")
       .update({ is_done: true, done_at: new Date().toISOString() })
       .in("id", relevant.map((item) => item.id));
 
+    setStationDetailOrder(null);
+    setStationQuantityPad(null);
+    loadAll();
+  }
+
+  async function printStationLabel(order, relevant) {
+    if (!relevant.length) return;
+    await saveStationQuantities(order, relevant);
+
     setStationLabel({
       customerNumber: order.customer_number,
       customerName: order.customer_name,
       station: activeStation.name,
       printedAt: new Date().toISOString(),
-      items: printedItems,
+      items: stationLabelItems(order, relevant),
     });
-    setStationDetailOrder(null);
     setStationQuantityPad(null);
 
     setTimeout(() => window.print(), 250);
-    loadAll();
   }
 
   function getWashKey(orderId, category) {
@@ -2420,12 +2434,15 @@ const tourColumns = Object.entries(
 
               <div className="mt-5 flex justify-end gap-3 border-t pt-4">
                 <Button onClick={() => { setStationDetailOrder(null); setStationQuantityPad(null); }}>Abbrechen</Button>
+                <Button className="bg-blue-700 text-white" onClick={() => printStationLabel(stationDetailOrder, relevant)}>
+                  Etikett drucken
+                </Button>
                 <button
                   type="button"
-                  onClick={() => finishFrotteeStationOrder(stationDetailOrder, relevant)}
+                  onClick={() => confirmStationOrder(stationDetailOrder, relevant)}
                   className="rounded-xl border border-green-700 bg-green-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-green-700"
                 >
-                  Bestaetigen + Etikett
+                  Bestaetigen
                 </button>
               </div>
             </div>
