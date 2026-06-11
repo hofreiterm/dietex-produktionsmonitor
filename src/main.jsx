@@ -25,13 +25,13 @@ function isAdminSessionUnlocked() {
 }
 
 const CATEGORIES = {
-  "BettwÃ¤sche": ["DeckenbezÃ¼ge + LeintÃ¼cher", "PolsterbezÃ¼ge"],
-  "Frottee": ["Frottee", "BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"],
-  "TischwÃ¤sche": ["TischtÃ¼cher", "Deckservietten", "Mundservietten"],
-  "Putzerei": ["Putzerei"],
+  Bettwäsche: ["Deckenbezüge + Leintücher", "Polsterbezüge"],
+  Frottee: ["Frottee", "Spannleintücher", "Bademäntel"],
+  Tischwäsche: ["Tischtücher + Deckservietten", "Mundservietten"],
+  Putzerei: ["Putzerei"],
 };
 
-const WASH_CATEGORIES = ["BettwÃ¤sche", "Frottee", "TischwÃ¤sche"];
+const WASH_CATEGORIES = ["Bettwäsche", "Frottee", "Tischwäsche"];
 
 const WASH_STREETS = [
   {
@@ -47,37 +47,37 @@ const WASH_STREETS = [
     name: "Waschstrasse 2",
     capacity: "50 kg",
     description: "Alles andere",
-    categories: ["BettwÃƒÂ¤sche", "TischwÃƒÂ¤sche"],
+    categories: ["BettwÃ¤sche", "TischwÃ¤sche"],
     className: "border-blue-400 bg-blue-50 text-blue-950",
   },
 ];
 
 const ALL_SUBCATEGORIES = [
-  "DeckenbezÃ¼ge + LeintÃ¼cher",
-  "PolsterbezÃ¼ge",
+  "Deckenbezüge + Leintücher",
+  "Polsterbezüge",
   "Frottee",
-  "BademÃ¤ntel",
-  "Spannleintuch 1-fach",
-  "Spannleintuch 2-fach",
-  "TischtÃ¼cher",
-  "Deckservietten",
+  "Spannleintücher",
+  "Bademäntel",
+  "Tischtücher + Deckservietten",
+  "Tischtücher + Deckservietten",
   "Mundservietten",
   "Putzerei",
 ];
 
 const CAT_ICON = {
-  "BettwÃ¤sche": "ðŸ›ï¸",
-  "Frottee": "ðŸ¥‹",
-  "TischwÃ¤sche": "ðŸ½ï¸",
-  "Putzerei": "P",
+  Bettwäsche: "🛏️",
+  Frottee: "🥋",
+  Tischwäsche: "🍽️",
+  Putzerei: "P",
 };
 
 const STATIONS = [
-  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["PolsterbezÃ¼ge", "TischtÃ¼cher", "Deckservietten", "Mundservietten"] },
-  { key: "jenway-grossteile", name: "Jenway GroÃŸteile", items: ["DeckenbezÃ¼ge + LeintÃ¼cher"] },
+  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["Polsterbezüge", "Mundservietten", "Tischtücher", "Deckservietten", "Tischtücher + Deckservietten"] },
+  { key: "jenway-grossteile", name: "Jenway Großteile", items: ["Deckenbezüge + Leintücher"] },
   { key: "jenway-frottee", name: "Jenway Frottee", items: ["Frottee"] },
-  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"] },
+  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["Bademäntel", "Spannleintücher"] },
 ];
+
 const ROWS = [1, 2, 3, 4, 5];
 const PLACES = 10;
 
@@ -283,20 +283,19 @@ function Logo() {
 
 function categoryStyle(cat, selected) {
   const styles = {
-    bettwaesche: "border-blue-400 bg-blue-50 text-blue-900",
-    frottee: "border-green-400 bg-green-50 text-green-900",
-    tischwaesche: "border-orange-400 bg-orange-50 text-orange-900",
-    putzerei: "border-violet-400 bg-violet-50 text-violet-900",
+    Bettwäsche: "border-blue-400 bg-blue-50 text-blue-900",
+    Frottee: "border-green-400 bg-green-50 text-green-900",
+    Tischwäsche: "border-orange-400 bg-orange-50 text-orange-900",
+    Putzerei: "border-violet-400 bg-violet-50 text-violet-900",
   };
-  return `${styles[categoryKey(cat)] || "border-slate-300 bg-white text-slate-900"} ${selected ? "scale-105 ring-4 ring-blue-200 shadow-lg" : "opacity-90 hover:opacity-100"}`;
+  return `${styles[cat]} ${selected ? "scale-105 ring-4 ring-blue-200 shadow-lg" : "opacity-90 hover:opacity-100"}`;
 }
 
 function getContainerPlan(selected) {
   const plan = [];
-  const selectedKeys = selected.map(categoryKey);
-  if (selectedKeys.includes("bettwaesche")) plan.push({ type: "Bettwäsche" });
-  if (selectedKeys.includes("tischwaesche")) plan.push({ type: "Tischwäsche" });
-  if (selectedKeys.includes("frottee")) {
+  if (selected.includes("Bettwäsche")) plan.push({ type: "Bettwäsche" });
+  if (selected.includes("Tischwäsche")) plan.push({ type: "Tischwäsche" });
+  if (selected.includes("Frottee")) {
     plan.push({ type: "Frottee" });
     plan.push({ type: "SPLT + BM" });
   }
@@ -329,49 +328,10 @@ function splitIntoColumns(rows, count) {
   return cols;
 }
 
-function articleKey(value) {
-  const text = String(value || "").toLowerCase();
-  if (text.includes("polster")) return "polster";
-  if (text.includes("deckenbez") || text.includes("leintÃ¼cher") || text.includes("leintücher")) return "grossteile";
-  if (text.includes("badem")) return "bademantel";
-  if (text.includes("1-fach")) return "splt1";
-  if (text.includes("2-fach")) return "splt2";
-  if (text.includes("spannleint")) return "spannleint";
-  if (text.includes("frottee")) return "frottee";
-  if (text.includes("deckserv")) return "deckservietten";
-  if (text.includes("tischt")) return "tischtuecher";
-  if (text.includes("mundserv")) return "mundservietten";
-  return text;
-}
-
-function categoryKey(value) {
-  const text = String(value || "").toLowerCase();
-  if (text.includes("bettw")) return "bettwaesche";
-  if (text.includes("frottee")) return "frottee";
-  if (text.includes("tischw")) return "tischwaesche";
-  if (text.includes("putzerei")) return "putzerei";
-  return text;
-}
-
-function stationMatchesItem(station, item) {
-  const itemKey = articleKey(item.subcategory);
-  const stationKeys = station.items.map((stationItem) => articleKey(stationItem));
-  if (stationKeys.includes(itemKey)) return true;
-
-  const text = String(item.subcategory || "").toLowerCase();
-  const isLegacyTischDeck = text.includes("tischt") && text.includes("deckserv");
-  if (isLegacyTischDeck && stationKeys.some((key) => key === "tischtuecher" || key === "deckservietten")) {
-    return true;
-  }
-
-  return false;
-}
-
-function isCountingItem(subcategory) {
-  return ["bademantel", "splt1", "splt2"].includes(articleKey(subcategory));
-}
-
 function displaySubcategory(subcategory) {
+  if (subcategory === "Tischtücher" || subcategory === "Deckservietten") {
+    return "Tischtücher + Deckservietten";
+  }
   return subcategory;
 }
 
@@ -426,7 +386,6 @@ function App() {
   const [leitungDateTo, setLeitungDateTo] = useState(fmtDateInput());
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
-  const [stationQuantities, setStationQuantities] = useState({});
 
   const [personalDate, setPersonalDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [personalDepartment, setPersonalDepartment] = useState("waescherei");
@@ -520,10 +479,10 @@ function App() {
       const next = { ...prev };
       orders.forEach((order) => {
         STATIONS.forEach((station) => {
-          const relevant = stationItemsForOrder(order, station);
+          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory));
           const key = `${order.id}-${station.key}`;
           if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
-            next[key] = Date.now() + 5000;
+            next[key] = Date.now() + 10000;
           }
         });
       });
@@ -552,54 +511,6 @@ function App() {
   function isArticleEnabled(customerNumber, subcategory) {
     const setting = articleSettings.find((s) => String(s.customer_number) === String(customerNumber) && s.subcategory === subcategory);
     return setting ? setting.is_enabled : true;
-  }
-
-  function stationQuantityKey(orderId, subcategory) {
-    return `${orderId}-${articleKey(subcategory)}`;
-  }
-
-  function getStationQuantity(orderId, subcategory) {
-    const key = stationQuantityKey(orderId, subcategory);
-    const item = items.find((entry) => entry.order_id === orderId && articleKey(entry.subcategory) === articleKey(subcategory));
-    return Number(stationQuantities[key] ?? item?.quantity ?? 0);
-  }
-
-  function setStationQuantity(orderId, subcategory, value) {
-    const nextValue = Math.max(0, Number(value) || 0);
-    const key = stationQuantityKey(orderId, subcategory);
-    setStationQuantities((prev) => {
-      return { ...prev, [key]: nextValue };
-    });
-
-    const matching = items.filter((entry) => entry.order_id === orderId && articleKey(entry.subcategory) === articleKey(subcategory));
-    if (matching.length) {
-      supabase
-        .from("order_categories")
-        .update({ quantity: nextValue })
-        .in("id", matching.map((entry) => entry.id))
-        .then(({ error }) => {
-          if (error) {
-            alert("Stueckzahl konnte nicht gespeichert werden: " + error.message);
-            return;
-          }
-          loadAll();
-        });
-    }
-  }
-
-  function stationItemsForOrder(order, station) {
-    return items
-      .filter((item) => item.order_id === order.id && item.washed_at && stationMatchesItem(station, item))
-      .sort((a, b) => {
-        const ai = station.items.findIndex((sub) => articleKey(sub) === articleKey(a.subcategory));
-        const bi = station.items.findIndex((sub) => articleKey(sub) === articleKey(b.subcategory));
-        return ai - bi;
-      });
-  }
-
-  function isOrderReadyForStation(order, station) {
-    const relevant = stationItemsForOrder(order, station);
-    return relevant.length > 0;
   }
 
   function orderArticleKey(category, subcategory) {
@@ -992,9 +903,9 @@ function App() {
       setHiddenStationOrders((p) => {
         const nextHidden = { ...p };
         STATIONS.forEach((station) => {
-          const relevant = orderItems.filter((i) => stationMatchesItem(station, i));
+          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory));
           if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
-            nextHidden[`${order.id}-${station.key}`] = Date.now() + 5000;
+            nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
           }
         });
         return nextHidden;
@@ -1041,21 +952,17 @@ function App() {
       return;
     }
 
-    const related = items.filter((i) => i.order_id === order.id && i.category === category && !i.washed_at);
-    if (!related.length) return;
+    const relatedIds = items
+      .filter((i) => i.order_id === order.id && i.category === category && !i.washed_at)
+      .map((i) => i.id);
+    if (!relatedIds.length) return;
 
     setPendingWash((prev) => ({ ...prev, [washKey]: true }));
     washTimers.current[washKey] = window.setTimeout(async () => {
-      const { error } = await supabase
+      await supabase
         .from("order_categories")
         .update({ washed_at: new Date().toISOString() })
-        .eq("order_id", order.id)
-        .eq("category", category)
-        .is("washed_at", null);
-
-      if (error) {
-        alert("Waschstatus konnte nicht gespeichert werden: " + error.message);
-      }
+        .in("id", relatedIds);
 
       delete washTimers.current[washKey];
       setPendingWash((prev) => {
@@ -1182,7 +1089,7 @@ function App() {
   const monitorRows = useMemo(() => {
     return sortedOrders
       .map((order) => {
-        const related = items.filter((item) => item.order_id === order.id);
+        const related = enabledItemsForOrder(order);
         const laundryItems = related.filter((i) => i.category !== "Putzerei");
         const putzereiItems = related.filter((i) => i.category === "Putzerei");
         const done = laundryItems.filter((i) => i.is_done).length;
@@ -1217,7 +1124,7 @@ function App() {
 
   function monitorDetailItems(order) {
     if (!order) return [];
-    return items.filter((item) => item.order_id === order.id && item.category !== "Putzerei");
+    return enabledItemsForOrder(order).filter((item) => item.category !== "Putzerei");
   }
 
   function monitorDetailGroups(order) {
@@ -1306,9 +1213,8 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      const related = stationItemsForOrder(order, activeStation);
+      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory));
       if (!related.length) return false;
-      if (!isOrderReadyForStation(order, activeStation)) return false;
 
       if (
         stationSearch &&
@@ -2344,11 +2250,8 @@ const tourColumns = Object.entries(
                           item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
                         }`}
                       >
-                        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
+                        <div className="flex items-center justify-between gap-2">
                           <span>{displaySubcategory(item.subcategory)}</span>
-                          <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-900">
-                            {Number(item.quantity || 0)} Stk.
-                          </span>
                           <span>{item.is_done ? "Fertig" : "Offen"}</span>
                         </div>
                       </div>
@@ -2357,13 +2260,6 @@ const tourColumns = Object.entries(
                 </div>
               ))}
             </div>
-            {monitorDetailOrder.monitorState === "fertig" && (
-              <div className="mt-5 flex justify-end border-t pt-4">
-                <Button className="bg-blue-700 text-white" onClick={() => archiveFinishedOrders([monitorDetailOrder.id])}>
-                  Auf Tour geben
-                </Button>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -2536,7 +2432,9 @@ const tourColumns = Object.entries(
 
               <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
                 {stationOrders.map((order) => {
-                  const relevant = stationItemsForOrder(order, activeStation);
+                  const relevant = enabledItemsForOrder(order)
+                    .filter((i) => activeStation.items.includes(i.subcategory))
+                    .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
                   const groupedRelevant = Object.values(
                     relevant.reduce((acc, item) => {
@@ -2555,23 +2453,15 @@ const tourColumns = Object.entries(
                       <div className="flex flex-wrap gap-2">
                         {groupedRelevant.map((group) => {
                           const done = group.items.every((item) => item.is_done);
-                          const item = group.items[0];
-                          const countable = activeStation.key === "frottee-splt-bm" && isCountingItem(item.subcategory);
-                          const qty = getStationQuantity(item.order_id, item.subcategory);
                           return (
-                            <div key={group.label} className={`rounded-lg border px-3 py-2 text-xs font-bold ${done ? "bg-green-100" : "bg-yellow-50"}`}>
-                              <button type="button" onClick={() => toggleStationGroup(group.items)}>
-                                {done ? "✅" : "⭕"} {group.label}
-                              </button>
-                              {countable && (
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => setStationQuantity(item.order_id, item.subcategory, qty - 1)}>-</button>
-                                  <span className="rounded bg-white px-2 py-1">{qty} Stk.</span>
-                                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => setStationQuantity(item.order_id, item.subcategory, qty + 1)}>+1</button>
-                                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => setStationQuantity(item.order_id, item.subcategory, qty + 10)}>+10</button>
-                                </div>
-                              )}
-                            </div>
+                            <button
+                              key={group.label}
+                              type="button"
+                              onClick={() => toggleStationGroup(group.items)}
+                              className={`rounded-lg border px-3 py-2 text-xs font-bold ${done ? "bg-green-100" : "bg-yellow-50"}`}
+                            >
+                              {done ? "✅" : "⭕"} {group.label}
+                            </button>
                           );
                         })}
                       </div>
@@ -2594,7 +2484,7 @@ const tourColumns = Object.entries(
             {splitIntoColumns(finishedRows, 2).map((col, idx) => (
               <div key={`done-${idx}`} className="rounded-3xl border border-green-100 bg-green-50/40 p-4">
                 <h2 className="mb-3 border-b-2 border-green-500 pb-2 text-center font-black">FERTIG</h2>
-                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} onClick={() => setMonitorDetailOrder(r)} />)}</div>
+                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} onClick={() => archiveFinishedOrders([r.id])} />)}</div>
               </div>
             ))}
           </section>
