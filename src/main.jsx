@@ -1953,57 +1953,59 @@ const tourColumns = Object.entries(
           </div>
         </div>
 
-        <div className={`relative overflow-hidden rounded-xl border bg-slate-100 ${compact ? "h-[calc(100vh-280px)] min-h-[390px]" : "h-[calc(100vh-320px)] min-h-[520px]"}`}>
-          <img
-            src={map.image}
-            alt={map.title}
-            className="absolute inset-0 h-full w-full object-contain p-6"
-            data-fallback-index="0"
-            onError={(e) => {
-              const fallbacks = map.imageFallbacks || [];
-              const index = Number(e.currentTarget.dataset.fallbackIndex || "0");
-              if (index < fallbacks.length) {
-                e.currentTarget.dataset.fallbackIndex = String(index + 1);
-                e.currentTarget.src = fallbacks[index];
-              }
-            }}
-          />
+        <div className={`relative flex items-center justify-center overflow-hidden rounded-xl border bg-slate-100 p-3 ${compact ? "h-[calc(100vh-360px)] min-h-[340px] max-h-[560px]" : "h-[calc(100vh-320px)] min-h-[520px]"}`}>
+          <div className={`relative ${map.aspect} h-full max-h-full max-w-full shrink-0`}>
+            <img
+              src={map.image}
+              alt={map.title}
+              className="absolute inset-0 h-full w-full object-contain"
+              data-fallback-index="0"
+              onError={(e) => {
+                const fallbacks = map.imageFallbacks || [];
+                const index = Number(e.currentTarget.dataset.fallbackIndex || "0");
+                if (index < fallbacks.length) {
+                  e.currentTarget.dataset.fallbackIndex = String(index + 1);
+                  e.currentTarget.src = fallbacks[index];
+                }
+              }}
+            />
 
-          {map.zones.map((zone, index) => {
-            const sectionName = currentSections()[index]?.name || zone.section;
-            const names = getEmployeesInSection(sectionName);
+            {map.zones.map((zone, index) => {
+              const sectionName = currentSections()[index]?.name || zone.section;
+              const names = getEmployeesInSection(sectionName);
 
-            return (
-              <div
-                key={sectionName}
-                className={`absolute rounded-lg border p-1 shadow-md backdrop-blur-sm ${
-                  names.length ? "border-blue-300 bg-white/90" : "border-slate-300 bg-white/50"
-                }`}
-                style={{
-                  left: `${zone.x}%`,
-                  top: `${zone.y}%`,
-                  width: `${zone.w}%`,
-                  transform: "translate(-50%, -50%)",
-                }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, sectionName)}
-              >
-                <div className="mb-1 truncate text-[9px] font-black text-blue-900">{sectionName}</div>
-                <div className="flex flex-wrap gap-1">
-                  {names.map((name) => (
-                    <span
-                      key={name}
-                      draggable
-                      onDragStart={() => setDragEmployee(name)}
-                      className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[9px] font-black leading-tight text-white"
-                    >
-                      {name}
-                    </span>
-                  ))}
+              return (
+                <div
+                  key={sectionName}
+                  className={`absolute rounded-lg border p-1 shadow-md backdrop-blur-sm ${
+                    names.length ? "border-blue-300 bg-white/90" : "border-slate-300 bg-white/50"
+                  }`}
+                  style={{
+                    left: `${zone.x}%`,
+                    top: `${zone.y}%`,
+                    width: `${zone.w}%`,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, sectionName)}
+                >
+                  <div className="mb-1 truncate text-[9px] font-black text-blue-900">{sectionName}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {names.map((name) => (
+                      <span
+                        key={name}
+                        draggable
+                        onDragStart={() => setDragEmployee(name)}
+                        className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[9px] font-black leading-tight text-white"
+                      >
+                        {name}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     );
