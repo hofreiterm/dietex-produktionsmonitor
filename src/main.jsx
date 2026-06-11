@@ -25,10 +25,10 @@ function isAdminSessionUnlocked() {
 }
 
 const CATEGORIES = {
-  BettwÃ¤sche: ["DeckenbezÃ¼ge + LeintÃ¼cher", "PolsterbezÃ¼ge"],
-  Frottee: ["Frottee", "BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"],
-  TischwÃ¤sche: ["TischtÃ¼cher", "Deckservietten", "Mundservietten"],
-  Putzerei: ["Putzerei"],
+  "BettwÃ¤sche": ["DeckenbezÃ¼ge + LeintÃ¼cher", "PolsterbezÃ¼ge"],
+  "Frottee": ["Frottee", "BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"],
+  "TischwÃ¤sche": ["TischtÃ¼cher", "Deckservietten", "Mundservietten"],
+  "Putzerei": ["Putzerei"],
 };
 
 const WASH_CATEGORIES = ["BettwÃ¤sche", "Frottee", "TischwÃ¤sche"];
@@ -66,10 +66,10 @@ const ALL_SUBCATEGORIES = [
 ];
 
 const CAT_ICON = {
-  BettwÃ¤sche: "ðŸ›ï¸",
-  Frottee: "ðŸ¥‹",
-  TischwÃ¤sche: "ðŸ½ï¸",
-  Putzerei: "P",
+  "BettwÃ¤sche": "ðŸ›ï¸",
+  "Frottee": "ðŸ¥‹",
+  "TischwÃ¤sche": "ðŸ½ï¸",
+  "Putzerei": "P",
 };
 
 const STATIONS = [
@@ -283,19 +283,20 @@ function Logo() {
 
 function categoryStyle(cat, selected) {
   const styles = {
-    Bettwäsche: "border-blue-400 bg-blue-50 text-blue-900",
-    Frottee: "border-green-400 bg-green-50 text-green-900",
-    Tischwäsche: "border-orange-400 bg-orange-50 text-orange-900",
-    Putzerei: "border-violet-400 bg-violet-50 text-violet-900",
+    bettwaesche: "border-blue-400 bg-blue-50 text-blue-900",
+    frottee: "border-green-400 bg-green-50 text-green-900",
+    tischwaesche: "border-orange-400 bg-orange-50 text-orange-900",
+    putzerei: "border-violet-400 bg-violet-50 text-violet-900",
   };
-  return `${styles[cat]} ${selected ? "scale-105 ring-4 ring-blue-200 shadow-lg" : "opacity-90 hover:opacity-100"}`;
+  return `${styles[categoryKey(cat)] || "border-slate-300 bg-white text-slate-900"} ${selected ? "scale-105 ring-4 ring-blue-200 shadow-lg" : "opacity-90 hover:opacity-100"}`;
 }
 
 function getContainerPlan(selected) {
   const plan = [];
-  if (selected.includes("Bettwäsche")) plan.push({ type: "Bettwäsche" });
-  if (selected.includes("Tischwäsche")) plan.push({ type: "Tischwäsche" });
-  if (selected.includes("Frottee")) {
+  const selectedKeys = selected.map(categoryKey);
+  if (selectedKeys.includes("bettwaesche")) plan.push({ type: "Bettwäsche" });
+  if (selectedKeys.includes("tischwaesche")) plan.push({ type: "Tischwäsche" });
+  if (selectedKeys.includes("frottee")) {
     plan.push({ type: "Frottee" });
     plan.push({ type: "SPLT + BM" });
   }
