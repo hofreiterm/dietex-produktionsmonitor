@@ -1058,16 +1058,29 @@ function App() {
     setStationQuantity(orderId, subcategory, getStationQuantity(orderId, subcategory) + amount);
   }
 
+  function stationArticleStepKey(subcategory) {
+    const text = String(subcategory || "").toLowerCase();
+    if (text.includes("badem")) return "bademantel";
+    if (text.includes("1-fach")) return "splt1";
+    if (text.includes("2-fach")) return "splt2";
+    if (text.includes("spannleint")) return "splt";
+    return displaySubcategory(subcategory);
+  }
+
   function getStationArticleStep(subcategory) {
     const label = displaySubcategory(subcategory);
-    return Number(stationArticleSteps[label] || stationQuantityStep(subcategory));
+    const key = stationArticleStepKey(subcategory);
+    const legacyBadem = stationArticleSteps["BademÃ¤ntel"] || stationArticleSteps["Bademäntel"];
+    if (key === "bademantel" && legacyBadem) return Number(legacyBadem);
+    return Number(stationArticleSteps[key] || stationArticleSteps[label] || stationQuantityStep(subcategory));
   }
 
   function setStationArticleStep(subcategory, value) {
     const label = displaySubcategory(subcategory);
+    const key = stationArticleStepKey(subcategory);
     const nextValue = Math.max(1, Number(value) || 1);
     setStationArticleSteps((prev) => {
-      const next = { ...prev, [label]: nextValue };
+      const next = { ...prev, [key]: nextValue, [label]: nextValue };
       localStorage.setItem("dietexStationArticleSteps", JSON.stringify(next));
       return next;
     });
