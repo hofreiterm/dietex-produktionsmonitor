@@ -362,6 +362,14 @@ function isWashCategory(category) {
   return ["bettwaesche", "frottee", "tischwaesche"].includes(categoryKey(category));
 }
 
+function categoryForSubcategory(subcategory) {
+  const key = articleKey(subcategory);
+  if (key === "polster" || key === "bettwaesche-grossteile") return "Bettwäsche";
+  if (key === "mundservietten" || key === "tischwaesche-kleinteile") return "Tischwäsche";
+  if (key === "frottee" || key === "bademantel" || key === "splt1" || key === "splt2" || key === "splt") return "Frottee";
+  return "Sonstiges";
+}
+
 function displaySubcategory(subcategory) {
   if (articleKey(subcategory) === "tischwaesche-kleinteile") {
     return "Tischtücher + Deckservietten";
@@ -582,9 +590,44 @@ function App() {
     return setting ? setting.is_enabled : true;
   }
 
+  function hasExplicitArticleSetting(customerNumber, subcategory) {
+    return articleSettings.some(
+      (s) =>
+        String(s.customer_number) === String(customerNumber) &&
+        articleKey(s.subcategory) === articleKey(subcategory) &&
+        s.is_enabled
+    );
+  }
+
   function stationItemsForOrder(order, station) {
     let existing = enabledItemsForOrder(order).filter((item) => isStationItemMatch(station, item.subcategory));
-    if (station.key !== "frottee-splt-bm") return existing;
+    if (station.key !== "frottee-splt-bm") {
+      const allOrderItems = enabledItemsForOrder(order);
+      const orderCategoryKeys = new Set(allOrderItems.map((item) => categoryKey(item.category)));
+      const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
+
+      station.items.forEach((subcategory) => {
+        if (!isArticleEnabled(order.customer_number, subcategory)) return;
+        const category = categoryForSubcategory(subcategory);
+        const matchingCategoryExists = orderCategoryKeys.has(categoryKey(category));
+        const explicitArticle = hasExplicitArticleSetting(order.customer_number, subcategory);
+        if (!matchingCategoryExists && !explicitArticle) return;
+
+        const label = displaySubcategory(subcategory);
+        if (byLabel.has(label)) return;
+        byLabel.set(label, {
+          id: `virtual-${order.id}-${subcategory}`,
+          order_id: order.id,
+          category,
+          subcategory,
+          is_done: false,
+          quantity: getStationQuantity(order.id, subcategory),
+          virtual: true,
+        });
+      });
+
+      return Array.from(byLabel.values()).filter((item) => !item.is_done);
+    }
     if (!existing.length) return existing;
     existing = existing.filter(
       (item) =>
@@ -1177,35 +1220,63 @@ function App() {
 
   async function saveStationQuantities(order, relevant) {
     if (!relevant.length) return;
-    const virtualItems = relevant.filter((item) => item.virtual);
-    if (virtualItems.length) {
-      await supabase.from("order_categories").insert(
-        virtualItems.map((item) => ({
-          order_id: item.order_id || order.id,
-          category: item.category || "Frottee",
+    await Promise.all(
+      relevant.map(async (item) => {
+        const orderId = item.source_order_id || item.order_id || order.id;
+        const quantity = getStationQuantity(orderId, item.subcategory);
+
+        if (!item.virtual && item.id) {
+          const { error } = await supabase
+            .from("order_categories")
+            .update({ quantity })
+            .eq("id", item.id);
+          if (error) throw error;
+          return;
+        }
+
+        const { data: existingRows, error: findError } = await supabase
+          .from("order_categories")
+          .select("id")
+          .eq("order_id", orderId)
+          .eq("subcategory", item.subcategory)
+          .limit(1);
+        if (findError) throw findError;
+
+        if (existingRows?.length) {
+          const { error } = await supabase
+            .from("order_categories")
+            .update({
+              category: item.category || categoryForSubcategory(item.subcategory),
+              quantity,
+              is_done: false,
+              done_at: null,
+            })
+            .eq("id", existingRows[0].id);
+          if (error) throw error;
+          return;
+        }
+
+        const { error } = await supabase.from("order_categories").insert({
+          order_id: orderId,
+          category: item.category || categoryForSubcategory(item.subcategory),
           subcategory: item.subcategory,
-          quantity: getStationQuantity(item.source_order_id || item.order_id || order.id, item.subcategory),
+          quantity,
           is_done: false,
           done_at: null,
-        }))
-      ).then(() => null).catch(() => null);
-    }
-
-    await Promise.all(
-      relevant.filter((item) => !item.virtual).map((item) =>
-        supabase
-          .from("order_categories")
-          .update({ quantity: getStationQuantity(item.source_order_id || item.order_id || order.id, item.subcategory) })
-          .eq("id", item.id)
-          .then(() => null)
-          .catch(() => null)
-      )
+        });
+        if (error) throw error;
+      })
     );
   }
 
   async function confirmStationOrder(order, relevant) {
     if (!relevant.length) return;
-    await saveStationQuantities(order, relevant);
+    try {
+      await saveStationQuantities(order, relevant);
+    } catch (error) {
+      alert("Stueckzahlen konnten nicht gespeichert werden: " + error.message);
+      return;
+    }
 
     setStationDetailOrder(null);
     setStationQuantityPad(null);
@@ -1219,29 +1290,35 @@ function App() {
       .map((item) => item.id);
 
     if (existingIds.length) {
-      await supabase
+      const { error } = await supabase
         .from("order_categories")
         .update({ is_done: true, done_at: new Date().toISOString() })
         .in("id", existingIds);
+      if (error) throw error;
     }
 
     await Promise.all(
-      relevant.filter((item) => item.virtual).map((item) =>
-        supabase
+      relevant.filter((item) => item.virtual).map(async (item) => {
+        const orderId = item.source_order_id || item.order_id || order.id;
+        const { error } = await supabase
           .from("order_categories")
           .update({ is_done: true, done_at: new Date().toISOString() })
-          .eq("order_id", item.order_id || order.id)
-          .eq("subcategory", item.subcategory)
-          .then(() => null)
-          .catch(() => null)
-      )
+          .eq("order_id", orderId)
+          .eq("subcategory", item.subcategory);
+        if (error) throw error;
+      })
     );
   }
 
   async function printStationLabel(order, relevant) {
     if (!relevant.length) return;
-    await saveStationQuantities(order, relevant);
-    await closeStationOrder(order, relevant);
+    try {
+      await saveStationQuantities(order, relevant);
+      await closeStationOrder(order, relevant);
+    } catch (error) {
+      alert("Station konnte nicht abgeschlossen werden: " + error.message);
+      return;
+    }
     clearStationQuantitiesForItems(relevant);
 
     setStationQuantityPad(null);
