@@ -25,13 +25,13 @@ function isAdminSessionUnlocked() {
 }
 
 const CATEGORIES = {
-  Bettwäsche: ["Deckenbezüge + Leintücher", "Polsterbezüge"],
-  Frottee: ["Frottee", "Spannleintuch 1-fach", "Spannleintuch 2-fach", "Bademäntel"],
-  Tischwäsche: ["Tischtücher + Deckservietten", "Mundservietten"],
+  BettwÃ¤sche: ["DeckenbezÃ¼ge + LeintÃ¼cher", "PolsterbezÃ¼ge"],
+  Frottee: ["Frottee", "BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"],
+  TischwÃ¤sche: ["TischtÃ¼cher", "Deckservietten", "Mundservietten"],
   Putzerei: ["Putzerei"],
 };
 
-const WASH_CATEGORIES = ["Bettwäsche", "Frottee", "Tischwäsche"];
+const WASH_CATEGORIES = ["BettwÃ¤sche", "Frottee", "TischwÃ¤sche"];
 
 const WASH_STREETS = [
   {
@@ -47,44 +47,37 @@ const WASH_STREETS = [
     name: "Waschstrasse 2",
     capacity: "50 kg",
     description: "Alles andere",
-    categories: ["BettwÃ¤sche", "TischwÃ¤sche"],
+    categories: ["BettwÃƒÂ¤sche", "TischwÃƒÂ¤sche"],
     className: "border-blue-400 bg-blue-50 text-blue-950",
   },
 ];
 
 const ALL_SUBCATEGORIES = [
-  "Deckenbezüge + Leintücher",
-  "Polsterbezüge",
+  "DeckenbezÃ¼ge + LeintÃ¼cher",
+  "PolsterbezÃ¼ge",
   "Frottee",
+  "BademÃ¤ntel",
   "Spannleintuch 1-fach",
   "Spannleintuch 2-fach",
-  "Bademäntel",
-  "Tischtücher + Deckservietten",
-  "Tischtücher + Deckservietten",
+  "TischtÃ¼cher",
+  "Deckservietten",
   "Mundservietten",
   "Putzerei",
 ];
 
 const CAT_ICON = {
-  Bettwäsche: "🛏️",
-  Frottee: "🥋",
-  Tischwäsche: "🍽️",
+  BettwÃ¤sche: "ðŸ›ï¸",
+  Frottee: "ðŸ¥‹",
+  TischwÃ¤sche: "ðŸ½ï¸",
   Putzerei: "P",
 };
 
 const STATIONS = [
-  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["Polsterbezüge", "Mundservietten", "Tischtücher", "Deckservietten", "Tischtücher + Deckservietten"] },
-  { key: "jenway-grossteile", name: "Jenway Großteile", items: ["Deckenbezüge + Leintücher"] },
+  { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["PolsterbezÃ¼ge", "TischtÃ¼cher", "Deckservietten", "Mundservietten"] },
+  { key: "jenway-grossteile", name: "Jenway GroÃŸteile", items: ["DeckenbezÃ¼ge + LeintÃ¼cher"] },
   { key: "jenway-frottee", name: "Jenway Frottee", items: ["Frottee"] },
-  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["Bademäntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"] },
+  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"] },
 ];
-
-function stationQuantityStep(subcategory) {
-  const text = String(subcategory || "").toLowerCase();
-  if (text.includes("badem")) return 5;
-  return 10;
-}
-
 const ROWS = [1, 2, 3, 4, 5];
 const PLACES = 10;
 
@@ -338,53 +331,38 @@ function splitIntoColumns(rows, count) {
 function articleKey(value) {
   const text = String(value || "").toLowerCase();
   if (text.includes("polster")) return "polster";
-  if (text.includes("mundserv")) return "mundservietten";
-  if (text.includes("tisch") || text.includes("deckserv")) return "tischwaesche-kleinteile";
+  if (text.includes("deckenbez") || text.includes("leintÃ¼cher") || text.includes("leintücher")) return "grossteile";
+  if (text.includes("badem")) return "bademantel";
   if (text.includes("1-fach")) return "splt1";
   if (text.includes("2-fach")) return "splt2";
-  if (text.includes("spannleint")) return "splt";
-  if (text.includes("deckenbez") || text.includes("leint")) return "bettwaesche-grossteile";
+  if (text.includes("spannleint")) return "spannleint";
   if (text.includes("frottee")) return "frottee";
-  if (text.includes("badem")) return "bademantel";
+  if (text.includes("tischt")) return "tischtuecher";
+  if (text.includes("deckserv")) return "deckservietten";
+  if (text.includes("mundserv")) return "mundservietten";
   return text;
 }
 
 function categoryKey(value) {
   const text = String(value || "").toLowerCase();
   if (text.includes("bettw")) return "bettwaesche";
-  if (text.includes("tischw")) return "tischwaesche";
   if (text.includes("frottee")) return "frottee";
+  if (text.includes("tischw")) return "tischwaesche";
   if (text.includes("putzerei")) return "putzerei";
   return text;
 }
 
-function isWashCategory(category) {
-  return ["bettwaesche", "frottee", "tischwaesche"].includes(categoryKey(category));
+function stationMatchesItem(station, item) {
+  const key = articleKey(item.subcategory);
+  return station.items.some((stationItem) => articleKey(stationItem) === key);
 }
 
-function categoryForSubcategory(subcategory) {
-  const key = articleKey(subcategory);
-  if (key === "polster" || key === "bettwaesche-grossteile") return "Bettwäsche";
-  if (key === "mundservietten" || key === "tischwaesche-kleinteile") return "Tischwäsche";
-  if (key === "frottee" || key === "bademantel" || key === "splt1" || key === "splt2" || key === "splt") return "Frottee";
-  return "Sonstiges";
+function isCountingItem(subcategory) {
+  return ["bademantel", "splt1", "splt2"].includes(articleKey(subcategory));
 }
 
 function displaySubcategory(subcategory) {
-  if (articleKey(subcategory) === "tischwaesche-kleinteile") {
-    return "Tischtücher + Deckservietten";
-  }
   return subcategory;
-}
-
-function isSplitSheetArticle(subcategory) {
-  return String(subcategory || "").toLowerCase().includes("spannleint");
-}
-
-function isStationItemMatch(station, subcategory) {
-  if (station.key === "frottee-splt-bm" && isSplitSheetArticle(subcategory)) return true;
-  const subKey = articleKey(subcategory);
-  return station.items.some((item) => articleKey(item) === subKey);
 }
 
 function App() {
@@ -441,16 +419,6 @@ function App() {
   const [stationQuantities, setStationQuantities] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("dietexStationQuantities") || "{}");
-    } catch {
-      return {};
-    }
-  });
-  const [stationLabel, setStationLabel] = useState(null);
-  const [stationDetailOrder, setStationDetailOrder] = useState(null);
-  const [stationQuantityPad, setStationQuantityPad] = useState(null);
-  const [stationArticleSteps, setStationArticleSteps] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("dietexStationArticleSteps") || "{}");
     } catch {
       return {};
     }
@@ -579,104 +547,57 @@ function App() {
 
   function isArticleEnabled(customerNumber, subcategory) {
     const setting = articleSettings.find((s) => String(s.customer_number) === String(customerNumber) && s.subcategory === subcategory);
-    if (!setting && isSplitSheetArticle(subcategory)) {
-      const legacySetting = articleSettings.find(
-        (s) =>
-          String(s.customer_number) === String(customerNumber) &&
-          s.subcategory === "SpannleintÃ¼cher"
-      );
-      return legacySetting ? legacySetting.is_enabled : true;
-    }
     return setting ? setting.is_enabled : true;
   }
 
-  function hasExplicitArticleSetting(customerNumber, subcategory) {
-    return articleSettings.some(
-      (s) =>
-        String(s.customer_number) === String(customerNumber) &&
-        articleKey(s.subcategory) === articleKey(subcategory) &&
-        s.is_enabled
-    );
+  function stationQuantityKey(orderId, subcategory) {
+    return `${orderId}-${articleKey(subcategory)}`;
+  }
+
+  function getStationQuantity(orderId, subcategory) {
+    const key = stationQuantityKey(orderId, subcategory);
+    const item = items.find((entry) => entry.order_id === orderId && articleKey(entry.subcategory) === articleKey(subcategory));
+    return Number(stationQuantities[key] ?? item?.quantity ?? 0);
+  }
+
+  function setStationQuantity(orderId, subcategory, value) {
+    const nextValue = Math.max(0, Number(value) || 0);
+    const key = stationQuantityKey(orderId, subcategory);
+    setStationQuantities((prev) => {
+      const next = { ...prev, [key]: nextValue };
+      localStorage.setItem("dietexStationQuantities", JSON.stringify(next));
+      return next;
+    });
+
+    const matching = items.filter((entry) => entry.order_id === orderId && articleKey(entry.subcategory) === articleKey(subcategory));
+    if (matching.length) {
+      supabase
+        .from("order_categories")
+        .update({ quantity: nextValue })
+        .in("id", matching.map((entry) => entry.id))
+        .then(({ error }) => {
+          if (error) {
+            alert("Stueckzahl konnte nicht gespeichert werden: " + error.message);
+            return;
+          }
+          loadAll();
+        });
+    }
   }
 
   function stationItemsForOrder(order, station) {
-    let existing = items.filter((item) => item.order_id === order.id && isStationItemMatch(station, item.subcategory));
-    if (station.key !== "frottee-splt-bm") {
-      const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
-
-      station.items.forEach((subcategory) => {
-        const explicitArticle = hasExplicitArticleSetting(order.customer_number, subcategory);
-        if (!explicitArticle) return;
-
-        const category = categoryForSubcategory(subcategory);
-        const label = displaySubcategory(subcategory);
-        if (byLabel.has(label)) return;
-        byLabel.set(label, {
-          id: `virtual-${order.id}-${subcategory}`,
-          order_id: order.id,
-          category,
-          subcategory,
-          is_done: false,
-          quantity: getStationQuantity(order.id, subcategory),
-          virtual: true,
-        });
+    return items
+      .filter((item) => item.order_id === order.id && item.washed_at && stationMatchesItem(station, item))
+      .sort((a, b) => {
+        const ai = station.items.findIndex((sub) => articleKey(sub) === articleKey(a.subcategory));
+        const bi = station.items.findIndex((sub) => articleKey(sub) === articleKey(b.subcategory));
+        return ai - bi;
       });
-
-      return Array.from(byLabel.values());
-    }
-    if (!existing.length) return existing;
-    existing = existing.filter(
-      (item) =>
-        !isSplitSheetArticle(item.subcategory) ||
-        station.items.includes(item.subcategory)
-    );
-    if (existing.every((item) => item.is_done)) return existing;
-
-    const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
-    station.items.forEach((subcategory) => {
-      if (!isArticleEnabled(order.customer_number, subcategory)) return;
-      const label = displaySubcategory(subcategory);
-      if (!byLabel.has(label)) {
-        byLabel.set(label, {
-          id: `virtual-${order.id}-${subcategory}`,
-          order_id: order.id,
-          category: "Frottee",
-          subcategory,
-          is_done: false,
-          quantity: getStationQuantity(order.id, subcategory),
-          virtual: true,
-        });
-      }
-    });
-
-    return Array.from(byLabel.values());
   }
 
-  function isOrderWashedForStation(order, station) {
-    const orderItems = items.filter((item) => item.order_id === order.id);
-    const stationWashItems = orderItems.filter((item) => {
-      if (!isWashCategory(item.category)) return false;
-      if (station.key === "frottee-splt-bm") return categoryKey(item.category) === "frottee";
-      return isStationItemMatch(station, item.subcategory);
-    });
-
-    if (stationWashItems.length > 0 && stationWashItems.every((item) => item.washed_at)) return true;
-    if (station.key === "frottee-splt-bm") return false;
-
-    const activeExplicitWashed = station.items.some((subcategory) => {
-      if (!hasExplicitArticleSetting(order.customer_number, subcategory)) return false;
-      const category = categoryForSubcategory(subcategory);
-      return orderItems.some(
-        (item) => categoryKey(item.category) === categoryKey(category) && item.washed_at
-      );
-    });
-    if (activeExplicitWashed) return true;
-
-    const stationCategories = [...new Set(stationWashItems.map((item) => categoryKey(item.category)))];
-    return stationCategories.some((cat) => {
-      const categoryItems = orderItems.filter((item) => categoryKey(item.category) === cat);
-      return categoryItems.some((item) => item.washed_at);
-    });
+  function isOrderReadyForStation(order, station) {
+    const relevant = stationItemsForOrder(order, station);
+    return relevant.length > 0;
   }
 
   function orderArticleKey(category, subcategory) {
@@ -791,18 +712,6 @@ function App() {
       ids,
       customerName: firstOrder?.customer_name || "",
       customerNumber: firstOrder?.customer_number || "",
-    });
-    setTourContainerCount("");
-    setTourNumberInput("");
-  }
-
-  function openTourModalForOrder(order) {
-    if (!order) return;
-    setMonitorDetailOrder(null);
-    setTourModal({
-      ids: [order.id],
-      customerName: order.customer_name || "",
-      customerNumber: order.customer_number || "",
     });
     setTourContainerCount("");
     setTourNumberInput("");
@@ -1081,7 +990,7 @@ function App() {
       setHiddenStationOrders((p) => {
         const nextHidden = { ...p };
         STATIONS.forEach((station) => {
-          const relevant = orderItems.filter((i) => isStationItemMatch(station, i.subcategory));
+          const relevant = orderItems.filter((i) => stationMatchesItem(station, i));
           if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
             nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
           }
@@ -1097,312 +1006,12 @@ function App() {
     if (!groupItems.length) return;
 
     const next = !groupItems.every((item) => item.is_done);
-    const fallbackOrderId = groupItems[0].source_order_id || groupItems[0].order_id;
-    const order = orders.find((entry) => entry.id === fallbackOrderId);
 
-    if (!order) return;
+    await supabase
+      .from("order_categories")
+      .update({ is_done: next, done_at: next ? new Date().toISOString() : null })
+      .in("id", groupItems.map((item) => item.id));
 
-    try {
-      await saveStationQuantities(order, groupItems);
-
-      const realIds = groupItems
-        .filter((item) => !item.virtual && item.id)
-        .map((item) => item.id);
-
-      if (realIds.length) {
-        const { error } = await supabase
-          .from("order_categories")
-          .update({ is_done: next, done_at: next ? new Date().toISOString() : null })
-          .in("id", realIds);
-        if (error) throw error;
-      }
-
-      await Promise.all(
-        groupItems.filter((item) => item.virtual).map(async (item) => {
-          const orderId = item.source_order_id || item.order_id || order.id;
-          const { error } = await supabase
-            .from("order_categories")
-            .update({ is_done: next, done_at: next ? new Date().toISOString() : null })
-            .eq("order_id", orderId)
-            .eq("subcategory", item.subcategory);
-          if (error) throw error;
-        })
-      );
-    } catch (error) {
-      alert("Artikel konnte nicht gespeichert werden: " + error.message);
-      return;
-    }
-
-    loadAll();
-  }
-
-  function stationQuantityKey(orderId, subcategory) {
-    return `${orderId}-${displaySubcategory(subcategory)}`;
-  }
-
-  function getStationQuantity(orderId, subcategory) {
-    const item = items.find((entry) => entry.order_id === orderId && displaySubcategory(entry.subcategory) === displaySubcategory(subcategory));
-    return Number(stationQuantities[stationQuantityKey(orderId, subcategory)] ?? item?.quantity ?? 0);
-  }
-
-  function setStationQuantity(orderId, subcategory, value) {
-    const key = stationQuantityKey(orderId, subcategory);
-    const nextValue = Math.max(0, Number(value) || 0);
-    setStationQuantities((prev) => {
-      const next = { ...prev, [key]: nextValue };
-      localStorage.setItem("dietexStationQuantities", JSON.stringify(next));
-      return next;
-    });
-
-    const matchingItems = items.filter(
-      (entry) =>
-        entry.order_id === orderId &&
-        displaySubcategory(entry.subcategory) === displaySubcategory(subcategory)
-    );
-    if (matchingItems.length) {
-      supabase
-        .from("order_categories")
-        .update({ quantity: nextValue })
-        .in("id", matchingItems.map((entry) => entry.id))
-        .then(({ error }) => {
-          if (!error) {
-            setItems((prev) =>
-              prev.map((entry) =>
-                matchingItems.some((item) => item.id === entry.id)
-                  ? { ...entry, quantity: nextValue }
-                  : entry
-              )
-            );
-          }
-        });
-    }
-  }
-
-  function addStationQuantity(orderId, subcategory, amount) {
-    setStationQuantity(orderId, subcategory, getStationQuantity(orderId, subcategory) + amount);
-  }
-
-  function stationArticleStepKey(subcategory) {
-    const text = String(subcategory || "").toLowerCase();
-    if (text.includes("badem")) return "bademantel";
-    if (text.includes("1-fach")) return "splt1";
-    if (text.includes("2-fach")) return "splt2";
-    if (text.includes("spannleint")) return "splt";
-    return displaySubcategory(subcategory);
-  }
-
-  function getStationArticleStep(subcategory) {
-    const label = displaySubcategory(subcategory);
-    const key = stationArticleStepKey(subcategory);
-    const legacyBadem = stationArticleSteps["BademÃƒÂ¤ntel"] || stationArticleSteps["BademÃ¤ntel"];
-    return Number(
-      stationArticleSteps[key] ||
-      stationArticleSteps[label] ||
-      (key === "bademantel" ? legacyBadem : null) ||
-      stationQuantityStep(subcategory)
-    );
-  }
-
-  function setStationArticleStep(subcategory, value) {
-    const label = displaySubcategory(subcategory);
-    const key = stationArticleStepKey(subcategory);
-    const nextValue = Math.max(1, Number(value) || 1);
-    setStationArticleSteps((prev) => {
-      const next = { ...prev, [key]: nextValue, [label]: nextValue };
-      localStorage.setItem("dietexStationArticleSteps", JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function stationQuantityPadKey(orderId, subcategory) {
-    return stationQuantityKey(orderId, subcategory);
-  }
-
-  function appendStationQuantityDigit(orderId, subcategory, digit) {
-    addStationQuantity(orderId, subcategory, digit);
-    setStationQuantityPad(stationQuantityPadKey(orderId, subcategory));
-  }
-
-  function clearStationQuantity(orderId, subcategory) {
-    setStationQuantity(orderId, subcategory, 0);
-    setStationQuantityPad(stationQuantityPadKey(orderId, subcategory));
-  }
-
-  function clearStationQuantitiesForItems(relevant) {
-    if (!relevant.length) return;
-    setStationQuantities((prev) => {
-      const next = { ...prev };
-      relevant.forEach((item) => {
-        delete next[stationQuantityKey(item.source_order_id || item.order_id, item.subcategory)];
-      });
-      localStorage.setItem("dietexStationQuantities", JSON.stringify(next));
-      return next;
-    });
-  }
-
-  function stationLabelItems(order, relevant) {
-    return Object.values(
-      relevant.reduce((acc, item) => {
-        const label = displaySubcategory(item.subcategory);
-        const quantityOrderId = item.source_order_id || item.order_id || order.id;
-        acc[label] = {
-          label,
-          quantity: getStationQuantity(quantityOrderId, item.subcategory),
-        };
-        return acc;
-      }, {})
-    );
-  }
-
-  async function saveStationQuantities(order, relevant) {
-    if (!relevant.length) return;
-    await Promise.all(
-      relevant.map(async (item) => {
-        const orderId = item.source_order_id || item.order_id || order.id;
-        const quantity = getStationQuantity(orderId, item.subcategory);
-
-        if (!item.virtual && item.id) {
-          const { error } = await supabase
-            .from("order_categories")
-            .update({ quantity })
-            .eq("id", item.id);
-          if (error) throw error;
-          return;
-        }
-
-        const { data: existingRows, error: findError } = await supabase
-          .from("order_categories")
-          .select("id")
-          .eq("order_id", orderId)
-          .eq("subcategory", item.subcategory)
-          .limit(1);
-        if (findError) throw findError;
-
-        if (existingRows?.length) {
-          const { error } = await supabase
-            .from("order_categories")
-            .update({
-              category: item.category || categoryForSubcategory(item.subcategory),
-              quantity,
-              is_done: false,
-              done_at: null,
-            })
-            .eq("id", existingRows[0].id);
-          if (error) throw error;
-          return;
-        }
-
-        const { error } = await supabase.from("order_categories").insert({
-          order_id: orderId,
-          category: item.category || categoryForSubcategory(item.subcategory),
-          subcategory: item.subcategory,
-          quantity,
-          is_done: false,
-          done_at: null,
-        });
-        if (error) throw error;
-      })
-    );
-  }
-
-  async function persistCustomerStationQuantities(order, relevant) {
-    if (!order || !relevant.length) return;
-    const customerOrderIds = orders
-      .filter((entry) => String(entry.customer_number) === String(order.customer_number))
-      .map((entry) => entry.id);
-    if (!customerOrderIds.includes(order.id)) customerOrderIds.push(order.id);
-
-    await Promise.all(
-      relevant.map(async (item) => {
-        const sourceOrderId = item.source_order_id || item.order_id || order.id;
-        const quantity = getStationQuantity(sourceOrderId, item.subcategory);
-
-        const { data: existingRows, error: findError } = await supabase
-          .from("order_categories")
-          .select("id,order_id")
-          .in("order_id", customerOrderIds)
-          .eq("subcategory", item.subcategory);
-        if (findError) throw findError;
-
-        if (existingRows?.length) {
-          const { error } = await supabase
-            .from("order_categories")
-            .update({ quantity })
-            .in("id", existingRows.map((row) => row.id));
-          if (error) throw error;
-          return;
-        }
-
-        const { error } = await supabase.from("order_categories").insert({
-          order_id: sourceOrderId,
-          category: item.category || categoryForSubcategory(item.subcategory),
-          subcategory: item.subcategory,
-          quantity,
-          is_done: Boolean(item.is_done),
-          done_at: item.done_at || null,
-        });
-        if (error) throw error;
-      })
-    );
-  }
-
-  async function confirmStationOrder(order, relevant) {
-    if (!relevant.length) return;
-    try {
-      await saveStationQuantities(order, relevant);
-      await persistCustomerStationQuantities(order, relevant);
-    } catch (error) {
-      alert("Stueckzahlen konnten nicht gespeichert werden: " + error.message);
-      return;
-    }
-
-    setStationDetailOrder(null);
-    setStationQuantityPad(null);
-    loadAll();
-  }
-
-  async function closeStationOrder(order, relevant) {
-    if (!relevant.length) return;
-    const existingIds = relevant
-      .filter((item) => !item.virtual)
-      .map((item) => item.id);
-
-    if (existingIds.length) {
-      const { error } = await supabase
-        .from("order_categories")
-        .update({ is_done: true, done_at: new Date().toISOString() })
-        .in("id", existingIds);
-      if (error) throw error;
-    }
-
-    await Promise.all(
-      relevant.filter((item) => item.virtual).map(async (item) => {
-        const orderId = item.source_order_id || item.order_id || order.id;
-        const { error } = await supabase
-          .from("order_categories")
-          .update({ is_done: true, done_at: new Date().toISOString() })
-          .eq("order_id", orderId)
-          .eq("subcategory", item.subcategory);
-        if (error) throw error;
-      })
-    );
-  }
-
-  async function printStationLabel(order, relevant) {
-    if (!relevant.length) return;
-    try {
-      await saveStationQuantities(order, relevant);
-      await persistCustomerStationQuantities(order, relevant);
-      await closeStationOrder(order, relevant);
-      await persistCustomerStationQuantities(order, relevant);
-    } catch (error) {
-      alert("Station konnte nicht abgeschlossen werden: " + error.message);
-      return;
-    }
-    clearStationQuantitiesForItems(relevant);
-
-    setStationQuantityPad(null);
-    setStationDetailOrder(null);
     loadAll();
   }
 
@@ -1545,10 +1154,10 @@ function App() {
       .map((order) => {
         const relevant = enabledItemsForOrder(order).filter((i) => {
           if (street.key === "ws-2") {
-            return isWashCategory(i.category) && categoryKey(i.category) !== "frottee";
+            return WASH_CATEGORIES.includes(i.category) && i.category !== "Frottee";
           }
 
-          return street.categories.some((category) => categoryKey(category) === categoryKey(i.category));
+          return street.categories.includes(i.category);
         });
         const open = order.status === "auf_tour" ? [] : relevant.filter((i) => !i.washed_at);
         const labels = [...new Set(open.map((i) => displaySubcategory(i.subcategory)))];
@@ -1567,7 +1176,7 @@ function App() {
   const monitorRows = useMemo(() => {
     return sortedOrders
       .map((order) => {
-        const related = enabledItemsForOrder(order);
+        const related = items.filter((item) => item.order_id === order.id);
         const laundryItems = related.filter((i) => i.category !== "Putzerei");
         const putzereiItems = related.filter((i) => i.category === "Putzerei");
         const done = laundryItems.filter((i) => i.is_done).length;
@@ -1602,40 +1211,7 @@ function App() {
 
   function monitorDetailItems(order) {
     if (!order) return [];
-    const rawItems = enabledItemsForOrder(order).filter((item) => categoryKey(item.category) !== "putzerei");
-    const byArticle = new Map();
-
-    rawItems.forEach((item) => {
-      const key = `${categoryKey(item.category)}-${articleKey(item.subcategory)}`;
-      const existing = byArticle.get(key);
-      if (
-        !existing ||
-        Number(item.quantity || 0) > Number(existing.quantity || 0) ||
-        (item.is_done && !existing.is_done)
-      ) {
-        byArticle.set(key, item);
-      }
-    });
-
-    const hasFrottee = rawItems.some((item) => categoryKey(item.category) === "frottee");
-    if (hasFrottee) {
-      ["Bademäntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"].forEach((subcategory) => {
-        if (!isArticleEnabled(order.customer_number, subcategory)) return;
-        const key = `frottee-${articleKey(subcategory)}`;
-        if (byArticle.has(key)) return;
-        byArticle.set(key, {
-          id: `monitor-virtual-${order.id}-${subcategory}`,
-          order_id: order.id,
-          category: "Frottee",
-          subcategory,
-          quantity: getStationQuantity(order.id, subcategory),
-          is_done: order.monitorState === "fertig",
-          virtual: true,
-        });
-      });
-    }
-
-    return Array.from(byArticle.values());
+    return items.filter((item) => item.order_id === order.id && item.category !== "Putzerei");
   }
 
   function monitorDetailGroups(order) {
@@ -1724,10 +1300,9 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      if (!isOrderWashedForStation(order, activeStation)) return false;
-
       const related = stationItemsForOrder(order, activeStation);
       if (!related.length) return false;
+      if (!isOrderReadyForStation(order, activeStation)) return false;
 
       if (
         stationSearch &&
@@ -1765,7 +1340,7 @@ const tourColumns = Object.entries(
     const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
     const packDone = laundryEnabled.length > 0 && laundryEnabled.every((i) => i.is_done);
 
-    const washRelevant = laundryEnabled.filter((i) => isWashCategory(i.category));
+    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
     const washDone = washRelevant.length === 0 || washRelevant.every((i) => i.washed_at);
 
     if (order.status === "auf_tour") return { label: "Auf der Tour", className: "bg-violet-100 text-violet-800 border-violet-300" };
@@ -1778,7 +1353,7 @@ const tourColumns = Object.entries(
     const enabled = enabledItemsForOrder(order);
     const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
     const putzereiItems = enabled.filter((i) => i.category === "Putzerei");
-    const washRelevant = laundryEnabled.filter((i) => isWashCategory(i.category));
+    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
     const washed = washRelevant.filter((i) => i.washed_at).length;
     const packed = laundryEnabled.filter((i) => i.is_done).length;
     const putzereiDone = putzereiItems.filter((i) => i.is_done).length;
@@ -1798,7 +1373,7 @@ const tourColumns = Object.entries(
     const enabled = enabledItemsForOrder(order);
     const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
     const packDone = laundryEnabled.length > 0 && laundryEnabled.every((i) => i.is_done);
-    const washRelevant = laundryEnabled.filter((i) => isWashCategory(i.category));
+    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
     const washDone = washRelevant.length === 0 || washRelevant.every((i) => i.washed_at);
     const latestWashedAt = washRelevant.map((i) => i.washed_at).filter(Boolean).sort().at(-1);
     const latestDoneAt = laundryEnabled.map((i) => i.done_at).filter(Boolean).sort().at(-1);
@@ -2466,59 +2041,57 @@ const tourColumns = Object.entries(
           </div>
         </div>
 
-        <div className={`relative flex items-center justify-center overflow-hidden rounded-xl border bg-slate-100 p-3 ${compact ? "h-[calc(100vh-360px)] min-h-[340px] max-h-[560px]" : "h-[calc(100vh-320px)] min-h-[520px]"}`}>
-          <div className={`relative ${map.aspect} h-full max-h-full max-w-full shrink-0`}>
-            <img
-              src={map.image}
-              alt={map.title}
-              className="absolute inset-0 h-full w-full object-contain"
-              data-fallback-index="0"
-              onError={(e) => {
-                const fallbacks = map.imageFallbacks || [];
-                const index = Number(e.currentTarget.dataset.fallbackIndex || "0");
-                if (index < fallbacks.length) {
-                  e.currentTarget.dataset.fallbackIndex = String(index + 1);
-                  e.currentTarget.src = fallbacks[index];
-                }
-              }}
-            />
+        <div className={`relative overflow-hidden rounded-xl border bg-slate-100 ${compact ? "h-[calc(100vh-280px)] min-h-[390px]" : "h-[calc(100vh-320px)] min-h-[520px]"}`}>
+          <img
+            src={map.image}
+            alt={map.title}
+            className="absolute inset-0 h-full w-full object-contain p-6"
+            data-fallback-index="0"
+            onError={(e) => {
+              const fallbacks = map.imageFallbacks || [];
+              const index = Number(e.currentTarget.dataset.fallbackIndex || "0");
+              if (index < fallbacks.length) {
+                e.currentTarget.dataset.fallbackIndex = String(index + 1);
+                e.currentTarget.src = fallbacks[index];
+              }
+            }}
+          />
 
-            {map.zones.map((zone, index) => {
-              const sectionName = currentSections()[index]?.name || zone.section;
-              const names = getEmployeesInSection(sectionName);
+          {map.zones.map((zone, index) => {
+            const sectionName = currentSections()[index]?.name || zone.section;
+            const names = getEmployeesInSection(sectionName);
 
-              return (
-                <div
-                  key={sectionName}
-                  className={`absolute rounded-lg border p-1 shadow-md backdrop-blur-sm ${
-                    names.length ? "border-blue-300 bg-white/90" : "border-slate-300 bg-white/50"
-                  }`}
-                  style={{
-                    left: `${zone.x}%`,
-                    top: `${zone.y}%`,
-                    width: `${zone.w}%`,
-                    transform: "translate(-50%, -50%)",
-                  }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, sectionName)}
-                >
-                  <div className="mb-1 truncate text-[9px] font-black text-blue-900">{sectionName}</div>
-                  <div className="flex flex-wrap gap-1">
-                    {names.map((name) => (
-                      <span
-                        key={name}
-                        draggable
-                        onDragStart={() => setDragEmployee(name)}
-                        className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[9px] font-black leading-tight text-white"
-                      >
-                        {name}
-                      </span>
-                    ))}
-                  </div>
+            return (
+              <div
+                key={sectionName}
+                className={`absolute rounded-lg border p-1 shadow-md backdrop-blur-sm ${
+                  names.length ? "border-blue-300 bg-white/90" : "border-slate-300 bg-white/50"
+                }`}
+                style={{
+                  left: `${zone.x}%`,
+                  top: `${zone.y}%`,
+                  width: `${zone.w}%`,
+                  transform: "translate(-50%, -50%)",
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, sectionName)}
+              >
+                <div className="mb-1 truncate text-[9px] font-black text-blue-900">{sectionName}</div>
+                <div className="flex flex-wrap gap-1">
+                  {names.map((name) => (
+                    <span
+                      key={name}
+                      draggable
+                      onDragStart={() => setDragEmployee(name)}
+                      className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[9px] font-black leading-tight text-white"
+                    >
+                      {name}
+                    </span>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -2660,157 +2233,6 @@ const tourColumns = Object.entries(
         </div>
       </header>
 
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          .station-print-label, .station-print-label * { visibility: visible !important; }
-          .station-print-label {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 80mm !important;
-            min-height: 50mm !important;
-            padding: 4mm !important;
-            border: 0 !important;
-            box-shadow: none !important;
-            background: white !important;
-          }
-        }
-      `}</style>
-
-      {stationLabel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="station-print-label w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
-            <div className="mb-3 flex items-start justify-between gap-3 border-b pb-3">
-              <div>
-                <div className="text-xs font-black uppercase tracking-wide text-slate-500">{stationLabel.station}</div>
-                <div className="text-3xl font-black leading-tight">{stationLabel.customerNumber}</div>
-                <div className="text-xl font-black leading-tight">{stationLabel.customerName}</div>
-              </div>
-              <div className="text-right text-xs font-bold text-slate-500">
-                {fmtDate(stationLabel.printedAt)}<br />
-                {fmtTime(stationLabel.printedAt)}
-              </div>
-            </div>
-            <div className="space-y-2">
-              {stationLabel.items.map((item) => (
-                <div key={item.label} className="flex items-center justify-between rounded-lg border px-3 py-2">
-                  <span className="font-black">{item.label}</span>
-                  <span className="text-2xl font-black">{item.quantity} Stk.</span>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 flex justify-end gap-2 print:hidden">
-              <Button onClick={() => setStationLabel(null)}>Schliessen</Button>
-              <Button className="bg-blue-700 text-white" onClick={() => window.print()}>Nochmal drucken</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {stationDetailOrder && (() => {
-        const relatedOrders = stationOrders.filter(
-          (entry) => String(entry.customer_number) === String(stationDetailOrder.customer_number)
-        );
-        const relevant = relatedOrders.flatMap((stationOrder) =>
-          stationItemsForOrder(stationOrder, activeStation)
-            .map((item) => ({ ...item, source_order_id: stationOrder.id }))
-        );
-        const groupedRelevant = Object.values(
-          relevant.reduce((acc, item) => {
-            const label = displaySubcategory(item.subcategory);
-            if (!acc[label]) acc[label] = { label, item, items: [] };
-            const currentOrderId = acc[label].item.source_order_id || acc[label].item.order_id || stationDetailOrder.id;
-            const itemOrderId = item.source_order_id || item.order_id || stationDetailOrder.id;
-            const currentQty = getStationQuantity(currentOrderId, acc[label].item.subcategory);
-            const itemQty = getStationQuantity(itemOrderId, item.subcategory);
-            if (
-              itemQty > currentQty ||
-              (!item.virtual && acc[label].item.virtual) ||
-              (!item.is_done && acc[label].item.is_done)
-            ) {
-              acc[label].item = item;
-            }
-            acc[label].items.push(item);
-            return acc;
-          }, {})
-        ).sort((a, b) => activeStation.items.indexOf(a.item.subcategory) - activeStation.items.indexOf(b.item.subcategory));
-        const actionRelevant = groupedRelevant.map((group) => group.item);
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-4xl rounded-3xl bg-white p-5 shadow-2xl">
-              <div className="mb-4 flex items-start justify-between gap-4 border-b pb-4">
-                <div>
-                  <div className="font-mono text-3xl font-black">{stationDetailOrder.customer_number}</div>
-                  <div className="text-2xl font-black">{stationDetailOrder.customer_name}</div>
-                  <div className="mt-1 text-sm font-bold text-slate-500">{activeStation.name}</div>
-                </div>
-                <Button onClick={() => { setStationDetailOrder(null); setStationQuantityPad(null); }}>Schliessen</Button>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-3">
-                {groupedRelevant.map((group) => {
-                  const item = group.item;
-                  const quantityOrderId = item.source_order_id || item.order_id || stationDetailOrder.id;
-                  const qty = getStationQuantity(quantityOrderId, item.subcategory);
-                  const step = getStationArticleStep(item.subcategory);
-                  const padKey = stationQuantityPadKey(quantityOrderId, item.subcategory);
-                  return (
-                    <div key={group.label} className={`rounded-2xl border p-3 ${qty > 0 ? "border-green-300 bg-green-50" : "bg-yellow-50"}`}>
-                      <div className="text-lg font-black">{group.label}</div>
-                      <div className="mt-2 grid grid-cols-[48px_1fr_48px] gap-2">
-                        <Button className="px-2 text-xl text-red-700" onClick={() => addStationQuantity(quantityOrderId, item.subcategory, -1)}>v</Button>
-                        <button
-                          type="button"
-                          onClick={() => setStationQuantityPad(padKey)}
-                          className="rounded-xl border bg-white px-3 py-3 text-4xl font-black"
-                        >
-                          {qty}
-                        </button>
-                        <Button className="px-2 text-xl" onClick={() => addStationQuantity(quantityOrderId, item.subcategory, 1)}>^</Button>
-                      </div>
-                      <div className="mt-2 grid grid-cols-2 gap-2">
-                        <Button onClick={() => addStationQuantity(quantityOrderId, item.subcategory, step)}>+{step}</Button>
-                        <Button className="text-red-700" onClick={() => addStationQuantity(quantityOrderId, item.subcategory, -step)}>-{step}</Button>
-                      </div>
-                      {stationQuantityPad === padKey && (
-                        <div className="mt-2 grid grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-2">
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
-                            <Button key={digit} className="py-3 text-xl" onClick={() => appendStationQuantityDigit(quantityOrderId, item.subcategory, digit)}>{digit}</Button>
-                          ))}
-                          <Button className="py-3 text-xl text-red-700" onClick={() => clearStationQuantity(quantityOrderId, item.subcategory)}>C</Button>
-                          <Button className="py-3 text-xl" onClick={() => appendStationQuantityDigit(quantityOrderId, item.subcategory, 0)}>0</Button>
-                          <Button className="py-3 text-xl" onClick={() => setStationQuantityPad(null)}>OK</Button>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-5 flex justify-end gap-3 border-t pt-4">
-                <Button onClick={() => { setStationDetailOrder(null); setStationQuantityPad(null); }}>Abbrechen</Button>
-                <button
-                  type="button"
-                  onClick={() => printStationLabel(stationDetailOrder, actionRelevant)}
-                  className="rounded-xl border border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-800"
-                >
-                  Abschliessen
-                </button>
-                <button
-                  type="button"
-                  onClick={() => confirmStationOrder(stationDetailOrder, actionRelevant)}
-                  className="rounded-xl border border-green-700 bg-green-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-green-700"
-                >
-                  Bestaetigen / speichern
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {pinModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
@@ -2916,7 +2338,7 @@ const tourColumns = Object.entries(
                           item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
                         }`}
                       >
-                        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
+                        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-2">
                           <span>{displaySubcategory(item.subcategory)}</span>
                           <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-900">
                             {Number(item.quantity || 0)} Stk.
@@ -2931,13 +2353,9 @@ const tourColumns = Object.entries(
             </div>
             {monitorDetailOrder.monitorState === "fertig" && (
               <div className="mt-5 flex justify-end border-t pt-4">
-                <button
-                  type="button"
-                  className="rounded-xl border border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-800"
-                  onClick={() => openTourModalForOrder(monitorDetailOrder)}
-                >
+                <Button className="bg-blue-700 text-white" onClick={() => archiveFinishedOrders([monitorDetailOrder.id])}>
                   Auf Tour geben
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -3055,8 +2473,7 @@ const tourColumns = Object.entries(
                             </button>
                           );
                         })}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -3112,21 +2529,8 @@ const tourColumns = Object.entries(
               </div>
 
               <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
-                {stationOrders.map((order, orderIndex) => {
-                  if (
-                    activeStation.key === "frottee-splt-bm" &&
-                    stationOrders.findIndex((entry) => String(entry.customer_number) === String(order.customer_number)) !== orderIndex
-                  ) {
-                    return null;
-                  }
-
-                  const relatedStationOrders = activeStation.key === "frottee-splt-bm"
-                    ? stationOrders.filter((entry) => String(entry.customer_number) === String(order.customer_number))
-                    : [order];
-
-                  const relevant = relatedStationOrders.flatMap((stationOrder) => stationItemsForOrder(stationOrder, activeStation)
-                    .map((item) => ({ ...item, source_order_id: stationOrder.id })))
-                    .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
+                {stationOrders.map((order) => {
+                  const relevant = stationItemsForOrder(order, activeStation);
 
                   const groupedRelevant = Object.values(
                     relevant.reduce((acc, item) => {
@@ -3137,48 +2541,34 @@ const tourColumns = Object.entries(
                     }, {})
                   );
 
-                  const showSpltBmDraft = activeStation.key === "frottee-splt-bm";
-
                   return (
                     <div key={order.id} className="rounded-xl border bg-white p-3">
                       <div className="mb-2">
                         <span className="text-sm">{order.customer_number}</span> <b>{order.customer_name}</b>
                       </div>
-                      {showSpltBmDraft ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setStationQuantityPad(null);
-                            setStationDetailOrder(order);
-                          }}
-                          className="w-full rounded-xl border bg-slate-50 p-3 text-left hover:border-blue-400 hover:bg-blue-50"
-                        >
-                          <div className="mb-2 text-xs font-bold uppercase text-slate-500">Antippen zum Erfassen</div>
-                          <div className="flex flex-wrap gap-1">
-                            {groupedRelevant.map((group) => (
-                              <span key={group.label} className="rounded-full bg-white px-2 py-1 text-xs font-black text-blue-900">
-                                {group.label}
-                              </span>
-                            ))}
-                          </div>
-                        </button>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {groupedRelevant.map((group) => {
+                      <div className="flex flex-wrap gap-2">
+                        {groupedRelevant.map((group) => {
                           const done = group.items.every((item) => item.is_done);
+                          const item = group.items[0];
+                          const countable = activeStation.key === "frottee-splt-bm" && isCountingItem(item.subcategory);
+                          const qty = getStationQuantity(item.order_id, item.subcategory);
                           return (
-                            <button
-                              key={group.label}
-                              type="button"
-                              onClick={() => toggleStationGroup(group.items)}
-                              className={`rounded-lg border px-3 py-2 text-xs font-bold ${done ? "bg-green-100" : "bg-yellow-50"}`}
-                            >
-                              {done ? "✅" : "⭕"} {group.label}
-                            </button>
+                            <div key={group.label} className={`rounded-lg border px-3 py-2 text-xs font-bold ${done ? "bg-green-100" : "bg-yellow-50"}`}>
+                              <button type="button" onClick={() => toggleStationGroup(group.items)}>
+                                {done ? "✅" : "⭕"} {group.label}
+                              </button>
+                              {countable && (
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => setStationQuantity(item.order_id, item.subcategory, qty - 1)}>-</button>
+                                  <span className="rounded bg-white px-2 py-1">{qty} Stk.</span>
+                                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => setStationQuantity(item.order_id, item.subcategory, qty + 1)}>+1</button>
+                                  <button type="button" className="rounded border bg-white px-2 py-1" onClick={() => setStationQuantity(item.order_id, item.subcategory, qty + 10)}>+10</button>
+                                </div>
+                              )}
+                            </div>
                           );
                         })}
-                        </div>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
@@ -3610,23 +3000,6 @@ const tourColumns = Object.entries(
             <div className="mb-4 flex items-center justify-between gap-3">
               <div><h2 className="text-2xl font-black">Stammdaten Kunden</h2><p className="text-slate-500">Pro Kunde festlegen, welche Unterkategorien bei den Stationen sichtbar sind.</p></div>
               <Input placeholder="Kunde suchen" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
-            </div>
-            <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
-              <h3 className="mb-2 text-lg font-black">Artikelstammdaten SPLT + BademÃ¤ntel</h3>
-              <div className="grid gap-3 md:grid-cols-3">
-                {["BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"].map((sub) => (
-                  <label key={sub} className="rounded-xl border bg-white p-3">
-                    <div className="mb-2 text-sm font-black">{sub}</div>
-                    <Input
-                      type="number"
-                      min="1"
-                      className="text-center font-black"
-                      value={getStationArticleStep(sub)}
-                      onChange={(e) => setStationArticleStep(sub, e.target.value)}
-                    />
-                  </label>
-                ))}
-              </div>
             </div>
             <div className="max-h-[650px] overflow-auto rounded-2xl border">
               <table className="w-full text-left text-sm">
