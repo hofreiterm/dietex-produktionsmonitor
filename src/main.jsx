@@ -600,16 +600,15 @@ function App() {
   }
 
   function stationItemsForOrder(order, station) {
-    let existing = enabledItemsForOrder(order).filter((item) => isStationItemMatch(station, item.subcategory));
+    let existing = items.filter((item) => item.order_id === order.id && isStationItemMatch(station, item.subcategory));
     if (station.key !== "frottee-splt-bm") {
       const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
 
       station.items.forEach((subcategory) => {
-        if (!isArticleEnabled(order.customer_number, subcategory)) return;
-        const category = categoryForSubcategory(subcategory);
         const explicitArticle = hasExplicitArticleSetting(order.customer_number, subcategory);
         if (!explicitArticle) return;
 
+        const category = categoryForSubcategory(subcategory);
         const label = displaySubcategory(subcategory);
         if (byLabel.has(label)) return;
         byLabel.set(label, {
@@ -654,7 +653,8 @@ function App() {
   }
 
   function isOrderWashedForStation(order, station) {
-    const stationWashItems = enabledItemsForOrder(order).filter((item) => {
+    const orderItems = items.filter((item) => item.order_id === order.id);
+    const stationWashItems = orderItems.filter((item) => {
       if (!isWashCategory(item.category)) return false;
       if (station.key === "frottee-splt-bm") return categoryKey(item.category) === "frottee";
       return isStationItemMatch(station, item.subcategory);
@@ -666,7 +666,7 @@ function App() {
     const activeExplicitWashed = station.items.some((subcategory) => {
       if (!hasExplicitArticleSetting(order.customer_number, subcategory)) return false;
       const category = categoryForSubcategory(subcategory);
-      return enabledItemsForOrder(order).some(
+      return orderItems.some(
         (item) => categoryKey(item.category) === categoryKey(category) && item.washed_at
       );
     });
@@ -674,7 +674,7 @@ function App() {
 
     const stationCategories = [...new Set(stationWashItems.map((item) => categoryKey(item.category)))];
     return stationCategories.some((cat) => {
-      const categoryItems = enabledItemsForOrder(order).filter((item) => categoryKey(item.category) === cat);
+      const categoryItems = orderItems.filter((item) => categoryKey(item.category) === cat);
       return categoryItems.some((item) => item.washed_at);
     });
   }
