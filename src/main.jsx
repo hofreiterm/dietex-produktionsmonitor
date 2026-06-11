@@ -343,7 +343,12 @@ function displaySubcategory(subcategory) {
 }
 
 function isSplitSheetArticle(subcategory) {
-  return subcategory === "Spannleintuch 1-fach" || subcategory === "Spannleintuch 2-fach";
+  return String(subcategory || "").toLowerCase().includes("spannleint");
+}
+
+function isStationItemMatch(station, subcategory) {
+  if (station.key === "frottee-splt-bm" && isSplitSheetArticle(subcategory)) return true;
+  return station.items.includes(subcategory);
 }
 
 function App() {
@@ -507,7 +512,7 @@ function App() {
       const next = { ...prev };
       orders.forEach((order) => {
         STATIONS.forEach((station) => {
-          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory));
+          const relevant = enabledItemsForOrder(order).filter((i) => isStationItemMatch(station, i.subcategory));
           const key = `${order.id}-${station.key}`;
           if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
             next[key] = Date.now() + 10000;
@@ -939,7 +944,7 @@ function App() {
       setHiddenStationOrders((p) => {
         const nextHidden = { ...p };
         STATIONS.forEach((station) => {
-          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory));
+          const relevant = orderItems.filter((i) => isStationItemMatch(station, i.subcategory));
           if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
             nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
           }
@@ -1381,7 +1386,7 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory));
+      const related = enabledItemsForOrder(order).filter((i) => isStationItemMatch(activeStation, i.subcategory));
       if (!related.length) return false;
 
       if (
@@ -2369,7 +2374,7 @@ const tourColumns = Object.entries(
         );
         const relevant = relatedOrders.flatMap((stationOrder) =>
           enabledItemsForOrder(stationOrder)
-            .filter((item) => activeStation.items.includes(item.subcategory))
+            .filter((item) => isStationItemMatch(activeStation, item.subcategory))
             .map((item) => ({ ...item, source_order_id: stationOrder.id }))
         );
         const groupedRelevant = Object.values(
@@ -2434,9 +2439,13 @@ const tourColumns = Object.entries(
 
               <div className="mt-5 flex justify-end gap-3 border-t pt-4">
                 <Button onClick={() => { setStationDetailOrder(null); setStationQuantityPad(null); }}>Abbrechen</Button>
-                <Button className="bg-blue-700 text-white" onClick={() => printStationLabel(stationDetailOrder, relevant)}>
+                <button
+                  type="button"
+                  onClick={() => printStationLabel(stationDetailOrder, relevant)}
+                  className="rounded-xl border border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-800"
+                >
                   Etikett drucken
-                </Button>
+                </button>
                 <button
                   type="button"
                   onClick={() => confirmStationOrder(stationDetailOrder, relevant)}
@@ -2760,7 +2769,7 @@ const tourColumns = Object.entries(
                     : [order];
 
                   const relevant = relatedStationOrders.flatMap((stationOrder) => enabledItemsForOrder(stationOrder)
-                    .filter((i) => activeStation.items.includes(i.subcategory))
+                    .filter((i) => isStationItemMatch(activeStation, i.subcategory))
                     .map((item) => ({ ...item, source_order_id: stationOrder.id })))
                     .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
