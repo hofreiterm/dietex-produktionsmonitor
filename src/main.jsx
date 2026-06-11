@@ -26,7 +26,7 @@ function isAdminSessionUnlocked() {
 
 const CATEGORIES = {
   Bettwäsche: ["Deckenbezüge + Leintücher", "Polsterbezüge"],
-  Frottee: ["Frottee", "Spannleintücher", "Bademäntel"],
+  Frottee: ["Frottee", "Spannleintuch 1-fach", "Spannleintuch 2-fach", "Bademäntel"],
   Tischwäsche: ["Tischtücher + Deckservietten", "Mundservietten"],
   Putzerei: ["Putzerei"],
 };
@@ -56,7 +56,8 @@ const ALL_SUBCATEGORIES = [
   "Deckenbezüge + Leintücher",
   "Polsterbezüge",
   "Frottee",
-  "Spannleintücher",
+  "Spannleintuch 1-fach",
+  "Spannleintuch 2-fach",
   "Bademäntel",
   "Tischtücher + Deckservietten",
   "Tischtücher + Deckservietten",
@@ -75,8 +76,14 @@ const STATIONS = [
   { key: "jenway-kleinteile", name: "Jenway Kleinteile", items: ["Polsterbezüge", "Mundservietten", "Tischtücher", "Deckservietten", "Tischtücher + Deckservietten"] },
   { key: "jenway-grossteile", name: "Jenway Großteile", items: ["Deckenbezüge + Leintücher"] },
   { key: "jenway-frottee", name: "Jenway Frottee", items: ["Frottee"] },
-  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["Bademäntel", "Spannleintücher"] },
+  { key: "frottee-splt-bm", name: "Frottee SPLT + BM", items: ["Bademäntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"] },
 ];
+
+function stationQuantityStep(subcategory) {
+  const text = String(subcategory || "").toLowerCase();
+  if (text.includes("badem")) return 5;
+  return 10;
+}
 
 const ROWS = [1, 2, 3, 4, 5];
 const PLACES = 10;
@@ -335,6 +342,10 @@ function displaySubcategory(subcategory) {
   return subcategory;
 }
 
+function isSplitSheetArticle(subcategory) {
+  return subcategory === "Spannleintuch 1-fach" || subcategory === "Spannleintuch 2-fach";
+}
+
 function App() {
   const params = new URLSearchParams(window.location.search);
   const initialView = params.get("view") || "annahme";
@@ -386,6 +397,23 @@ function App() {
   const [leitungDateTo, setLeitungDateTo] = useState(fmtDateInput());
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
+  const [stationQuantities, setStationQuantities] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("dietexStationQuantities") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [stationLabel, setStationLabel] = useState(null);
+  const [stationDetailOrder, setStationDetailOrder] = useState(null);
+  const [stationQuantityPad, setStationQuantityPad] = useState(null);
+  const [stationArticleSteps, setStationArticleSteps] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("dietexStationArticleSteps") || "{}");
+    } catch {
+      return {};
+    }
+  });
 
   const [personalDate, setPersonalDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [personalDepartment, setPersonalDepartment] = useState("waescherei");
@@ -510,6 +538,14 @@ function App() {
 
   function isArticleEnabled(customerNumber, subcategory) {
     const setting = articleSettings.find((s) => String(s.customer_number) === String(customerNumber) && s.subcategory === subcategory);
+    if (!setting && isSplitSheetArticle(subcategory)) {
+      const legacySetting = articleSettings.find(
+        (s) =>
+          String(s.customer_number) === String(customerNumber) &&
+          s.subcategory === "SpannleintÃ¼cher"
+      );
+      return legacySetting ? legacySetting.is_enabled : true;
+    }
     return setting ? setting.is_enabled : true;
   }
 
@@ -925,6 +961,124 @@ function App() {
       .update({ is_done: next, done_at: next ? new Date().toISOString() : null })
       .in("id", groupItems.map((item) => item.id));
 
+    loadAll();
+  }
+
+  function stationQuantityKey(orderId, subcategory) {
+    return `${orderId}-${displaySubcategory(subcategory)}`;
+  }
+
+  function getStationQuantity(orderId, subcategory) {
+    const item = items.find((entry) => entry.order_id === orderId && displaySubcategory(entry.subcategory) === displaySubcategory(subcategory));
+    return Number(item?.quantity ?? stationQuantities[stationQuantityKey(orderId, subcategory)] ?? 0);
+  }
+
+  function setStationQuantity(orderId, subcategory, value) {
+    const key = stationQuantityKey(orderId, subcategory);
+    const nextValue = Math.max(0, Number(value) || 0);
+    setStationQuantities((prev) => {
+      const next = { ...prev, [key]: nextValue };
+      localStorage.setItem("dietexStationQuantities", JSON.stringify(next));
+      return next;
+    });
+
+    const matchingItems = items.filter(
+      (entry) =>
+        entry.order_id === orderId &&
+        displaySubcategory(entry.subcategory) === displaySubcategory(subcategory)
+    );
+    if (matchingItems.length) {
+      supabase
+        .from("order_categories")
+        .update({ quantity: nextValue })
+        .in("id", matchingItems.map((entry) => entry.id))
+        .then(({ error }) => {
+          if (!error) {
+            setItems((prev) =>
+              prev.map((entry) =>
+                matchingItems.some((item) => item.id === entry.id)
+                  ? { ...entry, quantity: nextValue }
+                  : entry
+              )
+            );
+          }
+        });
+    }
+  }
+
+  function addStationQuantity(orderId, subcategory, amount) {
+    setStationQuantity(orderId, subcategory, getStationQuantity(orderId, subcategory) + amount);
+  }
+
+  function getStationArticleStep(subcategory) {
+    const label = displaySubcategory(subcategory);
+    return Number(stationArticleSteps[label] || stationQuantityStep(subcategory));
+  }
+
+  function setStationArticleStep(subcategory, value) {
+    const label = displaySubcategory(subcategory);
+    const nextValue = Math.max(1, Number(value) || 1);
+    setStationArticleSteps((prev) => {
+      const next = { ...prev, [label]: nextValue };
+      localStorage.setItem("dietexStationArticleSteps", JSON.stringify(next));
+      return next;
+    });
+  }
+
+  function stationQuantityPadKey(orderId, subcategory) {
+    return stationQuantityKey(orderId, subcategory);
+  }
+
+  function appendStationQuantityDigit(orderId, subcategory, digit) {
+    addStationQuantity(orderId, subcategory, digit);
+    setStationQuantityPad(stationQuantityPadKey(orderId, subcategory));
+  }
+
+  function clearStationQuantity(orderId, subcategory) {
+    setStationQuantity(orderId, subcategory, 0);
+    setStationQuantityPad(stationQuantityPadKey(orderId, subcategory));
+  }
+
+  async function finishFrotteeStationOrder(order, relevant) {
+    if (!relevant.length) return;
+    const printedItems = Object.values(
+      relevant.reduce((acc, item) => {
+        const label = displaySubcategory(item.subcategory);
+        acc[label] = {
+          label,
+          quantity: getStationQuantity(order.id, item.subcategory),
+        };
+        return acc;
+      }, {})
+    );
+
+    await Promise.all(
+      relevant.map((item) =>
+        supabase
+          .from("order_categories")
+          .update({ quantity: getStationQuantity(order.id, item.subcategory) })
+          .eq("id", item.id)
+          .then(() => null)
+          .catch(() => null)
+      )
+    );
+
+    await supabase
+      .from("order_categories")
+      .update({ is_done: true, done_at: new Date().toISOString() })
+      .in("id", relevant.map((item) => item.id));
+
+    setStationLabel({
+      customerNumber: order.customer_number,
+      customerName: order.customer_name,
+      station: activeStation.name,
+      printedAt: new Date().toISOString(),
+      items: printedItems,
+    });
+    setStationDetailOrder(null);
+    setStationQuantityPad(null);
+
+    setTimeout(() => window.print(), 250);
     loadAll();
   }
 
@@ -2147,6 +2301,138 @@ const tourColumns = Object.entries(
         </div>
       </header>
 
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .station-print-label, .station-print-label * { visibility: visible !important; }
+          .station-print-label {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 80mm !important;
+            min-height: 50mm !important;
+            padding: 4mm !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            background: white !important;
+          }
+        }
+      `}</style>
+
+      {stationLabel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="station-print-label w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-3 flex items-start justify-between gap-3 border-b pb-3">
+              <div>
+                <div className="text-xs font-black uppercase tracking-wide text-slate-500">{stationLabel.station}</div>
+                <div className="text-3xl font-black leading-tight">{stationLabel.customerNumber}</div>
+                <div className="text-xl font-black leading-tight">{stationLabel.customerName}</div>
+              </div>
+              <div className="text-right text-xs font-bold text-slate-500">
+                {fmtDate(stationLabel.printedAt)}<br />
+                {fmtTime(stationLabel.printedAt)}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {stationLabel.items.map((item) => (
+                <div key={item.label} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                  <span className="font-black">{item.label}</span>
+                  <span className="text-2xl font-black">{item.quantity} Stk.</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end gap-2 print:hidden">
+              <Button onClick={() => setStationLabel(null)}>Schliessen</Button>
+              <Button className="bg-blue-700 text-white" onClick={() => window.print()}>Nochmal drucken</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stationDetailOrder && (() => {
+        const relatedOrders = stationOrders.filter(
+          (entry) => String(entry.customer_number) === String(stationDetailOrder.customer_number)
+        );
+        const relevant = relatedOrders.flatMap((stationOrder) =>
+          enabledItemsForOrder(stationOrder)
+            .filter((item) => activeStation.items.includes(item.subcategory))
+            .map((item) => ({ ...item, source_order_id: stationOrder.id }))
+        );
+        const groupedRelevant = Object.values(
+          relevant.reduce((acc, item) => {
+            const label = displaySubcategory(item.subcategory);
+            if (!acc[label]) acc[label] = { label, item, items: [] };
+            acc[label].items.push(item);
+            return acc;
+          }, {})
+        ).sort((a, b) => activeStation.items.indexOf(a.item.subcategory) - activeStation.items.indexOf(b.item.subcategory));
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-4xl rounded-3xl bg-white p-5 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-4 border-b pb-4">
+                <div>
+                  <div className="font-mono text-3xl font-black">{stationDetailOrder.customer_number}</div>
+                  <div className="text-2xl font-black">{stationDetailOrder.customer_name}</div>
+                  <div className="mt-1 text-sm font-bold text-slate-500">{activeStation.name}</div>
+                </div>
+                <Button onClick={() => { setStationDetailOrder(null); setStationQuantityPad(null); }}>Schliessen</Button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                {groupedRelevant.map((group) => {
+                  const item = group.item;
+                  const qty = getStationQuantity(stationDetailOrder.id, item.subcategory);
+                  const step = getStationArticleStep(item.subcategory);
+                  const padKey = stationQuantityPadKey(stationDetailOrder.id, item.subcategory);
+                  return (
+                    <div key={group.label} className={`rounded-2xl border p-3 ${qty > 0 ? "border-green-300 bg-green-50" : "bg-yellow-50"}`}>
+                      <div className="text-lg font-black">{group.label}</div>
+                      <div className="mt-2 grid grid-cols-[48px_1fr_48px] gap-2">
+                        <Button className="px-2 text-xl text-red-700" onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, -1)}>v</Button>
+                        <button
+                          type="button"
+                          onClick={() => setStationQuantityPad(padKey)}
+                          className="rounded-xl border bg-white px-3 py-3 text-4xl font-black"
+                        >
+                          {qty}
+                        </button>
+                        <Button className="px-2 text-xl" onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, 1)}>^</Button>
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <Button onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, step)}>+{step}</Button>
+                        <Button className="text-red-700" onClick={() => addStationQuantity(stationDetailOrder.id, item.subcategory, -step)}>-{step}</Button>
+                      </div>
+                      {stationQuantityPad === padKey && (
+                        <div className="mt-2 grid grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-2">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => (
+                            <Button key={digit} className="py-3 text-xl" onClick={() => appendStationQuantityDigit(stationDetailOrder.id, item.subcategory, digit)}>{digit}</Button>
+                          ))}
+                          <Button className="py-3 text-xl text-red-700" onClick={() => clearStationQuantity(stationDetailOrder.id, item.subcategory)}>C</Button>
+                          <Button className="py-3 text-xl" onClick={() => appendStationQuantityDigit(stationDetailOrder.id, item.subcategory, 0)}>0</Button>
+                          <Button className="py-3 text-xl" onClick={() => setStationQuantityPad(null)}>OK</Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 flex justify-end gap-3 border-t pt-4">
+                <Button onClick={() => { setStationDetailOrder(null); setStationQuantityPad(null); }}>Abbrechen</Button>
+                <button
+                  type="button"
+                  onClick={() => finishFrotteeStationOrder(stationDetailOrder, relevant)}
+                  className="rounded-xl border border-green-700 bg-green-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-green-700"
+                >
+                  Bestaetigen + Etikett
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {pinModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
@@ -2252,8 +2538,11 @@ const tourColumns = Object.entries(
                           item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-3">
                           <span>{displaySubcategory(item.subcategory)}</span>
+                          <span className="rounded-full bg-white px-2 py-1 text-xs font-black text-slate-900">
+                            {Number(item.quantity || 0)} Stk.
+                          </span>
                           <span>{item.is_done ? "Fertig" : "Offen"}</span>
                         </div>
                       </div>
@@ -2262,6 +2551,13 @@ const tourColumns = Object.entries(
                 </div>
               ))}
             </div>
+            {monitorDetailOrder.monitorState === "fertig" && (
+              <div className="mt-5 flex justify-end border-t pt-4">
+                <Button className="border-green-700 bg-green-600 text-white" onClick={() => archiveFinishedOrders([monitorDetailOrder.id])}>
+                  Fertigen Auftrag entfernen
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2377,7 +2673,8 @@ const tourColumns = Object.entries(
                             </button>
                           );
                         })}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2433,9 +2730,21 @@ const tourColumns = Object.entries(
               </div>
 
               <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
-                {stationOrders.map((order) => {
-                  const relevant = enabledItemsForOrder(order)
+                {stationOrders.map((order, orderIndex) => {
+                  if (
+                    activeStation.key === "frottee-splt-bm" &&
+                    stationOrders.findIndex((entry) => String(entry.customer_number) === String(order.customer_number)) !== orderIndex
+                  ) {
+                    return null;
+                  }
+
+                  const relatedStationOrders = activeStation.key === "frottee-splt-bm"
+                    ? stationOrders.filter((entry) => String(entry.customer_number) === String(order.customer_number))
+                    : [order];
+
+                  const relevant = relatedStationOrders.flatMap((stationOrder) => enabledItemsForOrder(stationOrder)
                     .filter((i) => activeStation.items.includes(i.subcategory))
+                    .map((item) => ({ ...item, source_order_id: stationOrder.id })))
                     .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
                   const groupedRelevant = Object.values(
@@ -2447,13 +2756,34 @@ const tourColumns = Object.entries(
                     }, {})
                   );
 
+                  const showSpltBmDraft = activeStation.key === "frottee-splt-bm";
+
                   return (
                     <div key={order.id} className="rounded-xl border bg-white p-3">
                       <div className="mb-2">
                         <span className="text-sm">{order.customer_number}</span> <b>{order.customer_name}</b>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {groupedRelevant.map((group) => {
+                      {showSpltBmDraft ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStationQuantityPad(null);
+                            setStationDetailOrder(order);
+                          }}
+                          className="w-full rounded-xl border bg-slate-50 p-3 text-left hover:border-blue-400 hover:bg-blue-50"
+                        >
+                          <div className="mb-2 text-xs font-bold uppercase text-slate-500">Antippen zum Erfassen</div>
+                          <div className="flex flex-wrap gap-1">
+                            {groupedRelevant.map((group) => (
+                              <span key={group.label} className="rounded-full bg-white px-2 py-1 text-xs font-black text-blue-900">
+                                {group.label}
+                              </span>
+                            ))}
+                          </div>
+                        </button>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {groupedRelevant.map((group) => {
                           const done = group.items.every((item) => item.is_done);
                           return (
                             <button
@@ -2466,7 +2796,8 @@ const tourColumns = Object.entries(
                             </button>
                           );
                         })}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2486,7 +2817,7 @@ const tourColumns = Object.entries(
             {splitIntoColumns(finishedRows, 2).map((col, idx) => (
               <div key={`done-${idx}`} className="rounded-3xl border border-green-100 bg-green-50/40 p-4">
                 <h2 className="mb-3 border-b-2 border-green-500 pb-2 text-center font-black">FERTIG</h2>
-                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} onClick={() => archiveFinishedOrders([r.id])} />)}</div>
+                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} onClick={() => setMonitorDetailOrder(r)} />)}</div>
               </div>
             ))}
           </section>
@@ -2898,6 +3229,23 @@ const tourColumns = Object.entries(
             <div className="mb-4 flex items-center justify-between gap-3">
               <div><h2 className="text-2xl font-black">Stammdaten Kunden</h2><p className="text-slate-500">Pro Kunde festlegen, welche Unterkategorien bei den Stationen sichtbar sind.</p></div>
               <Input placeholder="Kunde suchen" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
+            </div>
+            <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
+              <h3 className="mb-2 text-lg font-black">Artikelstammdaten SPLT + BademÃ¤ntel</h3>
+              <div className="grid gap-3 md:grid-cols-3">
+                {["BademÃ¤ntel", "Spannleintuch 1-fach", "Spannleintuch 2-fach"].map((sub) => (
+                  <label key={sub} className="rounded-xl border bg-white p-3">
+                    <div className="mb-2 text-sm font-black">{sub}</div>
+                    <Input
+                      type="number"
+                      min="1"
+                      className="text-center font-black"
+                      value={getStationArticleStep(sub)}
+                      onChange={(e) => setStationArticleStep(sub, e.target.value)}
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
             <div className="max-h-[650px] overflow-auto rounded-2xl border">
               <table className="w-full text-left text-sm">
