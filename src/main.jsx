@@ -952,17 +952,17 @@ function App() {
       return;
     }
 
-    const relatedIds = items
-      .filter((i) => i.order_id === order.id && i.category === category && !i.washed_at)
-      .map((i) => i.id);
-    if (!relatedIds.length) return;
+    const related = items.filter((i) => i.order_id === order.id && i.category === category && !i.washed_at);
+    if (!related.length) return;
 
     setPendingWash((prev) => ({ ...prev, [washKey]: true }));
     washTimers.current[washKey] = window.setTimeout(async () => {
       await supabase
         .from("order_categories")
         .update({ washed_at: new Date().toISOString() })
-        .in("id", relatedIds);
+        .eq("order_id", order.id)
+        .eq("category", category)
+        .is("washed_at", null);
 
       delete washTimers.current[washKey];
       setPendingWash((prev) => {
