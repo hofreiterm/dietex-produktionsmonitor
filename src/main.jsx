@@ -512,7 +512,7 @@ function App() {
       const next = { ...prev };
       orders.forEach((order) => {
         STATIONS.forEach((station) => {
-          const relevant = enabledItemsForOrder(order).filter((i) => isStationItemMatch(station, i.subcategory));
+          const relevant = stationItemsForOrder(order, station);
           const key = `${order.id}-${station.key}`;
           if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
             next[key] = Date.now() + 10000;
@@ -552,6 +552,36 @@ function App() {
       return legacySetting ? legacySetting.is_enabled : true;
     }
     return setting ? setting.is_enabled : true;
+  }
+
+  function stationItemsForOrder(order, station) {
+    let existing = enabledItemsForOrder(order).filter((item) => isStationItemMatch(station, item.subcategory));
+    if (station.key !== "frottee-splt-bm") return existing;
+    if (!existing.length) return existing;
+    existing = existing.filter(
+      (item) =>
+        !isSplitSheetArticle(item.subcategory) ||
+        station.items.includes(item.subcategory)
+    );
+
+    const byLabel = new Map(existing.map((item) => [displaySubcategory(item.subcategory), item]));
+    station.items.forEach((subcategory) => {
+      if (!isArticleEnabled(order.customer_number, subcategory)) return;
+      const label = displaySubcategory(subcategory);
+      if (!byLabel.has(label)) {
+        byLabel.set(label, {
+          id: `virtual-${order.id}-${subcategory}`,
+          order_id: order.id,
+          category: "Frottee",
+          subcategory,
+          is_done: false,
+          quantity: getStationQuantity(order.id, subcategory),
+          virtual: true,
+        });
+      }
+    });
+
+    return Array.from(byLabel.values());
   }
 
   function orderArticleKey(category, subcategory) {
@@ -1059,8 +1089,20 @@ function App() {
 
   async function saveStationQuantities(order, relevant) {
     if (!relevant.length) return;
+    const virtualItems = relevant.filter((item) => item.virtual);
+    if (virtualItems.length) {
+      await supabase.from("order_categories").insert(
+        virtualItems.map((item) => ({
+          order_id: item.order_id || order.id,
+          category: item.category || "Frottee",
+          subcategory: item.subcategory,
+          quantity: getStationQuantity(order.id, item.subcategory),
+        }))
+      ).then(() => null).catch(() => null);
+    }
+
     await Promise.all(
-      relevant.map((item) =>
+      relevant.filter((item) => !item.virtual).map((item) =>
         supabase
           .from("order_categories")
           .update({ quantity: getStationQuantity(order.id, item.subcategory) })
@@ -1078,7 +1120,19 @@ function App() {
     await supabase
       .from("order_categories")
       .update({ is_done: true, done_at: new Date().toISOString() })
-      .in("id", relevant.map((item) => item.id));
+      .in("id", relevant.filter((item) => !item.virtual).map((item) => item.id));
+
+    await Promise.all(
+      relevant.filter((item) => item.virtual).map((item) =>
+        supabase
+          .from("order_categories")
+          .update({ is_done: true, done_at: new Date().toISOString() })
+          .eq("order_id", item.order_id || order.id)
+          .eq("subcategory", item.subcategory)
+          .then(() => null)
+          .catch(() => null)
+      )
+    );
 
     setStationDetailOrder(null);
     setStationQuantityPad(null);
@@ -1386,7 +1440,7 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      const related = enabledItemsForOrder(order).filter((i) => isStationItemMatch(activeStation, i.subcategory));
+      const related = stationItemsForOrder(order, activeStation);
       if (!related.length) return false;
 
       if (
@@ -2373,8 +2427,7 @@ const tourColumns = Object.entries(
           (entry) => String(entry.customer_number) === String(stationDetailOrder.customer_number)
         );
         const relevant = relatedOrders.flatMap((stationOrder) =>
-          enabledItemsForOrder(stationOrder)
-            .filter((item) => isStationItemMatch(activeStation, item.subcategory))
+          stationItemsForOrder(stationOrder, activeStation)
             .map((item) => ({ ...item, source_order_id: stationOrder.id }))
         );
         const groupedRelevant = Object.values(
@@ -2768,8 +2821,7 @@ const tourColumns = Object.entries(
                     ? stationOrders.filter((entry) => String(entry.customer_number) === String(order.customer_number))
                     : [order];
 
-                  const relevant = relatedStationOrders.flatMap((stationOrder) => enabledItemsForOrder(stationOrder)
-                    .filter((i) => isStationItemMatch(activeStation, i.subcategory))
+                  const relevant = relatedStationOrders.flatMap((stationOrder) => stationItemsForOrder(stationOrder, activeStation)
                     .map((item) => ({ ...item, source_order_id: stationOrder.id })))
                     .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
