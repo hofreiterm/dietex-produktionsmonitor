@@ -1305,10 +1305,52 @@ function App() {
     );
   }
 
+  async function persistCustomerStationQuantities(order, relevant) {
+    if (!order || !relevant.length) return;
+    const customerOrderIds = orders
+      .filter((entry) => String(entry.customer_number) === String(order.customer_number))
+      .map((entry) => entry.id);
+    if (!customerOrderIds.includes(order.id)) customerOrderIds.push(order.id);
+
+    await Promise.all(
+      relevant.map(async (item) => {
+        const sourceOrderId = item.source_order_id || item.order_id || order.id;
+        const quantity = getStationQuantity(sourceOrderId, item.subcategory);
+
+        const { data: existingRows, error: findError } = await supabase
+          .from("order_categories")
+          .select("id,order_id")
+          .in("order_id", customerOrderIds)
+          .eq("subcategory", item.subcategory);
+        if (findError) throw findError;
+
+        if (existingRows?.length) {
+          const { error } = await supabase
+            .from("order_categories")
+            .update({ quantity })
+            .in("id", existingRows.map((row) => row.id));
+          if (error) throw error;
+          return;
+        }
+
+        const { error } = await supabase.from("order_categories").insert({
+          order_id: sourceOrderId,
+          category: item.category || categoryForSubcategory(item.subcategory),
+          subcategory: item.subcategory,
+          quantity,
+          is_done: Boolean(item.is_done),
+          done_at: item.done_at || null,
+        });
+        if (error) throw error;
+      })
+    );
+  }
+
   async function confirmStationOrder(order, relevant) {
     if (!relevant.length) return;
     try {
       await saveStationQuantities(order, relevant);
+      await persistCustomerStationQuantities(order, relevant);
     } catch (error) {
       alert("Stueckzahlen konnten nicht gespeichert werden: " + error.message);
       return;
@@ -1350,7 +1392,9 @@ function App() {
     if (!relevant.length) return;
     try {
       await saveStationQuantities(order, relevant);
+      await persistCustomerStationQuantities(order, relevant);
       await closeStationOrder(order, relevant);
+      await persistCustomerStationQuantities(order, relevant);
     } catch (error) {
       alert("Station konnte nicht abgeschlossen werden: " + error.message);
       return;
