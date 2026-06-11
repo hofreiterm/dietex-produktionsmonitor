@@ -1152,22 +1152,26 @@ function App() {
     if (!relevant.length) return;
     await saveStationQuantities(order, relevant);
 
-    const completedItems = relevant.filter(
-      (item) => getStationQuantity(order.id, item.subcategory) > 0
-    );
-    const completedExistingIds = completedItems
+    setStationDetailOrder(null);
+    setStationQuantityPad(null);
+    loadAll();
+  }
+
+  async function closeStationOrder(order, relevant) {
+    if (!relevant.length) return;
+    const existingIds = relevant
       .filter((item) => !item.virtual)
       .map((item) => item.id);
 
-    if (completedExistingIds.length) {
+    if (existingIds.length) {
       await supabase
         .from("order_categories")
         .update({ is_done: true, done_at: new Date().toISOString() })
-        .in("id", completedExistingIds);
+        .in("id", existingIds);
     }
 
     await Promise.all(
-      completedItems.filter((item) => item.virtual).map((item) =>
+      relevant.filter((item) => item.virtual).map((item) =>
         supabase
           .from("order_categories")
           .update({ is_done: true, done_at: new Date().toISOString() })
@@ -1177,15 +1181,12 @@ function App() {
           .catch(() => null)
       )
     );
-
-    setStationDetailOrder(null);
-    setStationQuantityPad(null);
-    loadAll();
   }
 
   async function printStationLabel(order, relevant) {
     if (!relevant.length) return;
     await saveStationQuantities(order, relevant);
+    await closeStationOrder(order, relevant);
 
     setStationLabel({
       customerNumber: order.customer_number,
@@ -1195,6 +1196,8 @@ function App() {
       items: stationLabelItems(order, relevant),
     });
     setStationQuantityPad(null);
+    setStationDetailOrder(null);
+    loadAll();
 
     setTimeout(() => window.print(), 250);
   }
@@ -2541,14 +2544,14 @@ const tourColumns = Object.entries(
                   onClick={() => printStationLabel(stationDetailOrder, relevant)}
                   className="rounded-xl border border-blue-700 bg-blue-700 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-blue-800"
                 >
-                  Etikett drucken
+                  Etikett drucken + abschliessen
                 </button>
                 <button
                   type="button"
                   onClick={() => confirmStationOrder(stationDetailOrder, relevant)}
                   className="rounded-xl border border-green-700 bg-green-600 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-green-700"
                 >
-                  Bestaetigen
+                  Bestaetigen / speichern
                 </button>
               </div>
             </div>
