@@ -322,6 +322,11 @@ function fmtDateInput(d = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
+function localDateKey(ts = new Date()) {
+  const d = ts instanceof Date ? ts : new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function splitIntoColumns(rows, count) {
   const cols = Array.from({ length: count }, () => []);
   rows.forEach((row, idx) => cols[idx % count].push(row));
@@ -1140,6 +1145,20 @@ function App() {
   const finishedRows = monitorRows.filter((r) => r.monitorState === "fertig" && r.status !== "auf_tour");
   const tourRows = monitorRows.filter((r) => r.monitorState === "auf_tour");
   const todayKey = new Date().toISOString().slice(0, 10);
+  const takeoverListRows = useMemo(() => {
+    const today = localDateKey();
+
+    return sortedOrders
+      .filter((order) => localDateKey(order.created_at) === today)
+      .map((order) => ({
+        ...order,
+        acceptedTime: fmtTime(order.created_at),
+        takeoverCategories: getOrderCategories(order.id),
+      }))
+      .sort((a, b) =>
+        String(a.customer_number).localeCompare(String(b.customer_number), "de", { numeric: true })
+      );
+  }, [sortedOrders, items]);
 
   function monitorDetailItems(order) {
     if (!order) return [];
@@ -2405,6 +2424,50 @@ const tourColumns = Object.entries(
               <button type="button" onClick={addOrder} className="rounded-2xl bg-blue-700 px-8 py-3 text-base font-black text-white shadow-lg hover:bg-blue-800">
                 Kunde übernehmen
               </button>
+            </div>
+
+            <div className="mt-5 rounded-2xl border bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Übernahmeliste heute</h3>
+                <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-slate-600">{takeoverListRows.length}</span>
+              </div>
+
+              {takeoverListRows.length === 0 ? (
+                <div className="rounded-xl border border-dashed bg-white p-4 text-center text-sm font-semibold text-slate-500">
+                  Heute wurden noch keine Kunden übernommen.
+                </div>
+              ) : (
+                <div className="max-h-[360px] overflow-auto rounded-xl border bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-3 py-2">Nr.</th>
+                        <th className="px-3 py-2">Kunde</th>
+                        <th className="px-3 py-2">Artikelgruppe</th>
+                        <th className="px-3 py-2 text-right">Übernahme</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {takeoverListRows.map((order) => (
+                        <tr key={order.id} className="border-t">
+                          <td className="px-3 py-2 font-mono">{order.customer_number}</td>
+                          <td className="px-3 py-2 font-bold">{order.customer_name}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-1">
+                              {order.takeoverCategories.map((cat) => (
+                                <span key={cat} className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
+                                  <span className="mr-1">{CAT_ICON[cat] || cat.slice(0, 1)}</span>{cat}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right font-bold">{order.acceptedTime}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </section>
         )}
