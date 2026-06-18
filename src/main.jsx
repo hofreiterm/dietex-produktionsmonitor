@@ -383,6 +383,8 @@ function App() {
 
   const [stationSearch, setStationSearch] = useState("");
   const [masterSearch, setMasterSearch] = useState("");
+  const [newMasterCustomerNumber, setNewMasterCustomerNumber] = useState("");
+  const [newMasterCustomerName, setNewMasterCustomerName] = useState("");
   const [statsDate, setStatsDate] = useState(fmtDateInput());
   const [statsFrom, setStatsFrom] = useState("00:00");
   const [statsTo, setStatsTo] = useState("23:59");
@@ -1056,6 +1058,30 @@ function App() {
       .in("id", finishedContainers.map((c) => c.id));
   }
 
+  async function addMasterCustomer() {
+    const number = newMasterCustomerNumber.trim();
+    const name = newMasterCustomerName.trim();
+
+    if (!number || !name) return alert("Bitte Kundennummer und Kundenname eingeben.");
+    if (customers.some((c) => String(c.customer_number) === String(number))) {
+      return alert("Diese Kundennummer ist bereits angelegt.");
+    }
+
+    const { error } = await supabase.from("customers").insert({
+      customer_number: number,
+      customer_name: name,
+    });
+
+    if (error) {
+      alert("Kunde konnte nicht angelegt werden: " + error.message);
+      return;
+    }
+
+    setNewMasterCustomerNumber("");
+    setNewMasterCustomerName("");
+    setMasterSearch(number);
+    loadAll();
+  }
   async function deleteMasterCustomer(customer) {
     if (!confirm(`Kunde wirklich löschen?\n${customer.customer_number} ${customer.customer_name}`)) return;
     const { error } = await supabase.from("customers").delete().eq("id", customer.id);
@@ -3002,6 +3028,26 @@ const tourColumns = Object.entries(
               <div><h2 className="text-2xl font-black">Stammdaten Kunden</h2><p className="text-slate-500">Pro Kunde festlegen, welche Unterkategorien bei den Stationen sichtbar sind.</p></div>
               <Input placeholder="Kunde suchen" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
             </div>
+
+            <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
+              <h3 className="mb-3 text-lg font-black">Kunde anlegen</h3>
+              <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
+                <Input
+                  placeholder="Kundennummer"
+                  value={newMasterCustomerNumber}
+                  onChange={(e) => setNewMasterCustomerNumber(e.target.value)}
+                />
+                <Input
+                  placeholder="Kundenname"
+                  value={newMasterCustomerName}
+                  onChange={(e) => setNewMasterCustomerName(e.target.value)}
+                />
+                <Button className="bg-blue-700 text-white" onClick={addMasterCustomer}>
+                  Anlegen
+                </Button>
+              </div>
+            </div>
+
             <div className="max-h-[650px] overflow-auto rounded-2xl border">
               <table className="w-full text-left text-sm">
                 <thead className="sticky top-0 bg-slate-100">
