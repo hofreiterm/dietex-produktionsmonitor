@@ -451,6 +451,22 @@ function App() {
     return () => supabase.removeChannel(channel);
   }, []);
 
+  useEffect(() => {
+    const refreshIfVisible = () => {
+      if (!document.hidden) loadAll();
+    };
+
+    const interval = window.setInterval(refreshIfVisible, 15000);
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, []);
+
 
   useEffect(() => {
     localStorage.setItem("dietexPersonalPlan", JSON.stringify(personalPlan));
