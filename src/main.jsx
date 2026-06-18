@@ -2282,17 +2282,22 @@ const tourColumns = Object.entries(
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {group.items.map((item) => (
-                      <div
+                      <button
                         key={item.id}
-                        className={`rounded-xl border px-3 py-2 text-sm font-bold ${
+                        type="button"
+                        onClick={() => {
+                          if (!item.is_done) toggleItem(item);
+                        }}
+                        className={`rounded-xl border px-3 py-2 text-left text-sm font-bold transition ${
                           item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
-                        }`}
+                        } ${item.is_done ? "cursor-default" : "hover:ring-2 hover:ring-amber-300 active:scale-[0.99]"}`}
+                        title={item.is_done ? "Bereits fertig" : "Antippen = auf Fertig setzen"}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span>{displaySubcategory(item.subcategory)}</span>
                           <span>{item.is_done ? "Fertig" : "Offen"}</span>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
