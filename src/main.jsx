@@ -787,21 +787,13 @@ function App() {
     const name = customerName.trim();
     const orderRows = selectedOrderRows();
 
-    if (!number || !name) return alert("Kundennummer und Kundenname eingeben.");
+    if (!number || !name) return alert("Bitte zuerst einen bestehenden Kunden aus der Suche auswählen.");
     if (!selectedCategories.length) return alert("Mindestens eine Kategorie auswählen.");
 
     if (!orderRows.length) return alert("Mindestens einen Artikel fuer diesen Auftrag auswaehlen.");
 
     let customer = customers.find((c) => String(c.customer_number) === String(number));
-    if (!customer) {
-      const { data, error } = await supabase
-        .from("customers")
-        .insert({ customer_number: number, customer_name: name })
-        .select()
-        .single();
-      if (error) return alert("Kunde konnte nicht gespeichert werden: " + error.message);
-      customer = data;
-    }
+    if (!customer) return alert("Dieser Kunde ist nicht in den Stammdaten angelegt.");
 
     const today = new Date().toISOString().slice(0, 10);
 
@@ -2355,14 +2347,16 @@ const tourColumns = Object.entries(
 
         {view === "annahme" && (
           <section className="rounded-3xl border bg-white p-4 shadow-sm">
-            <div className="mb-3 flex justify-end">
-              <input id="customer-excel-import" type="file" accept=".xlsx,.xls" className="hidden" onChange={importCustomersExcel} />
-              <label htmlFor="customer-excel-import" className="cursor-pointer rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
-                📄 Kunden Excel importieren
-              </label>
-            </div>
-
-            <Input className="mb-2 w-full" placeholder="Kundennummer oder Name suchen" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
+            <Input
+              className="mb-2 w-full"
+              placeholder="Angelegten Kunden suchen"
+              value={customerSearch}
+              onChange={(e) => {
+                setCustomerSearch(e.target.value);
+                setCustomerNumber("");
+                setCustomerName("");
+              }}
+            />
 
             {customerSuggestions.length > 0 && (
               <div className="mb-3 rounded-xl border bg-white">
@@ -2383,10 +2377,18 @@ const tourColumns = Object.entries(
               </div>
             )}
 
-            <div className="grid gap-3 md:grid-cols-[220px_1fr]">
-              <Input placeholder="Kundennummer" value={customerNumber} onChange={(e) => setCustomerNumber(e.target.value)} />
-              <Input placeholder="Kundenname" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-            </div>
+            {customerNumber && customerName && (
+              <div className="mb-2 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 md:grid-cols-[160px_1fr]">
+                <div>
+                  <div className="text-xs font-bold uppercase text-emerald-700">Kundennummer</div>
+                  <div className="font-mono text-lg font-black">{customerNumber}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-bold uppercase text-emerald-700">Ausgewählter Kunde</div>
+                  <div className="text-lg font-black">{customerName}</div>
+                </div>
+              </div>
+            )}
 
             <Input className="mt-2 w-full" placeholder="Optionale Info für Verpackung / Produktion" value={info} onChange={(e) => setInfo(e.target.value)} />
 
