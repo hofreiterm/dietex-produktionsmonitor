@@ -47,7 +47,7 @@ const WASH_STREETS = [
     name: "Waschstrasse 2",
     capacity: "50 kg",
     description: "Alles andere",
-    categories: ["Bettwäsche", "Tischwäsche"],
+    categories: ["BettwÃ¤sche", "TischwÃ¤sche"],
     className: "border-blue-400 bg-blue-50 text-blue-950",
   },
 ];
@@ -204,8 +204,8 @@ const PERSONNEL_MAPS = {
     imageFallbacks: ["/plan skizze wäscherei.jpg", "/plan%20skizze%20w%C3%A4scherei.jpg"],
     aspect: "aspect-[715/720]",
     zones: [
-      { section: "Übernahme", x: 12, y: 88, w: 14 },
-      { section: "Waschstraßen", x: 18, y: 32, w: 14 },
+      { section: "Ãœbernahme", x: 12, y: 88, w: 14 },
+      { section: "WaschstraÃŸen", x: 18, y: 32, w: 14 },
       { section: "Waschmaschinen", x: 13, y: 43, w: 14 },
       { section: "Absortierung", x: 48, y: 22, w: 15 },
       { section: "Mangel 1", x: 64, y: 29, w: 14 },
@@ -213,12 +213,12 @@ const PERSONNEL_MAPS = {
       { section: "Frottee 1", x: 86, y: 20, w: 12 },
       { section: "Frottee 2", x: 86, y: 48, w: 12 },
       { section: "BM + SPLT", x: 88, y: 82, w: 12 },
-      { section: "Jenway Großteile", x: 42, y: 34, w: 14 },
+      { section: "Jenway GroÃŸteile", x: 42, y: 34, w: 14 },
       { section: "Jenway Kleinteile", x: 42, y: 52, w: 14 },
       { section: "Jenway Frottee", x: 42, y: 68, w: 14 },
-      { section: "Poolwäsche", x: 70, y: 84, w: 13 },
+      { section: "PoolwÃ¤sche", x: 70, y: 84, w: 13 },
       { section: "Expedit", x: 74, y: 75, w: 13 },
-      { section: "Wäsche auspacken", x: 25, y: 92, w: 14 },
+      { section: "WÃ¤sche auspacken", x: 25, y: 92, w: 14 },
     ],
   },
   putzerei: {
@@ -227,14 +227,14 @@ const PERSONNEL_MAPS = {
     imageFallbacks: ["/plan skizze Putzerei.jpg", "/plan%20skizze%20Putzerei.jpg"],
     aspect: "aspect-[715/522]",
     zones: [
-      { section: "Übernahme", x: 10, y: 90, w: 15 },
+      { section: "Ãœbernahme", x: 10, y: 90, w: 15 },
       { section: "Waschmaschinen", x: 22, y: 38, w: 14 },
       { section: "Putzmaschinen", x: 43, y: 43, w: 14 },
       { section: "Tunnelfinisher", x: 71, y: 25, w: 14 },
       { section: "Hemdenabteilung", x: 77, y: 78, w: 14 },
-      { section: "Bügeltische", x: 60, y: 58, w: 14 },
+      { section: "BÃ¼geltische", x: 60, y: 58, w: 14 },
       { section: "Verpackung", x: 88, y: 45, w: 14 },
-      { section: "Kleinwäscheabteilung", x: 28, y: 80, w: 15 },
+      { section: "KleinwÃ¤scheabteilung", x: 28, y: 80, w: 15 },
       { section: "Expedit", x: 10, y: 57, w: 13 },
     ],
   },
@@ -1971,7 +1971,7 @@ const tourColumns = Object.entries(
         } ${dragOrderId === row.id ? "ring-2 ring-blue-400 opacity-70" : ""}`}
       >
         <div className={`grid ${compact ? "grid-cols-[20px_62px_1fr_auto] gap-1.5" : "grid-cols-[28px_84px_1fr_auto] gap-3"} items-center`}>
-          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">↕</div>
+          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">â†•</div>
           <div className={`font-mono ${compact ? "text-[12px]" : "text-[15px]"} leading-tight`}>{row.customer_number}</div>
           <button
             type="button"
@@ -2000,7 +2000,7 @@ const tourColumns = Object.entries(
         )}
         {row.info && (
           <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
-            ℹ {row.info}
+            â„¹ {row.info}
           </div>
         )}
       </div>
@@ -2346,7 +2346,7 @@ const tourColumns = Object.entries(
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
             {(takeoverMode
               ? [
-                  ["annahme", "Kunden übernehmen"],
+                  ["annahme", "Kunden Ã¼bernehmen"],
                   ["station", "Station"],
                 ]
               : expeditMode
