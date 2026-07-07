@@ -490,13 +490,36 @@ function App() {
     });
   }, [orders, items, articleSettings]);
 
+  async function safeSupabaseQuery(label, queryFactory, retries = 2) {
+    let lastResult = { data: null, error: null };
+
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const result = await queryFactory();
+        lastResult = result || lastResult;
+        if (!result?.error) return result;
+      } catch (error) {
+        lastResult = { data: null, error };
+      }
+
+      if (attempt < retries) {
+        await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+      }
+    }
+
+    console.warn(`Supabase load failed: ${label}`, lastResult.error);
+    return lastResult;
+  }
+
   async function loadAll() {
     const [c, o, co, h, s] = await Promise.all([
-      supabase.from("customers").select("*").order("customer_number"),
-      supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
-      supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number"),
-      supabase.from("order_history").select("*").order("completed_at", { ascending: false }),
-      supabase.from("customer_article_settings").select("*"),
+      safeSupabaseQuery("customers", () => supabase.from("customers").select("*").order("customer_number")),
+      safeSupabaseQuery("orders", () =>
+        supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true })
+      ),
+      safeSupabaseQuery("containers", () => supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number")),
+      safeSupabaseQuery("order_history", () => supabase.from("order_history").select("*").order("completed_at", { ascending: false })),
+      safeSupabaseQuery("customer_article_settings", () => supabase.from("customer_article_settings").select("*")),
     ]);
 
     const activeOrders = (o.data || []).filter((x) => x.status !== "archiviert");
@@ -507,13 +530,10 @@ function App() {
     if (!h.error) setHistory(h.data || []);
     if (!s.error) setArticleSettings(s.data || []);
 
-    if (o.error) {
-      setItems([]);
-      return;
-    }
+    if (o.error) return;
 
     loadOrderCategoriesForOrders(activeOrders.map((order) => order.id), setItems).then((result) => {
-      if (!result.error) setItems(result.data || []);
+      if ((result.data || []).length) setItems(result.data || []);
     });
   }
 
@@ -548,13 +568,14 @@ function App() {
 
     for (let index = 0; index < uniqueIds.length; index += chunkSize) {
       const chunk = uniqueIds.slice(index, index + chunkSize);
-      const { data, error } = await supabase
-        .from("order_categories")
-        .select("*")
-        .in("order_id", chunk)
-        .order("subcategory");
+      const { data, error } = await safeSupabaseQuery("order_categories chunk", () =>
+        supabase.from("order_categories").select("*").in("order_id", chunk).order("subcategory")
+      );
 
-      if (error) return { data: allRows, error };
+      if (error) {
+        if (allRows.length && onChunk) onChunk([...allRows]);
+        continue;
+      }
       allRows.push(...(data || []));
       if (onChunk) onChunk([...allRows]);
     }
