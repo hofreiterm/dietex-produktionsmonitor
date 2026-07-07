@@ -532,50 +532,6 @@ function App() {
     return { data: allRows, error: null };
   }
 
-  function isArticleEnabledFromSettings(settings, customerNumber, subcategory) {
-    const setting = settings.find(
-      (s) =>
-        String(s.customer_number) === String(customerNumber) &&
-        s.subcategory === subcategory
-    );
-    return setting ? setting.is_enabled : true;
-  }
-
-  async function repairMissingOrderCategories(orderRows, itemRows, settingRows) {
-    const rowsToInsert = [];
-    const existingKeys = new Set(
-      itemRows.map((item) => `${item.order_id}__${item.category}__${item.subcategory}`)
-    );
-
-    orderRows
-      .filter((order) => order.status !== "archiviert" && order.status !== "auf_tour")
-      .forEach((order) => {
-        const orderItems = itemRows.filter((item) => item.order_id === order.id);
-        const presentCategories = [...new Set(orderItems.map((item) => item.category))];
-
-        presentCategories.forEach((category) => {
-          (CATEGORIES[category] || []).forEach((subcategory) => {
-            if (!isArticleEnabledFromSettings(settingRows, order.customer_number, subcategory)) return;
-
-            const key = `${order.id}__${category}__${subcategory}`;
-            if (existingKeys.has(key)) return;
-
-            existingKeys.add(key);
-            rowsToInsert.push({
-              order_id: order.id,
-              category,
-              subcategory,
-            });
-          });
-        });
-      });
-
-    if (!rowsToInsert.length) return false;
-
-    const { error } = await supabase.from("order_categories").insert(rowsToInsert);
-    return !error;
-  }
-
   async function loadAll() {
     const [c, o, i, co, h, s] = await Promise.all([
       supabase.from("customers").select("*").order("customer_number"),
@@ -586,18 +542,9 @@ function App() {
       supabase.from("customer_article_settings").select("*"),
     ]);
 
-    let itemRows = i.data || [];
-    if (!o.error && !i.error && !s.error) {
-      const repaired = await repairMissingOrderCategories(o.data || [], itemRows, s.data || []);
-      if (repaired) {
-        const refreshed = await loadAllOrderCategories();
-        if (!refreshed.error) itemRows = refreshed.data || [];
-      }
-    }
-
     if (!c.error) setCustomers(c.data || []);
     if (!o.error) setOrders((o.data || []).filter((x) => x.status !== "archiviert"));
-    if (!i.error) setItems(itemRows);
+    if (!i.error) setItems(i.data || []);
     if (!co.error) setContainers(co.data || []);
     if (!h.error) setHistory(h.data || []);
     if (!s.error) setArticleSettings(s.data || []);
@@ -1154,38 +1101,6 @@ function App() {
     });
   }, [orders]);
 
-  const displayOrders = useMemo(() => {
-    const seenActiveCustomers = new Set();
-
-    return sortedOrders.filter((order) => {
-      if (order.status === "auf_tour") return true;
-
-      const key = String(order.customer_number);
-      if (seenActiveCustomers.has(key)) return false;
-
-      seenActiveCustomers.add(key);
-      return true;
-    });
-  }, [sortedOrders]);
-
-  function groupedOrdersFor(order) {
-    if (order.status === "auf_tour") return [order];
-    return sortedOrders.filter(
-      (row) =>
-        row.status !== "auf_tour" &&
-        String(row.customer_number) === String(order.customer_number)
-    );
-  }
-
-  function enabledItemsForOrderGroup(order) {
-    const orderIds = new Set(groupedOrdersFor(order).map((row) => row.id));
-    return items.filter(
-      (item) =>
-        orderIds.has(item.order_id) &&
-        isArticleEnabled(order.customer_number, item.subcategory)
-    );
-  }
-
   const customerSuggestions = customers
     .filter((c) => customerSearch && (c.customer_number.includes(customerSearch) || c.customer_name.toLowerCase().includes(customerSearch.toLowerCase())))
     .slice(0, 8);
@@ -1230,9 +1145,9 @@ function App() {
   }
 
   const monitorRows = useMemo(() => {
-    return displayOrders
+    return sortedOrders
       .map((order) => {
-        const related = enabledItemsForOrderGroup(order);
+        const related = enabledItemsForOrder(order);
         const laundryItems = related.filter((i) => i.category !== "Putzerei");
         const putzereiItems = related.filter((i) => i.category === "Putzerei");
         const done = laundryItems.filter((i) => i.is_done).length;
@@ -1255,10 +1170,10 @@ function App() {
           putzereiOpen,
           putzereiPresent: putzereiItems.length > 0,
           monitorState,
-          categories: [...new Set(related.map((item) => item.category))],
+          categories: getOrderCategories(order.id),
         };
       });
-  }, [displayOrders, sortedOrders, items, articleSettings]);
+  }, [sortedOrders, items, articleSettings]);
 
   const workingRows = monitorRows.filter((r) => r.monitorState === "bearbeitung" && r.status !== "auf_tour");
   const finishedRows = monitorRows.filter((r) => r.monitorState === "fertig" && r.status !== "auf_tour");
@@ -1281,7 +1196,7 @@ function App() {
 
   function monitorDetailItems(order) {
     if (!order) return [];
-    return enabledItemsForOrderGroup(order).filter((item) => item.category !== "Putzerei");
+    return enabledItemsForOrder(order).filter((item) => item.category !== "Putzerei");
   }
 
   function monitorDetailGroups(order) {
@@ -1361,7 +1276,7 @@ const tourColumns = Object.entries(
   });
 
   const stationOrders = useMemo(() => {
-    return [...displayOrders]
+    return [...sortedOrders]
       .sort((a, b) =>
         String(a.customer_number).localeCompare(
           String(b.customer_number),
@@ -1370,7 +1285,7 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      const related = enabledItemsForOrderGroup(order).filter((i) => activeStation.items.includes(i.subcategory));
+      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory));
       if (!related.some((i) => i.washed_at)) return false;
 
       if (
@@ -1395,7 +1310,7 @@ const tourColumns = Object.entries(
 
       return true;
     });
-  }, [displayOrders, sortedOrders, items, articleSettings, activeStation, stationSearch, tick]);
+  }, [sortedOrders, items, articleSettings, activeStation, stationSearch, tick]);
 
   const statsRows = history.filter((h) => {
     const d = h.completed_at ? h.completed_at.slice(0, 10) : "";
@@ -2648,7 +2563,7 @@ const tourColumns = Object.entries(
 
               <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
                 {stationOrders.map((order) => {
-                  const relevant = enabledItemsForOrderGroup(order)
+                  const relevant = enabledItemsForOrder(order)
                     .filter((i) => activeStation.items.includes(i.subcategory))
                     .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
