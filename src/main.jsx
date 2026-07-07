@@ -1002,43 +1002,6 @@ function App() {
     loadAll();
   }
 
-  async function completeMonitorItem(item) {
-    const sourceItems = item._sourceItems || [item];
-    const openItems = sourceItems.filter((source) => !source.is_done);
-    if (!openItems.length) return;
-
-    const doneAt = new Date().toISOString();
-    await supabase
-      .from("order_categories")
-      .update({ is_done: true, done_at: doneAt })
-      .in("id", openItems.map((source) => source.id));
-
-    const touchedOrderIds = [...new Set(sourceItems.map((source) => source.order_id))];
-
-    await Promise.all(
-      touchedOrderIds.map(async (orderId) => {
-        const order = orders.find((row) => row.id === orderId);
-        if (!order) return;
-
-        const orderItems = enabledItemsForOrder(order).map((source) =>
-          openItems.some((open) => open.id === source.id)
-            ? { ...source, is_done: true, done_at: doneAt }
-            : source
-        );
-        const laundryItems = orderItems.filter((source) => source.category !== "Putzerei");
-        const allDone = laundryItems.length > 0 && laundryItems.every((source) => source.is_done);
-
-        if (!allDone) return;
-
-        const completedAt = new Date();
-        await supabase.from("orders").update({ status: "fertig", completed_at: completedAt.toISOString() }).eq("id", orderId);
-        await supabase.from("containers").update({ status: "fertig" }).eq("order_id", orderId);
-      })
-    );
-
-    loadAll();
-  }
-
   async function toggleStationGroup(groupItems) {
     if (!groupItems.length) return;
 
@@ -1223,42 +1186,6 @@ function App() {
     );
   }
 
-  function mergeArticleItems(rowItems) {
-    const merged = new Map();
-
-    rowItems.forEach((item) => {
-      const label = displaySubcategory(item.subcategory);
-      const key = `${item.category || "Sonstiges"}__${label}`;
-      const current = merged.get(key);
-
-      if (current) {
-        current._sourceItems.push(item);
-      } else {
-        merged.set(key, {
-          ...item,
-          id: key,
-          subcategory: label,
-          _sourceItems: [item],
-        });
-      }
-    });
-
-    return [...merged.values()].map((item) => {
-      const done = item._sourceItems.every((source) => source.is_done);
-      return {
-        ...item,
-        is_done: done,
-        done_at: done
-          ? item._sourceItems
-              .map((source) => source.done_at)
-              .filter(Boolean)
-              .sort()
-              .at(-1) || item.done_at
-          : null,
-      };
-    });
-  }
-
   const customerSuggestions = customers
     .filter((c) => customerSearch && (c.customer_number.includes(customerSearch) || c.customer_name.toLowerCase().includes(customerSearch.toLowerCase())))
     .slice(0, 8);
@@ -1306,9 +1233,8 @@ function App() {
     return displayOrders
       .map((order) => {
         const related = enabledItemsForOrderGroup(order);
-        const visibleItems = mergeArticleItems(related);
-        const laundryItems = visibleItems.filter((i) => i.category !== "Putzerei");
-        const putzereiItems = visibleItems.filter((i) => i.category === "Putzerei");
+        const laundryItems = related.filter((i) => i.category !== "Putzerei");
+        const putzereiItems = related.filter((i) => i.category === "Putzerei");
         const done = laundryItems.filter((i) => i.is_done).length;
         const total = laundryItems.length;
         const putzereiOpen = putzereiItems.length > 0 && putzereiItems.some((i) => !i.is_done);
@@ -1355,7 +1281,7 @@ function App() {
 
   function monitorDetailItems(order) {
     if (!order) return [];
-    return mergeArticleItems(enabledItemsForOrderGroup(order)).filter((item) => item.category !== "Putzerei");
+    return enabledItemsForOrderGroup(order).filter((item) => item.category !== "Putzerei");
   }
 
   function monitorDetailGroups(order) {
@@ -2479,7 +2405,7 @@ const tourColumns = Object.entries(
                         key={item.id}
                         type="button"
                         onClick={() => {
-                          if (!item.is_done) completeMonitorItem(item);
+                          if (!item.is_done) toggleItem(item);
                         }}
                         className={`rounded-xl border px-3 py-2 text-left text-sm font-bold transition ${
                           item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
