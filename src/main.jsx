@@ -47,7 +47,7 @@ const WASH_STREETS = [
     name: "Waschstrasse 2",
     capacity: "50 kg",
     description: "Alles andere",
-    categories: ["BettwÃ¤sche", "TischwÃ¤sche"],
+    categories: ["Bettwäsche", "Tischwäsche"],
     className: "border-blue-400 bg-blue-50 text-blue-950",
   },
 ];
@@ -204,8 +204,8 @@ const PERSONNEL_MAPS = {
     imageFallbacks: ["/plan skizze wäscherei.jpg", "/plan%20skizze%20w%C3%A4scherei.jpg"],
     aspect: "aspect-[715/720]",
     zones: [
-      { section: "Ãœbernahme", x: 12, y: 88, w: 14 },
-      { section: "WaschstraÃŸen", x: 18, y: 32, w: 14 },
+      { section: "Übernahme", x: 12, y: 88, w: 14 },
+      { section: "Waschstraßen", x: 18, y: 32, w: 14 },
       { section: "Waschmaschinen", x: 13, y: 43, w: 14 },
       { section: "Absortierung", x: 48, y: 22, w: 15 },
       { section: "Mangel 1", x: 64, y: 29, w: 14 },
@@ -213,12 +213,12 @@ const PERSONNEL_MAPS = {
       { section: "Frottee 1", x: 86, y: 20, w: 12 },
       { section: "Frottee 2", x: 86, y: 48, w: 12 },
       { section: "BM + SPLT", x: 88, y: 82, w: 12 },
-      { section: "Jenway GroÃŸteile", x: 42, y: 34, w: 14 },
+      { section: "Jenway Großteile", x: 42, y: 34, w: 14 },
       { section: "Jenway Kleinteile", x: 42, y: 52, w: 14 },
       { section: "Jenway Frottee", x: 42, y: 68, w: 14 },
-      { section: "PoolwÃ¤sche", x: 70, y: 84, w: 13 },
+      { section: "Poolwäsche", x: 70, y: 84, w: 13 },
       { section: "Expedit", x: 74, y: 75, w: 13 },
-      { section: "WÃ¤sche auspacken", x: 25, y: 92, w: 14 },
+      { section: "Wäsche auspacken", x: 25, y: 92, w: 14 },
     ],
   },
   putzerei: {
@@ -227,14 +227,14 @@ const PERSONNEL_MAPS = {
     imageFallbacks: ["/plan skizze Putzerei.jpg", "/plan%20skizze%20Putzerei.jpg"],
     aspect: "aspect-[715/522]",
     zones: [
-      { section: "Ãœbernahme", x: 10, y: 90, w: 15 },
+      { section: "Übernahme", x: 10, y: 90, w: 15 },
       { section: "Waschmaschinen", x: 22, y: 38, w: 14 },
       { section: "Putzmaschinen", x: 43, y: 43, w: 14 },
       { section: "Tunnelfinisher", x: 71, y: 25, w: 14 },
       { section: "Hemdenabteilung", x: 77, y: 78, w: 14 },
-      { section: "BÃ¼geltische", x: 60, y: 58, w: 14 },
+      { section: "Bügeltische", x: 60, y: 58, w: 14 },
       { section: "Verpackung", x: 88, y: 45, w: 14 },
-      { section: "KleinwÃ¤scheabteilung", x: 28, y: 80, w: 15 },
+      { section: "Kleinwäscheabteilung", x: 28, y: 80, w: 15 },
       { section: "Expedit", x: 10, y: 57, w: 13 },
     ],
   },
@@ -322,11 +322,6 @@ function fmtDateInput(d = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
-function localDateKey(ts = new Date()) {
-  const d = ts instanceof Date ? ts : new Date(ts);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
 function splitIntoColumns(rows, count) {
   const cols = Array.from({ length: count }, () => []);
   rows.forEach((row, idx) => cols[idx % count].push(row));
@@ -383,8 +378,6 @@ function App() {
 
   const [stationSearch, setStationSearch] = useState("");
   const [masterSearch, setMasterSearch] = useState("");
-  const [newMasterCustomerNumber, setNewMasterCustomerNumber] = useState("");
-  const [newMasterCustomerName, setNewMasterCustomerName] = useState("");
   const [statsDate, setStatsDate] = useState(fmtDateInput());
   const [statsFrom, setStatsFrom] = useState("00:00");
   const [statsTo, setStatsTo] = useState("23:59");
@@ -453,22 +446,6 @@ function App() {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  useEffect(() => {
-    const refreshIfVisible = () => {
-      if (!document.hidden) loadAll();
-    };
-
-    const interval = window.setInterval(refreshIfVisible, 15000);
-    window.addEventListener("focus", refreshIfVisible);
-    document.addEventListener("visibilitychange", refreshIfVisible);
-
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("focus", refreshIfVisible);
-      document.removeEventListener("visibilitychange", refreshIfVisible);
-    };
-  }, []);
-
 
   useEffect(() => {
     localStorage.setItem("dietexPersonalPlan", JSON.stringify(personalPlan));
@@ -513,30 +490,11 @@ function App() {
     });
   }, [orders, items, articleSettings]);
 
-  async function loadAllOrderCategories() {
-    const pageSize = 1000;
-    const allRows = [];
-
-    for (let from = 0; ; from += pageSize) {
-      const { data, error } = await supabase
-        .from("order_categories")
-        .select("*")
-        .order("subcategory")
-        .range(from, from + pageSize - 1);
-
-      if (error) return { data: allRows, error };
-      allRows.push(...(data || []));
-      if (!data || data.length < pageSize) break;
-    }
-
-    return { data: allRows, error: null };
-  }
-
   async function loadAll() {
     const [c, o, i, co, h, s] = await Promise.all([
       supabase.from("customers").select("*").order("customer_number"),
       supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
-      loadAllOrderCategories(),
+      supabase.from("order_categories").select("*").order("subcategory"),
       supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number"),
       supabase.from("order_history").select("*").order("completed_at", { ascending: false }),
       supabase.from("customer_article_settings").select("*"),
@@ -789,13 +747,21 @@ function App() {
     const name = customerName.trim();
     const orderRows = selectedOrderRows();
 
-    if (!number || !name) return alert("Bitte zuerst einen bestehenden Kunden aus der Suche auswählen.");
+    if (!number || !name) return alert("Kundennummer und Kundenname eingeben.");
     if (!selectedCategories.length) return alert("Mindestens eine Kategorie auswählen.");
 
     if (!orderRows.length) return alert("Mindestens einen Artikel fuer diesen Auftrag auswaehlen.");
 
     let customer = customers.find((c) => String(c.customer_number) === String(number));
-    if (!customer) return alert("Dieser Kunde ist nicht in den Stammdaten angelegt.");
+    if (!customer) {
+      const { data, error } = await supabase
+        .from("customers")
+        .insert({ customer_number: number, customer_name: name })
+        .select()
+        .single();
+      if (error) return alert("Kunde konnte nicht gespeichert werden: " + error.message);
+      customer = data;
+    }
 
     const today = new Date().toISOString().slice(0, 10);
 
@@ -986,17 +952,17 @@ function App() {
       return;
     }
 
-    const related = items.filter((i) => i.order_id === order.id && i.category === category && !i.washed_at);
-    if (!related.length) return;
+    const relatedIds = items
+      .filter((i) => i.order_id === order.id && i.category === category && !i.washed_at)
+      .map((i) => i.id);
+    if (!relatedIds.length) return;
 
     setPendingWash((prev) => ({ ...prev, [washKey]: true }));
     washTimers.current[washKey] = window.setTimeout(async () => {
       await supabase
         .from("order_categories")
         .update({ washed_at: new Date().toISOString() })
-        .eq("order_id", order.id)
-        .eq("category", category)
-        .is("washed_at", null);
+        .in("id", relatedIds);
 
       delete washTimers.current[washKey];
       setPendingWash((prev) => {
@@ -1058,30 +1024,6 @@ function App() {
       .in("id", finishedContainers.map((c) => c.id));
   }
 
-  async function addMasterCustomer() {
-    const number = newMasterCustomerNumber.trim();
-    const name = newMasterCustomerName.trim();
-
-    if (!number || !name) return alert("Bitte Kundennummer und Kundenname eingeben.");
-    if (customers.some((c) => String(c.customer_number) === String(number))) {
-      return alert("Diese Kundennummer ist bereits angelegt.");
-    }
-
-    const { error } = await supabase.from("customers").insert({
-      customer_number: number,
-      customer_name: name,
-    });
-
-    if (error) {
-      alert("Kunde konnte nicht angelegt werden: " + error.message);
-      return;
-    }
-
-    setNewMasterCustomerNumber("");
-    setNewMasterCustomerName("");
-    setMasterSearch(number);
-    loadAll();
-  }
   async function deleteMasterCustomer(customer) {
     if (!confirm(`Kunde wirklich löschen?\n${customer.customer_number} ${customer.customer_name}`)) return;
     const { error } = await supabase.from("customers").delete().eq("id", customer.id);
@@ -1179,20 +1121,6 @@ function App() {
   const finishedRows = monitorRows.filter((r) => r.monitorState === "fertig" && r.status !== "auf_tour");
   const tourRows = monitorRows.filter((r) => r.monitorState === "auf_tour");
   const todayKey = new Date().toISOString().slice(0, 10);
-  const takeoverListRows = useMemo(() => {
-    const today = localDateKey();
-
-    return sortedOrders
-      .filter((order) => localDateKey(order.created_at) === today)
-      .map((order) => ({
-        ...order,
-        acceptedTime: fmtTime(order.created_at),
-        takeoverCategories: getOrderCategories(order.id),
-      }))
-      .sort((a, b) =>
-        String(a.customer_number).localeCompare(String(b.customer_number), "de", { numeric: true })
-      );
-  }, [sortedOrders, items]);
 
   function monitorDetailItems(order) {
     if (!order) return [];
@@ -1286,7 +1214,7 @@ const tourColumns = Object.entries(
       )
       .filter((order) => {
       const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory));
-      if (!related.some((i) => i.washed_at)) return false;
+      if (!related.length) return false;
 
       if (
         stationSearch &&
@@ -1971,7 +1899,7 @@ const tourColumns = Object.entries(
         } ${dragOrderId === row.id ? "ring-2 ring-blue-400 opacity-70" : ""}`}
       >
         <div className={`grid ${compact ? "grid-cols-[20px_62px_1fr_auto] gap-1.5" : "grid-cols-[28px_84px_1fr_auto] gap-3"} items-center`}>
-          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">â†•</div>
+          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">↕</div>
           <div className={`font-mono ${compact ? "text-[12px]" : "text-[15px]"} leading-tight`}>{row.customer_number}</div>
           <button
             type="button"
@@ -2000,7 +1928,7 @@ const tourColumns = Object.entries(
         )}
         {row.info && (
           <div className="mt-1 rounded bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-900">
-            â„¹ {row.info}
+            ℹ {row.info}
           </div>
         )}
       </div>
@@ -2316,22 +2244,17 @@ const tourColumns = Object.entries(
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {group.items.map((item) => (
-                      <button
+                      <div
                         key={item.id}
-                        type="button"
-                        onClick={() => {
-                          if (!item.is_done) toggleItem(item);
-                        }}
-                        className={`rounded-xl border px-3 py-2 text-left text-sm font-bold transition ${
+                        className={`rounded-xl border px-3 py-2 text-sm font-bold ${
                           item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
-                        } ${item.is_done ? "cursor-default" : "hover:ring-2 hover:ring-amber-300 active:scale-[0.99]"}`}
-                        title={item.is_done ? "Bereits fertig" : "Antippen = auf Fertig setzen"}
+                        }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span>{displaySubcategory(item.subcategory)}</span>
                           <span>{item.is_done ? "Fertig" : "Offen"}</span>
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -2346,7 +2269,7 @@ const tourColumns = Object.entries(
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
             {(takeoverMode
               ? [
-                  ["annahme", "Kunden Ã¼bernehmen"],
+                  ["annahme", "Kunden übernehmen"],
                   ["station", "Station"],
                 ]
               : expeditMode
@@ -2373,16 +2296,14 @@ const tourColumns = Object.entries(
 
         {view === "annahme" && (
           <section className="rounded-3xl border bg-white p-4 shadow-sm">
-            <Input
-              className="mb-2 w-full"
-              placeholder="Angelegten Kunden suchen"
-              value={customerSearch}
-              onChange={(e) => {
-                setCustomerSearch(e.target.value);
-                setCustomerNumber("");
-                setCustomerName("");
-              }}
-            />
+            <div className="mb-3 flex justify-end">
+              <input id="customer-excel-import" type="file" accept=".xlsx,.xls" className="hidden" onChange={importCustomersExcel} />
+              <label htmlFor="customer-excel-import" className="cursor-pointer rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100">
+                📄 Kunden Excel importieren
+              </label>
+            </div>
+
+            <Input className="mb-2 w-full" placeholder="Kundennummer oder Name suchen" value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
 
             {customerSuggestions.length > 0 && (
               <div className="mb-3 rounded-xl border bg-white">
@@ -2403,18 +2324,10 @@ const tourColumns = Object.entries(
               </div>
             )}
 
-            {customerNumber && customerName && (
-              <div className="mb-2 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 md:grid-cols-[160px_1fr]">
-                <div>
-                  <div className="text-xs font-bold uppercase text-emerald-700">Kundennummer</div>
-                  <div className="font-mono text-lg font-black">{customerNumber}</div>
-                </div>
-                <div>
-                  <div className="text-xs font-bold uppercase text-emerald-700">Ausgewählter Kunde</div>
-                  <div className="text-lg font-black">{customerName}</div>
-                </div>
-              </div>
-            )}
+            <div className="grid gap-3 md:grid-cols-[220px_1fr]">
+              <Input placeholder="Kundennummer" value={customerNumber} onChange={(e) => setCustomerNumber(e.target.value)} />
+              <Input placeholder="Kundenname" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+            </div>
 
             <Input className="mt-2 w-full" placeholder="Optionale Info für Verpackung / Produktion" value={info} onChange={(e) => setInfo(e.target.value)} />
 
@@ -2473,50 +2386,6 @@ const tourColumns = Object.entries(
               <button type="button" onClick={addOrder} className="rounded-2xl bg-blue-700 px-8 py-3 text-base font-black text-white shadow-lg hover:bg-blue-800">
                 Kunde übernehmen
               </button>
-            </div>
-
-            <div className="mt-5 rounded-2xl border bg-slate-50 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-lg font-black">Übernahmeliste heute</h3>
-                <span className="rounded-full bg-white px-3 py-1 text-sm font-bold text-slate-600">{takeoverListRows.length}</span>
-              </div>
-
-              {takeoverListRows.length === 0 ? (
-                <div className="rounded-xl border border-dashed bg-white p-4 text-center text-sm font-semibold text-slate-500">
-                  Heute wurden noch keine Kunden übernommen.
-                </div>
-              ) : (
-                <div className="max-h-[360px] overflow-auto rounded-xl border bg-white">
-                  <table className="w-full text-left text-sm">
-                    <thead className="sticky top-0 bg-slate-100 text-xs uppercase text-slate-500">
-                      <tr>
-                        <th className="px-3 py-2">Nr.</th>
-                        <th className="px-3 py-2">Kunde</th>
-                        <th className="px-3 py-2">Artikelgruppe</th>
-                        <th className="px-3 py-2 text-right">Übernahme</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {takeoverListRows.map((order) => (
-                        <tr key={order.id} className="border-t">
-                          <td className="px-3 py-2 font-mono">{order.customer_number}</td>
-                          <td className="px-3 py-2 font-bold">{order.customer_name}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex flex-wrap gap-1">
-                              {order.takeoverCategories.map((cat) => (
-                                <span key={cat} className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">
-                                  <span className="mr-1">{CAT_ICON[cat] || cat.slice(0, 1)}</span>{cat}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-right font-bold">{order.acceptedTime}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           </section>
         )}
@@ -3028,26 +2897,6 @@ const tourColumns = Object.entries(
               <div><h2 className="text-2xl font-black">Stammdaten Kunden</h2><p className="text-slate-500">Pro Kunde festlegen, welche Unterkategorien bei den Stationen sichtbar sind.</p></div>
               <Input placeholder="Kunde suchen" value={masterSearch} onChange={(e) => setMasterSearch(e.target.value)} />
             </div>
-
-            <div className="mb-4 rounded-2xl border bg-slate-50 p-4">
-              <h3 className="mb-3 text-lg font-black">Kunde anlegen</h3>
-              <div className="grid gap-3 md:grid-cols-[180px_1fr_auto]">
-                <Input
-                  placeholder="Kundennummer"
-                  value={newMasterCustomerNumber}
-                  onChange={(e) => setNewMasterCustomerNumber(e.target.value)}
-                />
-                <Input
-                  placeholder="Kundenname"
-                  value={newMasterCustomerName}
-                  onChange={(e) => setNewMasterCustomerName(e.target.value)}
-                />
-                <Button className="bg-blue-700 text-white" onClick={addMasterCustomer}>
-                  Anlegen
-                </Button>
-              </div>
-            </div>
-
             <div className="max-h-[650px] overflow-auto rounded-2xl border">
               <table className="w-full text-left text-sm">
                 <thead className="sticky top-0 bg-slate-100">
