@@ -494,7 +494,7 @@ function App() {
     const [c, o, i, co, h, s] = await Promise.all([
       supabase.from("customers").select("*").order("customer_number"),
       supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
-      supabase.from("order_categories").select("*").order("subcategory"),
+      loadAllOrderCategories(),
       supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number"),
       supabase.from("order_history").select("*").order("completed_at", { ascending: false }),
       supabase.from("customer_article_settings").select("*"),
@@ -511,6 +511,25 @@ function App() {
   function isArticleEnabled(customerNumber, subcategory) {
     const setting = articleSettings.find((s) => String(s.customer_number) === String(customerNumber) && s.subcategory === subcategory);
     return setting ? setting.is_enabled : true;
+  }
+
+  async function loadAllOrderCategories() {
+    const pageSize = 1000;
+    const allRows = [];
+
+    for (let from = 0; ; from += pageSize) {
+      const { data, error } = await supabase
+        .from("order_categories")
+        .select("*")
+        .order("subcategory")
+        .range(from, from + pageSize - 1);
+
+      if (error) return { data: allRows, error };
+      allRows.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+
+    return { data: allRows, error: null };
   }
 
   function orderArticleKey(category, subcategory) {
