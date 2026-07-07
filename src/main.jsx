@@ -491,17 +491,21 @@ function App() {
   }, [orders, items, articleSettings]);
 
   async function loadAll() {
-    const [c, o, i, co, h, s] = await Promise.all([
+    const [c, o, co, h, s] = await Promise.all([
       supabase.from("customers").select("*").order("customer_number"),
       supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true }),
-      loadAllOrderCategories(),
       supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number"),
       supabase.from("order_history").select("*").order("completed_at", { ascending: false }),
       supabase.from("customer_article_settings").select("*"),
     ]);
 
+    const activeOrders = (o.data || []).filter((x) => x.status !== "archiviert");
+    const i = o.error
+      ? { data: [], error: o.error }
+      : await loadOrderCategoriesForOrders(activeOrders.map((order) => order.id));
+
     if (!c.error) setCustomers(c.data || []);
-    if (!o.error) setOrders((o.data || []).filter((x) => x.status !== "archiviert"));
+    if (!o.error) setOrders(activeOrders);
     if (!i.error) setItems(i.data || []);
     if (!co.error) setContainers(co.data || []);
     if (!h.error) setHistory(h.data || []);
@@ -527,6 +531,26 @@ function App() {
       if (error) return { data: allRows, error };
       allRows.push(...(data || []));
       if (!data || data.length < pageSize) break;
+    }
+
+    return { data: allRows, error: null };
+  }
+
+  async function loadOrderCategoriesForOrders(orderIds) {
+    const uniqueIds = [...new Set(orderIds.filter(Boolean))];
+    const allRows = [];
+    const chunkSize = 50;
+
+    for (let index = 0; index < uniqueIds.length; index += chunkSize) {
+      const chunk = uniqueIds.slice(index, index + chunkSize);
+      const { data, error } = await supabase
+        .from("order_categories")
+        .select("*")
+        .in("order_id", chunk)
+        .order("subcategory");
+
+      if (error) return { data: allRows, error };
+      allRows.push(...(data || []));
     }
 
     return { data: allRows, error: null };
