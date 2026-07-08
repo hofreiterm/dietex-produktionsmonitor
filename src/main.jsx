@@ -433,8 +433,10 @@ function App() {
   const [tourNumberInput, setTourNumberInput] = useState("");
   const [dragOrderId, setDragOrderId] = useState(null);
   const [pendingWash, setPendingWash] = useState({});
+  const [pendingFinishedOrders, setPendingFinishedOrders] = useState({});
   const [monitorDetailOrder, setMonitorDetailOrder] = useState(null);
   const washTimers = useRef({});
+  const finishedTimers = useRef({});
   const reloadTimer = useRef(null);
   const loadAllRunning = useRef(false);
   const loadAllQueued = useRef(false);
@@ -711,23 +713,63 @@ function App() {
 
   async function archiveFinishedOrders(orderIds = null) {
     const finished = orders.filter((o) => {
-      if (o.status !== "auf_tour") return false;
-
+      if (o.status !== "fertig") return false;
       const related = enabledItemsForOrder(o).filter((i) => i.category !== "Putzerei");
-
       return related.length > 0 && related.every((i) => i.is_done);
     });
     const ids = orderIds || finished.map((o) => o.id);
     if (!ids.length) return;
 
-    const firstOrder = orders.find((o) => o.id === ids[0]);
-    setTourModal({
-      ids,
-      customerName: firstOrder?.customer_name || "",
-      customerNumber: firstOrder?.customer_number || "",
+    ids.forEach((id) => {
+      if (finishedTimers.current[id]) {
+        window.clearTimeout(finishedTimers.current[id]);
+        delete finishedTimers.current[id];
+        setPendingFinishedOrders((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        return;
+      }
+
+      setPendingFinishedOrders((prev) => ({ ...prev, [id]: true }));
+      finishedTimers.current[id] = window.setTimeout(async () => {
+        await supabase
+          .from("orders")
+          .update({
+            status: "auf_tour",
+            container_count: null,
+            tour_number: null,
+          })
+          .eq("id", id);
+
+        await supabase
+          .from("containers")
+          .update({ removed_at: new Date().toISOString() })
+          .eq("order_id", id);
+
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === id
+              ? {
+                  ...o,
+                  status: "auf_tour",
+                  container_count: null,
+                  tour_number: null,
+                }
+              : o
+          )
+        );
+        setContainers((prev) => prev.filter((c) => c.order_id !== id));
+        setPendingFinishedOrders((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        delete finishedTimers.current[id];
+        scheduleLoadAll(15000);
+      }, 5000);
     });
-    setTourContainerCount("");
-    setTourNumberInput("");
   }
 
   async function confirmTourModal() {
@@ -1952,14 +1994,14 @@ const tourColumns = Object.entries(
   }
 
 
-  function SmallCustomerCard({ row, onClick }) {
+  function SmallCustomerCard({ row, onClick, pending = false }) {
     return (
       <button
         type="button"
         onClick={onClick}
         className={`grid w-full grid-cols-[80px_1fr_35px] items-center rounded-lg border bg-white px-3 py-2 text-left text-sm hover:shadow ${
           onClick ? "cursor-pointer" : ""
-        }`}
+        } ${pending ? "border-emerald-500 bg-emerald-100 ring-2 ring-emerald-300" : ""}`}
       >
         <span>{row.customer_number}</span>
         <b className="text-[16px] leading-tight break-words whitespace-normal">{row.customer_name}</b>
@@ -1970,6 +2012,11 @@ const tourColumns = Object.entries(
           </div>
         )}
         {row.info && <div className="col-span-3 mt-1 rounded bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-900">ℹ {row.info}</div>}
+        {pending && (
+          <div className="col-span-3 mt-2 rounded-lg bg-emerald-600 px-3 py-1 text-center text-xs font-black text-white">
+            Wird in 5 Sekunden entfernt - erneut antippen zum Abbrechen
+          </div>
+        )}
       </button>
     );
   }
@@ -2584,7 +2631,16 @@ const tourColumns = Object.entries(
             {splitIntoColumns(finishedRows, 2).map((col, idx) => (
               <div key={`done-${idx}`} className="rounded-3xl border border-green-100 bg-green-50/40 p-4">
                 <h2 className="mb-3 border-b-2 border-green-500 pb-2 text-center font-black">FERTIG</h2>
-                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} onClick={() => archiveFinishedOrders([r.id])} />)}</div>
+                <div className="space-y-2">
+                  {col.map((r) => (
+                    <SmallCustomerCard
+                      key={r.id}
+                      row={r}
+                      pending={Boolean(pendingFinishedOrders[r.id])}
+                      onClick={() => archiveFinishedOrders([r.id])}
+                    />
+                  ))}
+                </div>
               </div>
             ))}
           </section>
@@ -2631,60 +2687,35 @@ const tourColumns = Object.entries(
             <div className="rounded-3xl border bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-black">Touren</h2>
-                  <p className="text-slate-500">Alle Kunden mit Status Auf der Tour, nach Tourennummer aufsteigend sortiert.</p>
+                  <h2 className="text-2xl font-black">Fertige Kunden</h2>
+                  <p className="text-slate-500">Alle abgeschlossenen fertigen Kunden, aufsteigend nach Kundennummer.</p>
                 </div>
                 <div className="text-sm font-semibold text-slate-500">
                   {new Date().toLocaleDateString("de-AT")}
                 </div>
               </div>
 
-              {tourColumns.length === 0 ? (
+              {tourRows.length === 0 ? (
                 <div className="rounded-2xl border border-dashed bg-slate-50 p-8 text-center text-slate-500">
-                  Heute sind noch keine Kunden auf Tour gesetzt.
+                  Noch keine fertigen Kunden abgeschlossen.
                 </div>
               ) : (
-                <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-                  {tourColumns.map((col) => (
-                    <div key={col.tour} className="rounded-3xl border border-violet-200 bg-violet-50/50 p-4">
-                      <div className="mb-3 border-b-2 border-violet-400 pb-2">
-                        <h3 className="text-center text-2xl font-black text-violet-900">
-                          Tour {col.tour}
-                        </h3>
-                        <button
-                          onClick={() => removeWholeTour(col.tour)}
-                          className="mt-2 w-full rounded-xl bg-red-100 px-3 py-2 text-sm font-black text-red-700 hover:bg-red-200"
-                        >
-                          Ganze Tour löschen
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {col.rows.map((row) => (
-                          <div key={row.id} className="rounded-xl border bg-white p-3 shadow-sm">
-                            <div className="grid grid-cols-[90px_1fr] gap-2">
-                              <span className="font-mono font-semibold">{row.customer_number}</span>
-                              <b className="break-words">{row.customer_name}</b>
-                            </div>
-                            <div className="mt-2 rounded-lg bg-violet-50 px-3 py-2 text-sm font-black text-violet-900">
-                              Container/Packerl: {row.container_count || "-"}
-                            </div>
-                            {row.putzereiOpen && (
-                              <div className="mt-2 inline-flex rounded-full bg-violet-100 px-3 py-1 text-sm font-black text-violet-800">
-                                P
-                              </div>
-                            )}
-
-                            <button
-                              onClick={() => removeTourCustomer(row.id)}
-                              className="mt-2 w-full rounded-xl bg-slate-100 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-200"
-                            >
-                              Kunde entfernen
-                            </button>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {[...tourRows]
+                    .sort((a, b) => String(a.customer_number).localeCompare(String(b.customer_number), "de", { numeric: true }))
+                    .map((row) => (
+                      <div key={row.id} className="rounded-xl border bg-white p-3 shadow-sm">
+                        <div className="grid grid-cols-[90px_1fr] gap-2">
+                          <span className="font-mono font-semibold">{row.customer_number}</span>
+                          <b className="break-words">{row.customer_name}</b>
+                        </div>
+                        {row.putzereiOpen && (
+                          <div className="mt-2 inline-flex rounded-full bg-violet-100 px-3 py-1 text-sm font-black text-violet-800">
+                            P
                           </div>
-                        ))}
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
             </div>
