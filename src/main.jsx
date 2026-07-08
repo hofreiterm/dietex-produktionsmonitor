@@ -488,7 +488,7 @@ function App() {
       const next = { ...prev };
       orders.forEach((order) => {
         STATIONS.forEach((station) => {
-          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory));
+          const relevant = enabledItemsForOrder(order).filter((i) => station.items.includes(i.subcategory) && i.washed_at);
           const key = `${order.id}-${station.key}`;
           if (relevant.length > 0 && relevant.every((i) => i.is_done) && !next[key]) {
             next[key] = Date.now() + 10000;
@@ -1003,7 +1003,7 @@ function App() {
       setHiddenStationOrders((p) => {
         const nextHidden = { ...p };
         STATIONS.forEach((station) => {
-          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory));
+          const relevant = orderItems.filter((i) => station.items.includes(i.subcategory) && i.washed_at);
           if (relevant.length > 0 && relevant.every((i) => i.is_done)) {
             nextHidden[`${order.id}-${station.key}`] = Date.now() + 10000;
           }
@@ -1313,7 +1313,7 @@ const tourColumns = Object.entries(
         )
       )
       .filter((order) => {
-      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory));
+      const related = enabledItemsForOrder(order).filter((i) => activeStation.items.includes(i.subcategory) && i.washed_at);
       if (!related.length) return false;
 
       if (
@@ -2533,7 +2533,7 @@ const tourColumns = Object.entries(
               <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-4">
                 {stationOrders.map((order) => {
                   const relevant = enabledItemsForOrder(order)
-                    .filter((i) => activeStation.items.includes(i.subcategory))
+                    .filter((i) => activeStation.items.includes(i.subcategory) && i.washed_at)
                     .sort((a, b) => activeStation.items.indexOf(a.subcategory) - activeStation.items.indexOf(b.subcategory));
 
                   const groupedRelevant = Object.values(
