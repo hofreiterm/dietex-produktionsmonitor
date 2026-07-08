@@ -322,6 +322,14 @@ function fmtDateInput(d = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
+function localDateKey(value = new Date()) {
+  const d = value instanceof Date ? value : new Date(value);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function splitIntoColumns(rows, count) {
   const cols = Array.from({ length: count }, () => []);
   rows.forEach((row, idx) => cols[idx % count].push(row));
@@ -1193,6 +1201,21 @@ function App() {
     const cats = items.filter((i) => i.order_id === orderId).map((i) => i.category);
     return [...new Set(cats)];
   }
+
+  const takeoverListToday = useMemo(() => {
+    const today = localDateKey();
+    return sortedOrders
+      .filter((order) => localDateKey(order.created_at) === today && order.status !== "archiviert")
+      .map((order) => {
+        const groups = getOrderCategories(order.id);
+        return {
+          ...order,
+          takeoverGroups: groups.length ? groups.join(", ") : "-",
+          takeoverTime: fmtTime(order.created_at),
+        };
+      })
+      .sort((a, b) => String(a.customer_number || "").localeCompare(String(b.customer_number || ""), "de", { numeric: true }));
+  }, [sortedOrders, items]);
 
   function washRowsForCategory(category) {
     return sortedOrders
@@ -2533,6 +2556,41 @@ const tourColumns = Object.entries(
               <button type="button" onClick={addOrder} className="rounded-2xl bg-blue-700 px-8 py-3 text-base font-black text-white shadow-lg hover:bg-blue-800">
                 Kunde übernehmen
               </button>
+            </div>
+
+            <div className="mt-5 rounded-2xl border bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-lg font-black">Heute bereits übernommen</h3>
+                <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-blue-800">{takeoverListToday.length}</span>
+              </div>
+              {takeoverListToday.length === 0 ? (
+                <div className="rounded-xl border bg-white p-3 text-sm font-semibold text-slate-500">
+                  Heute noch keine Kunden übernommen.
+                </div>
+              ) : (
+                <div className="max-h-72 overflow-auto rounded-xl border bg-white">
+                  <table className="w-full border-collapse text-left text-sm">
+                    <thead className="sticky top-0 bg-slate-100">
+                      <tr className="border-b text-xs uppercase text-slate-500">
+                        <th className="px-3 py-2">Kundennummer</th>
+                        <th className="px-3 py-2">Kunde</th>
+                        <th className="px-3 py-2">Artikelgruppe</th>
+                        <th className="px-3 py-2 text-right">Übernahme</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {takeoverListToday.map((order) => (
+                        <tr key={order.id} className="border-b last:border-b-0">
+                          <td className="px-3 py-2 font-mono">{order.customer_number}</td>
+                          <td className="px-3 py-2 font-bold">{order.customer_name}</td>
+                          <td className="px-3 py-2">{order.takeoverGroups}</td>
+                          <td className="px-3 py-2 text-right font-bold">{order.takeoverTime}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </section>
         )}
