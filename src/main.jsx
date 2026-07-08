@@ -435,15 +435,24 @@ function App() {
   const [pendingWash, setPendingWash] = useState({});
   const [monitorDetailOrder, setMonitorDetailOrder] = useState(null);
   const washTimers = useRef({});
+  const reloadTimer = useRef(null);
+  const loadAllRunning = useRef(false);
+  const loadAllQueued = useRef(false);
 
   useEffect(() => {
-    loadAll();
+    scheduleLoadAll(0);
     const channel = supabase
       .channel("dietex-live")
-      .on("postgres_changes", { event: "*", schema: "public" }, () => loadAll())
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => scheduleLoadAll(15000))
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_categories" }, () => scheduleLoadAll(15000))
+      .on("postgres_changes", { event: "*", schema: "public", table: "containers" }, () => scheduleLoadAll(15000))
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_article_settings" }, () => scheduleLoadAll(15000))
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => {
+      if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
 
@@ -511,30 +520,51 @@ function App() {
     return lastResult;
   }
 
+  function scheduleLoadAll(delay = 15000) {
+    if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+    reloadTimer.current = window.setTimeout(() => {
+      reloadTimer.current = null;
+      loadAll();
+    }, delay);
+  }
+
   async function loadAll() {
-    const [c, o, co, h, s] = await Promise.all([
-      safeSupabaseQuery("customers", () => supabase.from("customers").select("*").order("customer_number")),
-      safeSupabaseQuery("orders", () =>
-        supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true })
-      ),
-      safeSupabaseQuery("containers", () => supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number")),
-      safeSupabaseQuery("order_history", () => supabase.from("order_history").select("*").order("completed_at", { ascending: false })),
-      safeSupabaseQuery("customer_article_settings", () => supabase.from("customer_article_settings").select("*")),
-    ]);
+    if (loadAllRunning.current) {
+      loadAllQueued.current = true;
+      return;
+    }
 
-    const activeOrders = (o.data || []).filter((x) => x.status !== "archiviert");
+    loadAllRunning.current = true;
+    try {
+      const [c, o, co, h, s] = await Promise.all([
+        safeSupabaseQuery("customers", () => supabase.from("customers").select("*").order("customer_number")),
+        safeSupabaseQuery("orders", () =>
+          supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true })
+        ),
+        safeSupabaseQuery("containers", () => supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number")),
+        safeSupabaseQuery("order_history", () => supabase.from("order_history").select("*").order("completed_at", { ascending: false })),
+        safeSupabaseQuery("customer_article_settings", () => supabase.from("customer_article_settings").select("*")),
+      ]);
 
-    if (!c.error) setCustomers(c.data || []);
-    if (!o.error) setOrders(activeOrders);
-    if (!co.error) setContainers(co.data || []);
-    if (!h.error) setHistory(h.data || []);
-    if (!s.error) setArticleSettings(s.data || []);
+      const activeOrders = (o.data || []).filter((x) => x.status !== "archiviert");
 
-    if (o.error) return;
+      if (!c.error) setCustomers(c.data || []);
+      if (!o.error) setOrders(activeOrders);
+      if (!co.error) setContainers(co.data || []);
+      if (!h.error) setHistory(h.data || []);
+      if (!s.error) setArticleSettings(s.data || []);
 
-    loadOrderCategoriesForOrders(activeOrders.map((order) => order.id), setItems).then((result) => {
+      if (o.error) return;
+
+      const result = await loadOrderCategoriesForOrders(activeOrders.map((order) => order.id), setItems);
       if ((result.data || []).length) setItems(result.data || []);
-    });
+    } finally {
+      loadAllRunning.current = false;
+      if (loadAllQueued.current) {
+        loadAllQueued.current = false;
+        scheduleLoadAll(15000);
+      }
+    }
   }
 
   function isArticleEnabled(customerNumber, subcategory) {
