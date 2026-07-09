@@ -330,6 +330,11 @@ function localDateKey(value = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function getHtmlBuildSignature(html) {
+  const match = String(html || "").match(/\/assets\/index-[^"']+\.js/);
+  return match ? match[0] : "";
+}
+
 function splitIntoColumns(rows, count) {
   const cols = Array.from({ length: count }, () => []);
   rows.forEach((row, idx) => cols[idx % count].push(row));
@@ -462,6 +467,38 @@ function App() {
     return () => {
       if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
       supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    const currentScript = document.querySelector('script[type="module"][src*="/assets/index-"]');
+    const currentSignature = currentScript ? new URL(currentScript.src).pathname : "";
+
+    async function checkForAppUpdate() {
+      if (!currentSignature) return;
+      try {
+        const response = await fetch(`${window.location.origin}${window.location.pathname}?dietex_update_check=${Date.now()}`, {
+          cache: "no-store",
+        });
+        if (!response.ok) return;
+        const nextSignature = getHtmlBuildSignature(await response.text());
+        if (nextSignature && nextSignature !== currentSignature) {
+          window.location.reload();
+        }
+      } catch {
+        // Offline or temporary network issue: keep the current screen running.
+      }
+    }
+
+    const interval = window.setInterval(checkForAppUpdate, 60000);
+    const onVisibilityChange = () => {
+      if (!document.hidden) checkForAppUpdate();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
@@ -1301,6 +1338,61 @@ function App() {
         return acc;
       }, {})
     );
+  }
+
+  async function finishMonitorItem(item) {
+    if (!item || item.is_done) return;
+
+    const doneAt = new Date().toISOString();
+    const order = orders.find((o) => o.id === item.order_id);
+    if (!order) return;
+
+    const { error } = await supabase
+      .from("order_categories")
+      .update({
+        is_done: true,
+        done_at: doneAt,
+        washed_at: item.washed_at || doneAt,
+      })
+      .eq("id", item.id);
+
+    if (error) {
+      alert("Artikel konnte nicht auf fertig gesetzt werden: " + error.message);
+      return;
+    }
+
+    const orderItems = enabledItemsForOrder(order).map((row) =>
+      row.id === item.id ? { ...row, is_done: true, done_at: doneAt, washed_at: row.washed_at || doneAt } : row
+    );
+    const allDone = orderItems.filter((row) => row.category !== "Putzerei").every((row) => row.is_done);
+
+    setItems((prev) =>
+      prev.map((row) =>
+        row.id === item.id ? { ...row, is_done: true, done_at: doneAt, washed_at: row.washed_at || doneAt } : row
+      )
+    );
+
+    if (allDone) {
+      const acceptedAt = new Date(order.created_at);
+      const completedAt = new Date(doneAt);
+      const duration = Math.max(0, Math.round((completedAt - acceptedAt) / 60000));
+
+      await supabase.from("orders").update({ status: "fertig", completed_at: doneAt }).eq("id", item.order_id);
+      await supabase.from("containers").update({ status: "fertig" }).eq("order_id", item.order_id);
+
+      if (order.status !== "fertig") {
+        await supabase.from("order_history").insert({
+          order_id: order.id,
+          customer_number: order.customer_number,
+          customer_name: order.customer_name,
+          accepted_at: order.created_at,
+          completed_at: doneAt,
+          duration_minutes: duration,
+        });
+      }
+    }
+
+    loadAll();
   }
   
   async function removeTourCustomer(orderId) {
@@ -2414,17 +2506,22 @@ const tourColumns = Object.entries(
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {group.items.map((item) => (
-                      <div
+                      <button
+                        type="button"
                         key={item.id}
-                        className={`rounded-xl border px-3 py-2 text-sm font-bold ${
-                          item.is_done ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"
+                        disabled={item.is_done}
+                        onClick={() => finishMonitorItem(item)}
+                        className={`rounded-xl border px-3 py-2 text-left text-sm font-bold transition ${
+                          item.is_done
+                            ? "cursor-default border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 active:scale-[0.99]"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span>{displaySubcategory(item.subcategory)}</span>
                           <span>{item.is_done ? "Fertig" : "Offen"}</span>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
