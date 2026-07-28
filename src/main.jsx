@@ -335,6 +335,12 @@ function getHtmlBuildSignature(html) {
   return match ? match[0] : "";
 }
 
+function reloadWithCacheBuster() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("dietex_reload", Date.now().toString());
+  window.location.replace(url.toString());
+}
+
 function splitIntoColumns(rows, count) {
   const cols = Array.from({ length: count }, () => []);
   rows.forEach((row, idx) => cols[idx % count].push(row));
@@ -473,32 +479,50 @@ function App() {
   useEffect(() => {
     const currentScript = document.querySelector('script[type="module"][src*="/assets/index-"]');
     const currentSignature = currentScript ? new URL(currentScript.src).pathname : "";
+    let reloadStarted = false;
 
     async function checkForAppUpdate() {
-      if (!currentSignature) return;
+      if (!currentSignature || reloadStarted) return;
       try {
-        const response = await fetch(`${window.location.origin}${window.location.pathname}?dietex_update_check=${Date.now()}`, {
-          cache: "no-store",
+        const url = new URL(window.location.href);
+        url.searchParams.set("dietex_update_check", Date.now().toString());
+        const response = await fetch(url.toString(), {
+          cache: "reload",
+          headers: {
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+          },
         });
         if (!response.ok) return;
         const nextSignature = getHtmlBuildSignature(await response.text());
         if (nextSignature && nextSignature !== currentSignature) {
-          window.location.reload();
+          reloadStarted = true;
+          reloadWithCacheBuster();
         }
       } catch {
         // Offline or temporary network issue: keep the current screen running.
       }
     }
 
-    const interval = window.setInterval(checkForAppUpdate, 60000);
+    checkForAppUpdate();
+    const interval = window.setInterval(checkForAppUpdate, 10000);
     const onVisibilityChange = () => {
       if (!document.hidden) checkForAppUpdate();
     };
+    const onUserReturns = () => checkForAppUpdate();
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("focus", onUserReturns);
+    window.addEventListener("online", onUserReturns);
+    window.addEventListener("pointerdown", onUserReturns);
+    window.addEventListener("touchstart", onUserReturns);
 
     return () => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("focus", onUserReturns);
+      window.removeEventListener("online", onUserReturns);
+      window.removeEventListener("pointerdown", onUserReturns);
+      window.removeEventListener("touchstart", onUserReturns);
     };
   }, []);
 
