@@ -394,6 +394,8 @@ function App() {
   const [info, setInfo] = useState("");
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [excludedOrderArticles, setExcludedOrderArticles] = useState({});
+  const [takeoverBusy, setTakeoverBusy] = useState(false);
+  const [takeoverMessage, setTakeoverMessage] = useState("");
 
   const [stationSearch, setStationSearch] = useState("");
   const [masterSearch, setMasterSearch] = useState("");
@@ -610,14 +612,19 @@ function App() {
       const [c, o, co, h, s] = await Promise.all([
         safeSupabaseQuery("customers", () => supabase.from("customers").select("*").order("customer_number")),
         safeSupabaseQuery("orders", () =>
-          supabase.from("orders").select("*").order("sort_order", { ascending: true }).order("created_at", { ascending: true })
+          supabase
+            .from("orders")
+            .select("*")
+            .neq("status", "archiviert")
+            .order("sort_order", { ascending: true })
+            .order("created_at", { ascending: true })
         ),
         safeSupabaseQuery("containers", () => supabase.from("containers").select("*").is("removed_at", null).order("row_number").order("place_number")),
         safeSupabaseQuery("order_history", () => supabase.from("order_history").select("*").order("completed_at", { ascending: false })),
         safeSupabaseQuery("customer_article_settings", () => supabase.from("customer_article_settings").select("*")),
       ]);
 
-      const activeOrders = (o.data || []).filter((x) => x.status !== "archiviert");
+      const activeOrders = o.data || [];
 
       if (!c.error) setCustomers(c.data || []);
       if (!o.error) setOrders(activeOrders);
@@ -628,7 +635,7 @@ function App() {
       if (o.error) return;
 
       const result = await loadOrderCategoriesForOrders(activeOrders.map((order) => order.id), setItems);
-      if ((result.data || []).length) setItems(result.data || []);
+      setItems(result.data || []);
     } finally {
       loadAllRunning.current = false;
       if (loadAllQueued.current) {
@@ -954,6 +961,10 @@ function App() {
   }
 
   async function addOrder() {
+    if (takeoverBusy) return;
+    setTakeoverBusy(true);
+    setTakeoverMessage("Uebernahme laeuft...");
+    try {
     const number = customerNumber.trim();
     const name = customerName.trim();
     const orderRows = selectedOrderRows();
@@ -1100,7 +1111,15 @@ function App() {
     setInfo("");
     setSelectedCategories([]);
     setExcludedOrderArticles({});
+    setTakeoverMessage("Kunde wurde uebernommen.");
     loadAll();
+    } catch (error) {
+      const message = error?.message || String(error);
+      setTakeoverMessage("Uebernahme fehlgeschlagen: " + message);
+      alert("Uebernahme fehlgeschlagen: " + message);
+    } finally {
+      setTakeoverBusy(false);
+    }
   }
 
   async function toggleItem(item) {
@@ -2698,6 +2717,11 @@ const tourColumns = Object.entries(
                 Kunde übernehmen
               </button>
             </div>
+            {takeoverMessage && (
+              <div className="mx-auto mt-3 max-w-xl rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-center text-sm font-bold text-blue-900">
+                {takeoverMessage}
+              </div>
+            )}
 
             <div className="mt-5 rounded-2xl border bg-slate-50 p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
