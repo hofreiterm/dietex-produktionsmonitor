@@ -985,7 +985,16 @@ function App() {
     );
 
     if (existingOrder) {
-      const existingItems = items.filter((i) => i.order_id === existingOrder.id);
+      const { data: existingItemsData, error: existingItemsError } = await supabase
+        .from("order_categories")
+        .select("subcategory")
+        .eq("order_id", existingOrder.id);
+
+      if (existingItemsError) {
+        return alert("Bestehende Artikel konnten nicht geprueft werden: " + existingItemsError.message);
+      }
+
+      const existingItems = existingItemsData || [];
       const existingSubcategories = new Set(existingItems.map((i) => i.subcategory));
 
       const rowsToAdd = orderRows
@@ -993,7 +1002,8 @@ function App() {
         .map((row) => ({ order_id: existingOrder.id, category: row.category, subcategory: row.subcategory }));
 
       if (rowsToAdd.length) {
-        await supabase.from("order_categories").insert(rowsToAdd);
+        const { error: itemsError } = await supabase.from("order_categories").insert(rowsToAdd);
+        if (itemsError) return alert("Artikel konnten nicht hinzugefuegt werden: " + itemsError.message);
       }
 
       const existingContainerTypes = new Set(
@@ -1008,7 +1018,7 @@ function App() {
         const slots = findFreeSlots(newContainerPlan.length);
         if (!slots) return alert("Kein freier Containerplatz verfügbar.");
 
-        await supabase.from("containers").insert(
+        const { error: containerError } = await supabase.from("containers").insert(
           newContainerPlan.map((p, idx) => ({
             order_id: existingOrder.id,
             container_type: p.type,
@@ -1017,6 +1027,7 @@ function App() {
             status: "bearbeitung",
           }))
         );
+        if (containerError) return alert("Container konnten nicht angelegt werden: " + containerError.message);
       }
 
       if (info.trim()) {
@@ -1024,7 +1035,12 @@ function App() {
           ? `${existingOrder.info} | ${info.trim()}`
           : info.trim();
 
-        await supabase.from("orders").update({ info: mergedInfo }).eq("id", existingOrder.id);
+        const { error: infoError } = await supabase.from("orders").update({ info: mergedInfo }).eq("id", existingOrder.id);
+        if (infoError) return alert("Info konnte nicht gespeichert werden: " + infoError.message);
+      }
+
+      if (!rowsToAdd.length && !newContainerPlan.length && !info.trim()) {
+        alert("Dieser Kunde ist heute mit diesen Artikelgruppen bereits uebernommen.");
       }
 
       setCustomerSearch("");
@@ -1060,10 +1076,13 @@ function App() {
     if (error) return alert("Auftrag konnte nicht erstellt werden: " + error.message);
 
     const rows = orderRows.map((row) => ({ order_id: order.id, category: row.category, subcategory: row.subcategory }));
-    if (rows.length) await supabase.from("order_categories").insert(rows);
+    if (rows.length) {
+      const { error: itemError } = await supabase.from("order_categories").insert(rows);
+      if (itemError) return alert("Artikel konnten nicht erstellt werden: " + itemError.message);
+    }
 
     if (plan.length) {
-      await supabase.from("containers").insert(
+      const { error: containerError } = await supabase.from("containers").insert(
         plan.map((p, idx) => ({
           order_id: order.id,
           container_type: p.type,
@@ -1072,6 +1091,7 @@ function App() {
           status: "bearbeitung",
         }))
       );
+      if (containerError) return alert("Container konnten nicht erstellt werden: " + containerError.message);
     }
 
     setCustomerSearch("");
