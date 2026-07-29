@@ -405,6 +405,7 @@ function App() {
   const [leitungStatusFilter, setLeitungStatusFilter] = useState("alle");
   const [leitungDateFrom, setLeitungDateFrom] = useState(fmtDateInput());
   const [leitungDateTo, setLeitungDateTo] = useState(fmtDateInput());
+  const [leitungSort, setLeitungSort] = useState("customer_asc");
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
 
@@ -1617,6 +1618,110 @@ const tourColumns = Object.entries(
     return { key: "uebernommen", label: "Uebernommen", changedAt: order.created_at, className: "bg-yellow-100 text-yellow-800 border-yellow-300" };
   }
 
+  async function archiveProductionOrder(order) {
+    if (!window.confirm(`${order.customer_number} ${order.customer_name} wirklich ausblenden/archivieren?`)) return;
+
+    const now = new Date().toISOString();
+    const { error } = await supabase.from("orders").update({ status: "archiviert", completed_at: now }).eq("id", order.id);
+    if (error) {
+      alert("Auftrag konnte nicht archiviert werden: " + error.message);
+      return;
+    }
+
+    await supabase.from("containers").update({ removed_at: now }).eq("order_id", order.id).is("removed_at", null);
+    setOrders((prev) => prev.filter((o) => o.id !== order.id));
+    setContainers((prev) => prev.filter((c) => c.order_id !== order.id));
+    scheduleLoadAll(1000);
+  }
+
+  async function changeProductionStatus(order, nextStatus) {
+    const enabled = enabledItemsForOrder(order);
+    const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
+    const washRelevant = laundryEnabled.filter((i) => WASH_CATEGORIES.includes(i.category));
+    const now = new Date().toISOString();
+
+    if (nextStatus === "uebernommen") {
+      if (!window.confirm(`${order.customer_number} ${order.customer_name} auf Uebernommen zuruecksetzen? Verpackt/Fertig/Tour wird zurueckgenommen.`)) return;
+
+      const { error: orderError } = await supabase
+        .from("orders")
+        .update({ status: "uebernommen", completed_at: null, container_count: null, tour_number: null })
+        .eq("id", order.id);
+      if (orderError) {
+        alert("Status konnte nicht geaendert werden: " + orderError.message);
+        return;
+      }
+
+      if (enabled.length) {
+        const { error: itemError } = await supabase
+          .from("order_categories")
+          .update({ is_done: false, done_at: null })
+          .in("id", enabled.map((i) => i.id));
+        if (itemError) {
+          alert("Artikelstatus konnte nicht geaendert werden: " + itemError.message);
+          return;
+        }
+      }
+
+      await supabase.from("containers").update({ removed_at: null }).eq("order_id", order.id);
+    }
+
+    if (nextStatus === "gewaschen") {
+      const missingWash = washRelevant.filter((i) => !i.washed_at);
+      const { error: orderError } = await supabase.from("orders").update({ status: "uebernommen" }).eq("id", order.id);
+      if (orderError) {
+        alert("Status konnte nicht geaendert werden: " + orderError.message);
+        return;
+      }
+
+      if (missingWash.length) {
+        const { error: itemError } = await supabase
+          .from("order_categories")
+          .update({ washed_at: now })
+          .in("id", missingWash.map((i) => i.id));
+        if (itemError) {
+          alert("Waschstatus konnte nicht geaendert werden: " + itemError.message);
+          return;
+        }
+      }
+    }
+
+    if (nextStatus === "fertig") {
+      const openItems = laundryEnabled.filter((i) => !i.is_done);
+      const { error: orderError } = await supabase.from("orders").update({ status: "fertig", completed_at: now }).eq("id", order.id);
+      if (orderError) {
+        alert("Status konnte nicht geaendert werden: " + orderError.message);
+        return;
+      }
+
+      if (openItems.length) {
+        const { error: itemError } = await supabase
+          .from("order_categories")
+          .update({ is_done: true, done_at: now })
+          .in("id", openItems.map((i) => i.id));
+        if (itemError) {
+          alert("Artikelstatus konnte nicht geaendert werden: " + itemError.message);
+          return;
+        }
+      }
+    }
+
+    if (nextStatus === "auf_tour") {
+      const { error } = await supabase
+        .from("orders")
+        .update({ status: "auf_tour", completed_at: now, container_count: null, tour_number: null })
+        .eq("id", order.id);
+      if (error) {
+        alert("Status konnte nicht geaendert werden: " + error.message);
+        return;
+      }
+
+      await supabase.from("containers").update({ removed_at: now }).eq("order_id", order.id).is("removed_at", null);
+    }
+
+    await loadAll();
+  }
+
   const productionRows = sortedOrders
     .map((order) => ({ order, status: getCustomerProductionStatusWithTime(order), details: getCustomerStatusDetails(order) }))
     .filter(({ status }) => {
@@ -1628,6 +1733,11 @@ const tourColumns = Object.entries(
       return dateKey >= from && dateKey <= to;
     })
     .sort((a, b) => {
+      if (leitungSort === "customer_asc" || leitungSort === "customer_desc") {
+        const result = String(a.order.customer_number).localeCompare(String(b.order.customer_number), "de", { numeric: true });
+        if (result !== 0) return leitungSort === "customer_asc" ? result : -result;
+      }
+
       const aTime = a.status.changedAt ? new Date(a.status.changedAt).getTime() : 0;
       const bTime = b.status.changedAt ? new Date(b.status.changedAt).getTime() : 0;
       if (aTime !== bTime) return bTime - aTime;
@@ -3311,6 +3421,18 @@ const tourColumns = Object.entries(
                     <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Bis</label>
                     <Input type="date" value={leitungDateTo} onChange={(e) => setLeitungDateTo(e.target.value)} />
                   </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Sortierung</label>
+                    <select
+                      className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold"
+                      value={leitungSort}
+                      onChange={(e) => setLeitungSort(e.target.value)}
+                    >
+                      <option value="customer_asc">Kundennummer aufsteigend</option>
+                      <option value="customer_desc">Kundennummer absteigend</option>
+                      <option value="status_time">Letzter Status zuerst</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -3327,6 +3449,7 @@ const tourColumns = Object.entries(
                       <th className="p-3">Container/Packerl</th>
                       <th className="p-3">Zusatz</th>
                       <th className="p-3">Tour</th>
+                      <th className="p-3">Korrektur</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3362,11 +3485,32 @@ const tourColumns = Object.entries(
                             </span>
                           ) : "-"}
                         </td>
+                        <td className="p-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <select
+                              className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold"
+                              value={status.key}
+                              onChange={(e) => changeProductionStatus(order, e.target.value)}
+                            >
+                              <option value="uebernommen">Uebernommen</option>
+                              <option value="gewaschen">Gewaschen</option>
+                              <option value="fertig">Fertig</option>
+                              <option value="auf_tour">Auf der Tour</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => archiveProductionOrder(order)}
+                              className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 hover:bg-red-100"
+                            >
+                              Archivieren
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                     {!productionRows.length && (
                       <tr>
-                        <td className="p-6 text-center font-semibold text-slate-500" colSpan="9">
+                        <td className="p-6 text-center font-semibold text-slate-500" colSpan="10">
                           Keine Kunden im gewaehlten Zeitraum.
                         </td>
                       </tr>
