@@ -1202,7 +1202,7 @@ function App() {
     }
 
     setItems((prev) => prev.map((item) => (relatedIds.includes(item.id) ? { ...item, washed_at: washedAt } : item)));
-    loadAll();
+    scheduleLoadAll(5000);
   }
 
   async function moveOrder(order, direction) {
