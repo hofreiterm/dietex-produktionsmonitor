@@ -552,7 +552,7 @@ function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       setTick(Date.now());
-      autoArchiveFinishedAt2330();
+      autoMoveFinishedToTourAtMidnight();
     }, 1000);
     return () => clearInterval(interval);
   }, [orders, items]);
@@ -779,11 +779,17 @@ function App() {
     });
   }
 
-  async function autoArchiveFinishedAt2330() {
-    const now = new Date();
-    const todayKey = now.toISOString().slice(0, 10);
-    if (now.getHours() === 23 && now.getMinutes() === 30 && localStorage.getItem("dietexAutoArchive") !== todayKey) {
-      localStorage.setItem("dietexAutoArchive", todayKey);
+  async function autoMoveFinishedToTourAtMidnight() {
+    const todayKey = localDateKey();
+    const lastRunKey = localStorage.getItem("dietexAutoTourMidnightDate");
+
+    if (!lastRunKey) {
+      localStorage.setItem("dietexAutoTourMidnightDate", todayKey);
+      return;
+    }
+
+    if (lastRunKey !== todayKey) {
+      localStorage.setItem("dietexAutoTourMidnightDate", todayKey);
       await archiveFinishedOrders();
     }
   }
@@ -797,56 +803,45 @@ function App() {
     const ids = orderIds || finished.map((o) => o.id);
     if (!ids.length) return;
 
-    ids.forEach((id) => {
-      if (finishedTimers.current[id]) {
-        window.clearTimeout(finishedTimers.current[id]);
-        delete finishedTimers.current[id];
-        setPendingFinishedOrders((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        return;
-      }
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        status: "auf_tour",
+        container_count: null,
+        tour_number: null,
+      })
+      .in("id", ids);
 
-      setPendingFinishedOrders((prev) => ({ ...prev, [id]: true }));
-      finishedTimers.current[id] = window.setTimeout(async () => {
-        await supabase
-          .from("orders")
-          .update({
-            status: "auf_tour",
-            container_count: null,
-            tour_number: null,
-          })
-          .eq("id", id);
+    if (error) {
+      alert("Kunde konnte nicht auf Tour gesetzt werden: " + error.message);
+      return;
+    }
 
-        await supabase
-          .from("containers")
-          .update({ removed_at: new Date().toISOString() })
-          .eq("order_id", id);
+    await supabase
+      .from("containers")
+      .update({ removed_at: now })
+      .in("order_id", ids);
 
-        setOrders((prev) =>
-          prev.map((o) =>
-            o.id === id
-              ? {
-                  ...o,
-                  status: "auf_tour",
-                  container_count: null,
-                  tour_number: null,
-                }
-              : o
-          )
-        );
-        setContainers((prev) => prev.filter((c) => c.order_id !== id));
-        setPendingFinishedOrders((prev) => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        delete finishedTimers.current[id];
-        scheduleLoadAll(15000);
-      }, 5000);
+    setOrders((prev) =>
+      prev.map((o) =>
+        ids.includes(o.id)
+          ? {
+              ...o,
+              status: "auf_tour",
+              container_count: null,
+              tour_number: null,
+            }
+          : o
+      )
+    );
+    setContainers((prev) => prev.filter((c) => !ids.includes(c.order_id)));
+    setPendingFinishedOrders((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => delete next[id]);
+      return next;
     });
+    scheduleLoadAll(1000);
   }
 
   async function confirmTourModal() {
@@ -1190,39 +1185,24 @@ function App() {
   }
 
   async function washCategory(order, category) {
-    const washKey = getWashKey(order.id, category);
-
-    if (pendingWash[washKey]) {
-      clearTimeout(washTimers.current[washKey]);
-      delete washTimers.current[washKey];
-      setPendingWash((prev) => {
-        const next = { ...prev };
-        delete next[washKey];
-        return next;
-      });
-      return;
-    }
-
     const relatedIds = items
       .filter((i) => i.order_id === order.id && i.category === category && !i.washed_at)
       .map((i) => i.id);
     if (!relatedIds.length) return;
 
-    setPendingWash((prev) => ({ ...prev, [washKey]: true }));
-    washTimers.current[washKey] = window.setTimeout(async () => {
-      await supabase
-        .from("order_categories")
-        .update({ washed_at: new Date().toISOString() })
-        .in("id", relatedIds);
+    const washedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from("order_categories")
+      .update({ washed_at: washedAt })
+      .in("id", relatedIds);
 
-      delete washTimers.current[washKey];
-      setPendingWash((prev) => {
-        const next = { ...prev };
-        delete next[washKey];
-        return next;
-      });
-      loadAll();
-    }, 5000);
+    if (error) {
+      alert("Waschstatus konnte nicht gespeichert werden: " + error.message);
+      return;
+    }
+
+    setItems((prev) => prev.map((item) => (relatedIds.includes(item.id) ? { ...item, washed_at: washedAt } : item)));
+    loadAll();
   }
 
   async function moveOrder(order, direction) {
