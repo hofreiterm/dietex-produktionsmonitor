@@ -481,14 +481,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== "monitor") return undefined;
-
-    scheduleLoadAll(0);
-    const interval = window.setInterval(() => scheduleLoadAll(0), 10000);
-    return () => window.clearInterval(interval);
-  }, [view]);
-
-  useEffect(() => {
     const currentScript = document.querySelector('script[type="module"][src*="/assets/index-"]');
     const currentSignature = currentScript ? new URL(currentScript.src).pathname : "";
     let reloadStarted = false;
@@ -508,6 +500,9 @@ function App() {
         if (!response.ok) return;
         const nextSignature = getHtmlBuildSignature(await response.text());
         if (nextSignature && nextSignature !== currentSignature) {
+          const lastReloadAt = Number(sessionStorage.getItem("dietexLastAutoReloadAt") || "0");
+          if (Date.now() - lastReloadAt < 10 * 60 * 1000) return;
+          sessionStorage.setItem("dietexLastAutoReloadAt", Date.now().toString());
           reloadStarted = true;
           reloadWithCacheBuster();
         }
@@ -517,7 +512,7 @@ function App() {
     }
 
     checkForAppUpdate();
-    const interval = window.setInterval(checkForAppUpdate, 10000);
+    const interval = window.setInterval(checkForAppUpdate, 60000);
     const onVisibilityChange = () => {
       if (!document.hidden) checkForAppUpdate();
     };
@@ -649,7 +644,7 @@ function App() {
 
       if (o.error) return;
 
-      const result = await loadOrderCategoriesForOrders(activeOrders.map((order) => order.id), setItems);
+      const result = await loadOrderCategoriesForOrders(activeOrders.map((order) => order.id));
       setItems(result.data || []);
     } finally {
       loadAllRunning.current = false;
