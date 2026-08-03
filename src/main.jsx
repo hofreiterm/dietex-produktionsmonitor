@@ -460,6 +460,7 @@ function App() {
   const washTimers = useRef({});
   const finishedTimers = useRef({});
   const reloadTimer = useRef(null);
+  const reloadDueAt = useRef(0);
   const loadAllRunning = useRef(false);
   const loadAllQueued = useRef(false);
 
@@ -467,10 +468,10 @@ function App() {
     scheduleLoadAll(0);
     const channel = supabase
       .channel("dietex-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => scheduleLoadAll(15000))
-      .on("postgres_changes", { event: "*", schema: "public", table: "order_categories" }, () => scheduleLoadAll(15000))
-      .on("postgres_changes", { event: "*", schema: "public", table: "containers" }, () => scheduleLoadAll(15000))
-      .on("postgres_changes", { event: "*", schema: "public", table: "customer_article_settings" }, () => scheduleLoadAll(15000))
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => scheduleLoadAll(2000))
+      .on("postgres_changes", { event: "*", schema: "public", table: "order_categories" }, () => scheduleLoadAll(2000))
+      .on("postgres_changes", { event: "*", schema: "public", table: "containers" }, () => scheduleLoadAll(2000))
+      .on("postgres_changes", { event: "*", schema: "public", table: "customer_article_settings" }, () => scheduleLoadAll(2000))
       .subscribe();
 
     return () => {
@@ -478,6 +479,14 @@ function App() {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  useEffect(() => {
+    if (view !== "monitor") return undefined;
+
+    scheduleLoadAll(0);
+    const interval = window.setInterval(() => scheduleLoadAll(0), 10000);
+    return () => window.clearInterval(interval);
+  }, [view]);
 
   useEffect(() => {
     const currentScript = document.querySelector('script[type="module"][src*="/assets/index-"]');
@@ -595,9 +604,14 @@ function App() {
   }
 
   function scheduleLoadAll(delay = 15000) {
+    const dueAt = Date.now() + delay;
+    if (reloadTimer.current && reloadDueAt.current <= dueAt) return;
+
     if (reloadTimer.current) window.clearTimeout(reloadTimer.current);
+    reloadDueAt.current = dueAt;
     reloadTimer.current = window.setTimeout(() => {
       reloadTimer.current = null;
+      reloadDueAt.current = 0;
       loadAll();
     }, delay);
   }
@@ -641,7 +655,7 @@ function App() {
       loadAllRunning.current = false;
       if (loadAllQueued.current) {
         loadAllQueued.current = false;
-        scheduleLoadAll(15000);
+        scheduleLoadAll(1000);
       }
     }
   }
