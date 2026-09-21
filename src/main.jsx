@@ -164,13 +164,24 @@ const PUTZEREI_GROUPS = [
 
 function normalizePersonnelSections(sections, fallback) {
   const source = Array.isArray(sections) && sections.length ? sections : fallback;
-  return source.map((section) => ({
-    ...section,
-    target: Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
+  return source.map((section) => {
+    const baseTarget = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
       shift.key,
       section.target?.[shift.key] ?? section.target?.default ?? (section.target?.flexible ? null : 0),
-    ])),
-  }));
+    ]));
+
+    return {
+      ...section,
+      target: baseTarget,
+      targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
+        strength.key,
+        Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
+          shift.key,
+          section.targetsByStrength?.[strength.key]?.[shift.key] ?? baseTarget[shift.key],
+        ])),
+      ])),
+    };
+  });
 }
 
 const PUTZEREI_SECTION_ALIASES = {
@@ -1920,7 +1931,10 @@ const tourColumns = Object.entries(
 
   const getSectionTarget = (section) => {
     if (section.target.flexible) return null;
-    const shiftTarget = section.target?.[personalShift];
+    const strengthTargets = section.targetsByStrength?.[getPersonnelDayStrength()];
+    const shiftTarget = strengthTargets && Object.prototype.hasOwnProperty.call(strengthTargets, personalShift)
+      ? strengthTargets[personalShift]
+      : section.target?.[personalShift];
     if (shiftTarget === null || shiftTarget === "") return null;
     return Number(shiftTarget ?? section.target?.default ?? 0);
   };
@@ -2068,19 +2082,33 @@ const tourColumns = Object.entries(
   const openPersonnelDepartmentEditor = () => {
     setDepartmentDraft(currentSections().map((section) => ({
       name: section.name,
-      target: Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [shift.key, section.target?.[shift.key] ?? ""])),
+      targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
+        strength.key,
+        Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
+          shift.key,
+          section.targetsByStrength?.[strength.key]?.[shift.key] ?? section.target?.[shift.key] ?? "",
+        ])),
+      ])),
     })));
     setPersonnelDepartmentModal(true);
   };
 
   const savePersonnelDepartments = () => {
-    const cleaned = departmentDraft.map((section) => ({
-      name: section.name.trim(),
-      target: Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => {
-        const rawValue = section.target?.[shift.key];
-        return [shift.key, rawValue === "" || rawValue === null ? null : Number(rawValue)];
-      })),
-    }));
+    const cleaned = departmentDraft.map((section) => {
+      const targetsByStrength = Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
+        strength.key,
+        Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => {
+          const rawValue = section.targetsByStrength?.[strength.key]?.[shift.key];
+          return [shift.key, rawValue === "" || rawValue === null ? null : Number(rawValue)];
+        })),
+      ]));
+
+      return {
+        name: section.name.trim(),
+        target: { ...targetsByStrength.mittel },
+        targetsByStrength,
+      };
+    });
 
     if (cleaned.some((section) => !section.name)) {
       window.alert("Jede Abteilung benötigt einen Namen.");
@@ -2090,7 +2118,9 @@ const tourColumns = Object.entries(
       window.alert("Jeder Abteilungsname darf nur einmal vorkommen.");
       return;
     }
-    if (cleaned.some((section) => Object.values(section.target).some((value) => value !== null && (!Number.isFinite(value) || value < 0)))) {
+    if (cleaned.some((section) => Object.values(section.targetsByStrength).some((targets) =>
+      Object.values(targets).some((value) => value !== null && (!Number.isFinite(value) || value < 0))
+    ))) {
       window.alert("Soll-Personen bitte als positive Zahl oder 0 eingeben.");
       return;
     }
@@ -3258,33 +3288,50 @@ const tourColumns = Object.entries(
             </div>
 
             <div className="overflow-auto p-5">
-              <div className="min-w-[720px] overflow-hidden rounded-xl border">
-                <div className="grid grid-cols-[1fr_150px_150px_150px] bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">
-                  <div>Name</div>
-                  {PERSONNEL_SHIFTS.map((shift, index) => <div key={shift.key}>Soll {index + 1}. Schicht</div>)}
-                </div>
+              <div className="grid gap-3">
                 {departmentDraft.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="grid grid-cols-[1fr_150px_150px_150px] gap-2 border-t p-2">
-                    <Input
-                      className="w-full"
-                      value={section.name}
-                      onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, name: event.target.value } : entry))}
-                    />
-                    {PERSONNEL_SHIFTS.map((shift) => (
+                  <div key={sectionIndex} className="rounded-xl border bg-slate-50 p-3">
+                    <label className="mb-3 block text-xs font-black text-slate-600">
+                      Abteilungsname
                       <Input
-                        key={shift.key}
-                        type="number"
-                        min="0"
-                        step="1"
-                        className="w-full text-center"
-                        placeholder="bei Bedarf"
-                        value={section.target?.[shift.key] ?? ""}
-                        onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? {
-                          ...entry,
-                          target: { ...entry.target, [shift.key]: event.target.value },
-                        } : entry))}
+                        className="mt-1 w-full bg-white"
+                        value={section.name}
+                        onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, name: event.target.value } : entry))}
                       />
-                    ))}
+                    </label>
+
+                    <div className="min-w-[650px] overflow-hidden rounded-lg border bg-white">
+                      <div className="grid grid-cols-[130px_1fr_1fr_1fr] bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">
+                        <div>Tagesstärke</div>
+                        {PERSONNEL_SHIFTS.map((shift, index) => <div key={shift.key}>Soll {index + 1}. Schicht</div>)}
+                      </div>
+                      {PERSONNEL_DAY_STRENGTHS.map((strength) => (
+                        <div key={strength.key} className="grid grid-cols-[130px_1fr_1fr_1fr] items-center gap-2 border-t p-2">
+                          <div className="text-sm font-black">{strength.label}</div>
+                          {PERSONNEL_SHIFTS.map((shift) => (
+                            <Input
+                              key={shift.key}
+                              type="number"
+                              min="0"
+                              step="1"
+                              className="w-full text-center"
+                              placeholder="bei Bedarf"
+                              value={section.targetsByStrength?.[strength.key]?.[shift.key] ?? ""}
+                              onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? {
+                                ...entry,
+                                targetsByStrength: {
+                                  ...entry.targetsByStrength,
+                                  [strength.key]: {
+                                    ...entry.targetsByStrength?.[strength.key],
+                                    [shift.key]: event.target.value,
+                                  },
+                                },
+                              } : entry))}
+                            />
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
