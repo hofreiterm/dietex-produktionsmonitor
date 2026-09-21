@@ -205,6 +205,38 @@ const PUTZEREI_EMPLOYEES = [
   { name: "Andrea P.", hours: 40 },
 ];
 
+const PERSONNEL_WEEKDAYS = [
+  { key: 1, label: "Montag", short: "Mo" },
+  { key: 2, label: "Dienstag", short: "Di" },
+  { key: 3, label: "Mittwoch", short: "Mi" },
+  { key: 4, label: "Donnerstag", short: "Do" },
+  { key: 5, label: "Freitag", short: "Fr" },
+];
+
+const EMPTY_EMPLOYEE_FORM = {
+  name: "",
+  hours: "",
+  preferredWorkplace1: "",
+  preferredWorkplace2: "",
+  regularHours: "",
+  regularDays: [1, 2, 3, 4, 5],
+};
+
+function normalizePersonnelEmployee(employee) {
+  return {
+    ...employee,
+    preferredWorkplace1: employee?.preferredWorkplace1 || "",
+    preferredWorkplace2: employee?.preferredWorkplace2 || "",
+    regularHours: employee?.regularHours || "",
+    regularDays: Array.isArray(employee?.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5],
+  };
+}
+
+function normalizePersonnelEmployees(employees, fallback) {
+  const source = Array.isArray(employees) && employees.length ? employees : fallback;
+  return source.map(normalizePersonnelEmployee);
+}
+
 const PERSONNEL_DEPARTMENTS = {
   waescherei: {
     label: "Wäscherei",
@@ -454,25 +486,29 @@ function App() {
     }
   });
   const [dragEmployee, setDragEmployee] = useState(null);
+  const [selectedPersonnelEmployee, setSelectedPersonnelEmployee] = useState(null);
   const [personnelEmployeesByDept, setPersonnelEmployeesByDept] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("dietexPersonnelEmployeesByDept") || "null");
       if (saved && typeof saved === "object") {
         return {
-          waescherei: Array.isArray(saved.waescherei) && saved.waescherei.length ? saved.waescherei : PERSONNEL_EMPLOYEES,
-          putzerei: Array.isArray(saved.putzerei) && saved.putzerei.length ? saved.putzerei : PUTZEREI_EMPLOYEES,
+          waescherei: normalizePersonnelEmployees(saved.waescherei, PERSONNEL_EMPLOYEES),
+          putzerei: normalizePersonnelEmployees(saved.putzerei, PUTZEREI_EMPLOYEES),
         };
       }
     } catch {}
     return {
-      waescherei: PERSONNEL_EMPLOYEES,
-      putzerei: PUTZEREI_EMPLOYEES,
+      waescherei: normalizePersonnelEmployees(PERSONNEL_EMPLOYEES, PERSONNEL_EMPLOYEES),
+      putzerei: normalizePersonnelEmployees(PUTZEREI_EMPLOYEES, PUTZEREI_EMPLOYEES),
     };
   });
   const [newEmployeeName, setNewEmployeeName] = useState("");
   const [newEmployeeHours, setNewEmployeeHours] = useState("");
   const [exchangeEmployeeName, setExchangeEmployeeName] = useState("");
   const [exchangeTargetDept, setExchangeTargetDept] = useState("putzerei");
+  const [personnelEmployeeModal, setPersonnelEmployeeModal] = useState(false);
+  const [editingEmployeeName, setEditingEmployeeName] = useState(null);
+  const [employeeForm, setEmployeeForm] = useState(EMPTY_EMPLOYEE_FORM);
 
   const [tourModal, setTourModal] = useState(null);
   const [tourContainerCount, setTourContainerCount] = useState("");
@@ -569,6 +605,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelEmployeesByDept", JSON.stringify(personnelEmployeesByDept));
   }, [personnelEmployeesByDept]);
+
+  useEffect(() => {
+    setSelectedPersonnelEmployee(null);
+    setDragEmployee(null);
+  }, [personalDepartment, personalDate, personalShift]);
 
   useEffect(() => {
     return () => {
@@ -1784,10 +1825,10 @@ const tourColumns = Object.entries(
       const maximum = section ? getSectionTarget(section) : null;
       const assigned = getEmployeesInSection(sectionName);
 
-      if (getEmployeeAssignment(employeeName) === sectionName) return;
+      if (getEmployeeAssignment(employeeName) === sectionName) return true;
       if (maximum !== null && assigned.length >= maximum) {
         window.alert(`${sectionName} ist bereits voll (maximal ${maximum} ${maximum === 1 ? "Person" : "Personen"}).`);
-        return;
+        return false;
       }
     }
 
@@ -1808,6 +1849,18 @@ const tourColumns = Object.entries(
 
       return { ...prev, [key]: next };
     });
+    return true;
+  };
+
+  const selectPersonnelEmployee = (employeeName) => {
+    setSelectedPersonnelEmployee((current) => current === employeeName ? null : employeeName);
+  };
+
+  const assignSelectedPersonnelEmployee = (sectionName) => {
+    if (!selectedPersonnelEmployee) return;
+    if (setEmployeeToSection(selectedPersonnelEmployee, sectionName)) {
+      setSelectedPersonnelEmployee(null);
+    }
   };
 
   const getSectionTarget = (section) => {
@@ -1834,13 +1887,126 @@ const tourColumns = Object.entries(
     setEmployeeStatus((prev) => ({ ...prev, [`${personalDepartment}_${name}`]: next }));
   };
 
-  const getActiveEmployees = () => currentEmployees().filter((e) => getEmployeeStatus(e.name) === "anwesend");
+  const getPersonalWeekday = () => new Date(`${personalDate}T12:00:00`).getDay();
+
+  const isEmployeeRegularDay = (employee) => {
+    const days = Array.isArray(employee.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5];
+    return days.includes(getPersonalWeekday());
+  };
+
+  const getActiveEmployees = () => currentEmployees().filter(
+    (employee) => getEmployeeStatus(employee.name) === "anwesend"
+  );
 
   const getSortedEmployees = (list) =>
     [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), "de", { numeric: true }));
 
   const getUnassignedEmployees = () =>
     getSortedEmployees(getActiveEmployees().filter((e) => !getEmployeeAssignment(e.name)));
+
+  const getEmployeeAssignmentStats = (employeeName) => {
+    const counts = {};
+    Object.entries(personalPlan)
+      .filter(([key]) => key.startsWith(`${personalDepartment}_`))
+      .forEach(([, plan]) => {
+        currentSections().forEach((section) => {
+          if ((plan?.[section.name] || []).includes(employeeName)) {
+            counts[section.name] = (counts[section.name] || 0) + 1;
+          }
+        });
+      });
+
+    return Object.entries(counts)
+      .map(([section, count]) => ({ section, count }))
+      .sort((a, b) => b.count - a.count || a.section.localeCompare(b.section, "de"));
+  };
+
+  const openPersonnelEmployeeEditor = (employeeName = null) => {
+    const employee = employeeName ? currentEmployees().find((entry) => entry.name === employeeName) : null;
+    setEditingEmployeeName(employee?.name || null);
+    setEmployeeForm(employee ? {
+      name: employee.name,
+      hours: employee.hours ?? "",
+      preferredWorkplace1: employee.preferredWorkplace1 || "",
+      preferredWorkplace2: employee.preferredWorkplace2 || "",
+      regularHours: employee.regularHours || "",
+      regularDays: Array.isArray(employee.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5],
+    } : { ...EMPTY_EMPLOYEE_FORM, regularDays: [...EMPTY_EMPLOYEE_FORM.regularDays] });
+    setPersonnelEmployeeModal(true);
+  };
+
+  const resetPersonnelEmployeeForm = () => {
+    setEditingEmployeeName(null);
+    setEmployeeForm({ ...EMPTY_EMPLOYEE_FORM, regularDays: [...EMPTY_EMPLOYEE_FORM.regularDays] });
+  };
+
+  const savePersonnelEmployee = () => {
+    const name = employeeForm.name.trim();
+    const hoursText = String(employeeForm.hours ?? "").trim();
+    const hours = hoursText === "" ? "" : Number(hoursText);
+
+    if (!name) {
+      window.alert("Bitte Namen eingeben.");
+      return;
+    }
+    if (hoursText !== "" && Number.isNaN(hours)) {
+      window.alert("Wochenstunden bitte als Zahl eingeben.");
+      return;
+    }
+    if (employeeForm.preferredWorkplace1 && employeeForm.preferredWorkplace1 === employeeForm.preferredWorkplace2) {
+      window.alert("Bitte zwei unterschiedliche Lieblingsarbeitsplätze auswählen.");
+      return;
+    }
+    if (!employeeForm.regularDays.length) {
+      window.alert("Bitte mindestens einen Stamm-Arbeitstag auswählen.");
+      return;
+    }
+    if (currentEmployees().some((employee) => employee.name.toLowerCase() === name.toLowerCase() && employee.name !== editingEmployeeName)) {
+      window.alert("Dieser Mitarbeiter existiert bereits.");
+      return;
+    }
+
+    const savedEmployee = normalizePersonnelEmployee({
+      name,
+      hours,
+      preferredWorkplace1: employeeForm.preferredWorkplace1,
+      preferredWorkplace2: employeeForm.preferredWorkplace2,
+      regularHours: employeeForm.regularHours.trim(),
+      regularDays: [...employeeForm.regularDays].sort(),
+    });
+
+    setPersonnelEmployeesByDept((prev) => {
+      const existing = prev[personalDepartment] || [];
+      const next = editingEmployeeName
+        ? existing.map((employee) => employee.name === editingEmployeeName ? savedEmployee : employee)
+        : [...existing, savedEmployee];
+      return { ...prev, [personalDepartment]: getSortedEmployees(next) };
+    });
+
+    if (editingEmployeeName && editingEmployeeName !== name) {
+      setPersonalPlan((prev) => {
+        const next = {};
+        Object.entries(prev).forEach(([key, plan]) => {
+          next[key] = {};
+          Object.entries(plan || {}).forEach(([section, names]) => {
+            next[key][section] = (names || []).map((assignedName) => assignedName === editingEmployeeName ? name : assignedName);
+          });
+        });
+        return next;
+      });
+
+      setEmployeeStatus((prev) => {
+        const next = { ...prev };
+        const oldKey = `${personalDepartment}_${editingEmployeeName}`;
+        const newKey = `${personalDepartment}_${name}`;
+        if (Object.prototype.hasOwnProperty.call(next, oldKey)) next[newKey] = next[oldKey];
+        delete next[oldKey];
+        return next;
+      });
+    }
+
+    resetPersonnelEmployeeForm();
+  };
 
   const copyWholePersonalDay = () => {
     if (!copyPersonalDate) {
@@ -2056,6 +2222,23 @@ const tourColumns = Object.entries(
       .filter(([key]) => key.startsWith(`${personalDepartment}_`) && key !== currentKey)
       .map(([, plan]) => plan || {});
 
+    const historyByEmployee = {};
+    currentEmployees().forEach((employee) => {
+      const sectionCounts = {};
+      currentSections().forEach((section) => {
+        sectionCounts[section.name] = historyPlans.reduce(
+          (count, plan) => count + ((plan[section.name] || []).includes(employee.name) ? 1 : 0),
+          0
+        );
+      });
+      const mostAssigned = Object.entries(sectionCounts)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "de"))[0];
+      historyByEmployee[employee.name] = {
+        sectionCounts,
+        mostAssignedSection: mostAssigned?.[1] > 0 ? mostAssigned[0] : "",
+      };
+    });
+
     const assigned = new Set(unavailable);
 
     currentSections().forEach((section) => {
@@ -2064,17 +2247,20 @@ const tourColumns = Object.entries(
 
       const candidates = currentEmployees()
         .filter((emp) => getEmployeeStatus(emp.name) === "anwesend")
+        .filter((emp) => isEmployeeRegularDay(emp))
         .filter((emp) => !assigned.has(emp.name))
         .map((emp) => {
           let score = 0;
+          const history = historyByEmployee[emp.name];
 
-          historyPlans.forEach((plan) => {
-            if ((plan[section.name] || []).includes(emp.name)) score += 10;
+          if (emp.preferredWorkplace1 === section.name) score += 1000;
+          else if (emp.preferredWorkplace1) score -= 120;
 
-            Object.entries(plan).forEach(([zone, names]) => {
-              if (zone !== section.name && (names || []).includes(emp.name)) score += 1;
-            });
-          });
+          if (emp.preferredWorkplace2 === section.name) score += 600;
+          else if (emp.preferredWorkplace2) score -= 40;
+
+          score += (history?.sectionCounts?.[section.name] || 0) * 30;
+          if (history?.mostAssignedSection === section.name) score += 180;
 
           return { emp, score };
         })
@@ -2409,6 +2595,15 @@ const tourColumns = Object.entries(
             </div>
           </div>
 
+          {selectedPersonnelEmployee && (
+            <div className="mb-3 flex items-center justify-between rounded-xl border border-blue-300 bg-blue-50 px-3 py-2">
+              <div className="text-sm font-black text-blue-900">Ausgewählt: {selectedPersonnelEmployee}</div>
+              <button type="button" className="text-xs font-bold text-blue-800 hover:underline" onClick={() => setSelectedPersonnelEmployee(null)}>
+                Auswahl aufheben
+              </button>
+            </div>
+          )}
+
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {currentSections().map((section, index) => {
               const assigned = getEmployeesInSection(section.name);
@@ -2418,9 +2613,13 @@ const tourColumns = Object.entries(
               return (
                 <div
                   key={section.name}
+                  onClick={() => assignSelectedPersonnelEmployee(section.name)}
                   onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, section.name)}
-                  className={`min-h-28 rounded-xl border-2 p-3 ${getSectionColor(section)}`}
+                  onDrop={() => {
+                    if (dragEmployee) setEmployeeToSection(dragEmployee, section.name);
+                    setDragEmployee(null);
+                  }}
+                  className={`min-h-28 rounded-xl border-2 p-3 transition ${getSectionColor(section)} ${selectedPersonnelEmployee ? "cursor-pointer ring-2 ring-blue-300 hover:ring-blue-500" : ""}`}
                 >
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <div className="flex min-w-0 items-center gap-2">
@@ -2438,17 +2637,22 @@ const tourColumns = Object.entries(
                     {assigned.map((name) => {
                       const employee = currentEmployees().find((entry) => entry.name === name);
                       return (
-                        <div
+                        <button
+                          type="button"
                           key={name}
                           draggable
                           onDragStart={() => setDragEmployee(name)}
-                          className="cursor-grab rounded-md border border-blue-200 bg-white px-2 py-1.5 shadow-sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            selectPersonnelEmployee(name);
+                          }}
+                          className={`cursor-pointer rounded-md border bg-white px-2 py-1.5 text-left shadow-sm ${selectedPersonnelEmployee === name ? "border-blue-600 ring-2 ring-blue-400" : "border-blue-200"}`}
                         >
                           <div className="text-[11px] font-black leading-tight">{name}</div>
                           <div className="text-[9px] leading-none text-slate-500">
                             {employee?.hours ? `${employee.hours} h/Woche` : "Chef"}
                           </div>
-                        </div>
+                        </button>
                       );
                     })}
                     {Array.from({ length: freePlaces }, (_, placeIndex) => (
@@ -2558,9 +2762,13 @@ const tourColumns = Object.entries(
         </div>
 
         <div
-          className="mb-2 rounded-xl border bg-white p-2"
+          className={`mb-2 rounded-xl border bg-white p-2 ${selectedPersonnelEmployee ? "cursor-pointer hover:border-blue-400" : ""}`}
+          onClick={() => assignSelectedPersonnelEmployee("pool")}
           onDragOver={(e) => e.preventDefault()}
-          onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, "pool")}
+          onDrop={() => {
+            if (dragEmployee) setEmployeeToSection(dragEmployee, "pool");
+            setDragEmployee(null);
+          }}
         >
           <div className="mb-1 flex items-center justify-between">
             <div className="text-xs font-black">Nicht eingeteilt</div>
@@ -2570,15 +2778,20 @@ const tourColumns = Object.entries(
           </div>
           <div className="grid max-h-[28vh] grid-cols-2 gap-1 overflow-auto">
             {getUnassignedEmployees().map((emp) => (
-              <div
+              <button
+                type="button"
                 key={emp.name}
                 draggable
                 onDragStart={() => setDragEmployee(emp.name)}
-                className="cursor-grab rounded-md border bg-slate-50 px-2 py-1"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  selectPersonnelEmployee(emp.name);
+                }}
+                className={`cursor-pointer rounded-md border px-2 py-1 text-left ${selectedPersonnelEmployee === emp.name ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400" : "bg-slate-50"}`}
               >
                 <div className="text-[11px] font-black leading-tight">{emp.name}</div>
                 <div className="text-[9px] text-slate-500 leading-none">{emp.hours ? `${emp.hours} h` : "Chef"}</div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -2592,9 +2805,13 @@ const tourColumns = Object.entries(
             return (
               <div
                 key={zone.key}
+                onClick={() => assignSelectedPersonnelEmployee(zone.key)}
                 onDragOver={(e) => e.preventDefault()}
-                onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, zone.key)}
-                className="rounded-xl border bg-white p-2"
+                onDrop={() => {
+                  if (dragEmployee) setEmployeeToSection(dragEmployee, zone.key);
+                  setDragEmployee(null);
+                }}
+                className={`rounded-xl border bg-white p-2 ${selectedPersonnelEmployee ? "cursor-pointer hover:border-blue-400" : ""}`}
               >
                 <div className="mb-1 flex items-center justify-between">
                   <div className="text-xs font-black">{zone.title}</div>
@@ -2604,14 +2821,19 @@ const tourColumns = Object.entries(
                 </div>
                 <div className="flex min-h-8 flex-wrap gap-1">
                   {zoneEmployees.map((emp) => (
-                    <span
+                    <button
+                      type="button"
                       key={emp.name}
                       draggable
                       onDragStart={() => setDragEmployee(emp.name)}
-                      className="cursor-grab rounded-md border bg-slate-50 px-2 py-1 text-[10px] font-black"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        selectPersonnelEmployee(emp.name);
+                      }}
+                      className={`cursor-pointer rounded-md border px-2 py-1 text-[10px] font-black ${selectedPersonnelEmployee === emp.name ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400" : "bg-slate-50"}`}
                     >
                       {emp.name}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -2712,6 +2934,158 @@ const tourColumns = Object.entries(
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {personnelEmployeeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black">Mitarbeiter bearbeiten</h2>
+                <p className="text-sm text-slate-500">{currentDepartmentConfig().label}</p>
+              </div>
+              <Button onClick={() => setPersonnelEmployeeModal(false)}>Schließen</Button>
+            </div>
+
+            <div className="grid min-h-0 flex-1 md:grid-cols-[340px_1fr]">
+              <aside className="overflow-auto border-r bg-slate-50 p-3">
+                <Button className="mb-3 w-full bg-blue-700 text-white" onClick={resetPersonnelEmployeeForm}>
+                  Neuen Mitarbeiter anlegen
+                </Button>
+                <div className="space-y-2">
+                  {getSortedEmployees(currentEmployees()).map((employee) => {
+                    const assignmentStats = getEmployeeAssignmentStats(employee.name);
+                    const topAssignment = assignmentStats[0];
+                    const isEditing = editingEmployeeName === employee.name;
+                    return (
+                      <div key={employee.name} className={`rounded-xl border p-2 ${isEditing ? "border-blue-500 bg-blue-50" : "bg-white"}`}>
+                        <button type="button" className="w-full text-left" onClick={() => openPersonnelEmployeeEditor(employee.name)}>
+                          <div className="font-black">{employee.name}</div>
+                          <div className="text-xs text-slate-500">
+                            {employee.hours !== "" ? `${employee.hours} Wochenstunden` : "Keine Wochenstunden"}
+                          </div>
+                          <div className="mt-1 text-[11px] font-semibold text-blue-800">
+                            {topAssignment ? `Am häufigsten: ${topAssignment.section} (${topAssignment.count}x)` : "Noch keine Einteilung gespeichert"}
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          className="mt-2 text-xs font-bold text-red-700 hover:underline"
+                          onClick={() => {
+                            deletePersonnelEmployee(employee.name);
+                            if (editingEmployeeName === employee.name) resetPersonnelEmployeeForm();
+                          }}
+                        >
+                          Mitarbeiter löschen
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </aside>
+
+              <div className="overflow-auto p-5">
+                <h3 className="mb-4 text-lg font-black">{editingEmployeeName ? "Stammdaten bearbeiten" : "Neuer Mitarbeiter"}</h3>
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <label className="block text-sm font-bold">
+                    Name
+                    <Input
+                      className="mt-1 w-full"
+                      value={employeeForm.name}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, name: e.target.value }))}
+                    />
+                  </label>
+                  <label className="block text-sm font-bold">
+                    Wochenstunden
+                    <Input
+                      className="mt-1 w-full"
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={employeeForm.hours}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, hours: e.target.value }))}
+                    />
+                  </label>
+                  <label className="block text-sm font-bold">
+                    1. liebster Arbeitsplatz
+                    <select
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
+                      value={employeeForm.preferredWorkplace1}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, preferredWorkplace1: e.target.value }))}
+                    >
+                      <option value="">Keine Angabe</option>
+                      {currentSections().map((section) => <option key={section.name} value={section.name}>{section.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-bold">
+                    2. liebster Arbeitsplatz
+                    <select
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
+                      value={employeeForm.preferredWorkplace2}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, preferredWorkplace2: e.target.value }))}
+                    >
+                      <option value="">Keine Angabe</option>
+                      {currentSections().map((section) => <option key={section.name} value={section.name}>{section.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-bold lg:col-span-2">
+                    Stammzeiten
+                    <Input
+                      className="mt-1 w-full"
+                      placeholder="z. B. 07:00 bis 15:30"
+                      value={employeeForm.regularHours}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, regularHours: e.target.value }))}
+                    />
+                  </label>
+                </div>
+
+                <fieldset className="mt-5">
+                  <legend className="mb-2 text-sm font-black">Stammtage</legend>
+                  <div className="grid gap-2 sm:grid-cols-5">
+                    {PERSONNEL_WEEKDAYS.map((day) => {
+                      const checked = employeeForm.regularDays.includes(day.key);
+                      return (
+                        <label key={day.key} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold ${checked ? "border-blue-400 bg-blue-50 text-blue-900" : "bg-white text-slate-500"}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setEmployeeForm((prev) => ({
+                              ...prev,
+                              regularDays: checked
+                                ? prev.regularDays.filter((key) => key !== day.key)
+                                : [...prev.regularDays, day.key],
+                            }))}
+                          />
+                          {day.short}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+
+                {editingEmployeeName && (
+                  <div className="mt-5 rounded-xl border bg-slate-50 p-3">
+                    <div className="mb-2 text-sm font-black">Bisherige Einteilungen</div>
+                    <div className="flex flex-wrap gap-2">
+                      {getEmployeeAssignmentStats(editingEmployeeName).length ? getEmployeeAssignmentStats(editingEmployeeName).map((entry) => (
+                        <span key={entry.section} className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">
+                          {entry.section}: {entry.count}x
+                        </span>
+                      )) : <span className="text-sm text-slate-500">Noch keine Einteilung gespeichert.</span>}
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-6 flex justify-end gap-2 border-t pt-4">
+                  <Button onClick={resetPersonnelEmployeeForm}>Eingaben leeren</Button>
+                  <Button className="bg-blue-700 text-white" onClick={savePersonnelEmployee}>
+                    {editingEmployeeName ? "Änderungen speichern" : "Mitarbeiter speichern"}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -3177,12 +3551,13 @@ const tourColumns = Object.entries(
                   <span className="self-center text-xs font-bold text-slate-500">Kopieren von:</span>
                   <Input type="date" value={copyPersonalDate} onChange={(e) => setCopyPersonalDate(e.target.value)} />
                   <Button onClick={copyWholePersonalDay}>Tag kopieren</Button>
+                  <Button onClick={() => openPersonnelEmployeeEditor()}>Mitarbeiter bearbeiten</Button>
                   <button
                     type="button"
                     onClick={applyPersonnelSuggestions}
                     className="rounded-xl border border-green-900 bg-green-700 px-4 py-2 text-sm font-black text-white hover:bg-green-800 active:scale-[0.98]"
                   >
-                    Vorschlag erstellen
+                    KI-Vorschlag erstellen
                   </button>
                   {PERSONNEL_SHIFTS.map((shift) => (
                     <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
