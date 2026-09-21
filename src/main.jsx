@@ -2438,32 +2438,6 @@ const tourColumns = Object.entries(
       };
     });
 
-    const dayStrength = PERSONNEL_DAY_STRENGTHS.find((entry) => entry.key === getPersonnelDayStrength()) || PERSONNEL_DAY_STRENGTHS[1];
-    const additionalZaCount = Math.max(0, dayStrength.zaTarget - manualZa.length);
-    const automaticZaCandidates = currentEmployees()
-      .filter((employee) => getEmployeeStatus(employee.name) === "anwesend")
-      .filter((employee) => isEmployeeRegularDay(employee))
-      .filter((employee) => isEmployeeRegularShift(employee))
-      .filter((employee) => !unavailable.has(employee.name))
-      .map((employee) => {
-        const history = historyByEmployee[employee.name];
-        const bestStationScore = currentSections().reduce((best, section) => {
-          let score = (history?.sectionCounts?.[section.name] || 0) * 30;
-          if (employee.preferredWorkplace1 === section.name) score += 1000;
-          if (employee.preferredWorkplace2 === section.name) score += 600;
-          if (history?.mostAssignedSection === section.name) score += 180;
-          return Math.max(best, score);
-        }, 0);
-        return { employee, bestStationScore };
-      })
-      .sort((a, b) => a.bestStationScore - b.bestStationScore || String(a.employee.name).localeCompare(String(b.employee.name), "de", { numeric: true }));
-
-    automaticZaCandidates.slice(0, additionalZaCount).forEach(({ employee }) => {
-      nextPlan.za.push(employee.name);
-      nextPlan.autoZa.push(employee.name);
-      unavailable.add(employee.name);
-    });
-
     const assigned = new Set(unavailable);
 
     currentSections().forEach((section) => {
@@ -2499,6 +2473,32 @@ const tourColumns = Object.entries(
         nextPlan[section.name].push(emp.name);
         assigned.add(emp.name);
       });
+    });
+
+    const dayStrength = PERSONNEL_DAY_STRENGTHS.find((entry) => entry.key === getPersonnelDayStrength()) || PERSONNEL_DAY_STRENGTHS[1];
+    const additionalZaCount = Math.max(0, dayStrength.zaTarget - manualZa.length);
+    const automaticZaCandidates = currentEmployees()
+      .filter((employee) => getEmployeeStatus(employee.name) === "anwesend")
+      .filter((employee) => isEmployeeRegularDay(employee))
+      .filter((employee) => isEmployeeRegularShift(employee))
+      .filter((employee) => !assigned.has(employee.name))
+      .map((employee) => {
+        const history = historyByEmployee[employee.name];
+        const bestStationScore = currentSections().reduce((best, section) => {
+          let score = (history?.sectionCounts?.[section.name] || 0) * 30;
+          if (employee.preferredWorkplace1 === section.name) score += 1000;
+          if (employee.preferredWorkplace2 === section.name) score += 600;
+          if (history?.mostAssignedSection === section.name) score += 180;
+          return Math.max(best, score);
+        }, 0);
+        return { employee, bestStationScore };
+      })
+      .sort((a, b) => a.bestStationScore - b.bestStationScore || String(a.employee.name).localeCompare(String(b.employee.name), "de", { numeric: true }));
+
+    automaticZaCandidates.slice(0, additionalZaCount).forEach(({ employee }) => {
+      nextPlan.za.push(employee.name);
+      nextPlan.autoZa.push(employee.name);
+      assigned.add(employee.name);
     });
 
     setPersonalPlan((prev) => ({
