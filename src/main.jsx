@@ -2923,6 +2923,114 @@ const tourColumns = Object.entries(
   }
 
   function PersonnelMapOverview({ compact = false }) {
+    if (personalDepartment === "waescherei") {
+      const rowDefinitions = [
+        ["Übernahme", "Waschstraßen", "Waschmaschinen"],
+        ["Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT"],
+        ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"],
+      ];
+      const listedNames = new Set(rowDefinitions.flat());
+      const additionalSections = currentSections().filter((section) => !listedNames.has(section.name));
+
+      const renderSectionField = (section, stationNumber) => {
+        const assigned = getEmployeesInSection(section.name);
+        const target = getSectionTarget(section);
+        const freePlaces = target === null ? 0 : Math.max(0, target - assigned.length);
+        const displayName = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
+
+        return (
+          <div
+            key={section.id || section.name}
+            onClick={() => assignSelectedPersonnelEmployee(section.name)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => {
+              if (dragEmployee) setEmployeeToSection(dragEmployee, section.name);
+              setDragEmployee(null);
+            }}
+            className={`min-h-28 rounded-xl border-2 p-3 transition ${getSectionColor(section)} ${selectedPersonnelEmployee ? "cursor-pointer ring-2 ring-blue-300" : ""}`}
+          >
+            <div className="mb-2 flex items-start justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-black text-white">
+                  {stationNumber}
+                </span>
+                <h4 className="break-words text-sm font-black leading-tight">{displayName}</h4>
+              </div>
+              <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-700">
+                {assigned.length}/{target === null ? "Bedarf" : target}
+              </span>
+            </div>
+
+            <div className="grid gap-1 sm:grid-cols-2">
+              {assigned.map((name) => {
+                const employee = currentEmployees().find((entry) => entry.name === name);
+                return (
+                  <button
+                    type="button"
+                    key={name}
+                    draggable
+                    onDragStart={() => setDragEmployee(name)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      selectPersonnelEmployee(name);
+                    }}
+                    className="cursor-pointer rounded-md border border-blue-200 bg-white px-2 py-1.5 text-left shadow-sm"
+                  >
+                    <div className="text-[11px] font-black leading-tight">{name}</div>
+                    <div className="text-[9px] leading-none text-slate-500">
+                      {employee?.borrowedFrom ? "Aus Putzerei" : employee?.hours ? `${employee.hours} h/Woche` : "Chef"}
+                    </div>
+                  </button>
+                );
+              })}
+              {Array.from({ length: freePlaces }, (_, placeIndex) => (
+                <div
+                  key={`free-${placeIndex}`}
+                  className="flex min-h-10 items-center justify-center rounded-md border border-dashed border-slate-300 bg-white/60 px-2 py-1 text-[10px] font-bold text-slate-400"
+                >
+                  Freier Platz
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      };
+
+      let stationNumber = 0;
+      return (
+        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-lg font-black">Stationsfolge Wäscherei</h3>
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+              {personalDate} | {PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label || personalShift}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {rowDefinitions.map((row, rowIndex) => {
+              const sections = row.map((name) => currentSections().find((section) => section.name === name)).filter(Boolean);
+              const rowStart = stationNumber;
+              stationNumber += sections.length;
+              return (
+                <div key={rowIndex} className={`grid gap-2 ${rowIndex === 0 ? "md:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-5"}`}>
+                  {sections.map((section, index) => renderSectionField(section, rowStart + index + 1))}
+                </div>
+              );
+            })}
+          </div>
+
+          {additionalSections.length > 0 && (
+            <div className="mt-3 border-t pt-3">
+              <h4 className="mb-2 text-sm font-black text-slate-600">Weitere Abteilungen</h4>
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {additionalSections.map((section, index) => renderSectionField(section, stationNumber + index + 1))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
     if (personalDepartment === "putzerei") {
       return (
         <div className="rounded-2xl border bg-white p-3 shadow-sm">
