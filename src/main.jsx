@@ -87,6 +87,12 @@ const PERSONNEL_SHIFTS = [
   { key: "15-schluss", label: "15:00–Schluss" },
 ];
 
+const PERSONNEL_DAY_STRENGTHS = [
+  { key: "schwach", label: "Schwach", zaTarget: 2 },
+  { key: "mittel", label: "Mittel", zaTarget: 1 },
+  { key: "stark", label: "Stark", zaTarget: 0 },
+];
+
 const PERSONNEL_SECTIONS = [
   { name: "Übernahme", target: { default: 4 } },
   { name: "Waschstraßen", target: { default: 1 } },
@@ -155,6 +161,17 @@ const PUTZEREI_GROUPS = [
     sections: PUTZEREI_SECTIONS.map((section) => section.name),
   },
 ];
+
+function normalizePersonnelSections(sections, fallback) {
+  const source = Array.isArray(sections) && sections.length ? sections : fallback;
+  return source.map((section) => ({
+    ...section,
+    target: Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
+      shift.key,
+      section.target?.[shift.key] ?? section.target?.default ?? (section.target?.flexible ? null : 0),
+    ])),
+  }));
+}
 
 const PUTZEREI_SECTION_ALIASES = {
   Putzmaschinen: "Reinigungsmaschinen",
@@ -471,6 +488,28 @@ function App() {
   const [personalStatsFrom, setPersonalStatsFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [personalStatsTo, setPersonalStatsTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [personalShift, setPersonalShift] = useState("07-12");
+  const [personnelDayStrengthByDate, setPersonnelDayStrengthByDate] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("dietexPersonnelDayStrengthByDate") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [personnelSectionsByDept, setPersonnelSectionsByDept] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("dietexPersonnelSectionsByDept") || "null");
+      if (saved && typeof saved === "object") {
+        return {
+          waescherei: normalizePersonnelSections(saved.waescherei, PERSONNEL_SECTIONS),
+          putzerei: normalizePersonnelSections(saved.putzerei, PUTZEREI_SECTIONS),
+        };
+      }
+    } catch {}
+    return {
+      waescherei: normalizePersonnelSections(PERSONNEL_SECTIONS, PERSONNEL_SECTIONS),
+      putzerei: normalizePersonnelSections(PUTZEREI_SECTIONS, PUTZEREI_SECTIONS),
+    };
+  });
   const [personalPlan, setPersonalPlan] = useState(() => {
     try {
       return normalizePersonnelPlan(JSON.parse(localStorage.getItem("dietexPersonalPlan") || "{}"));
@@ -509,6 +548,8 @@ function App() {
   const [personnelEmployeeModal, setPersonnelEmployeeModal] = useState(false);
   const [editingEmployeeName, setEditingEmployeeName] = useState(null);
   const [employeeForm, setEmployeeForm] = useState(EMPTY_EMPLOYEE_FORM);
+  const [personnelDepartmentModal, setPersonnelDepartmentModal] = useState(false);
+  const [departmentDraft, setDepartmentDraft] = useState([]);
 
   const [tourModal, setTourModal] = useState(null);
   const [tourContainerCount, setTourContainerCount] = useState("");
@@ -605,6 +646,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelEmployeesByDept", JSON.stringify(personnelEmployeesByDept));
   }, [personnelEmployeesByDept]);
+
+  useEffect(() => {
+    localStorage.setItem("dietexPersonnelSectionsByDept", JSON.stringify(personnelSectionsByDept));
+  }, [personnelSectionsByDept]);
+
+  useEffect(() => {
+    localStorage.setItem("dietexPersonnelDayStrengthByDate", JSON.stringify(personnelDayStrengthByDate));
+  }, [personnelDayStrengthByDate]);
 
   useEffect(() => {
     setSelectedPersonnelEmployee(null);
@@ -1801,9 +1850,15 @@ const tourColumns = Object.entries(
 
   const currentDepartmentConfig = () => PERSONNEL_DEPARTMENTS[personalDepartment] || PERSONNEL_DEPARTMENTS.waescherei;
 
-  const currentSections = () => currentDepartmentConfig().sections;
+  const currentSections = () => personnelSectionsByDept[personalDepartment] || currentDepartmentConfig().sections;
   const currentGroups = () => currentDepartmentConfig().groups;
   const currentEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
+
+  const getPersonnelDayStrengthKey = () => `${personalDepartment}_${personalDate}`;
+  const getPersonnelDayStrength = () => personnelDayStrengthByDate[getPersonnelDayStrengthKey()] || "mittel";
+  const setPersonnelDayStrength = (strength) => {
+    setPersonnelDayStrengthByDate((prev) => ({ ...prev, [getPersonnelDayStrengthKey()]: strength }));
+  };
 
   const getPersonalKey = (date = personalDate, shift = personalShift, dept = personalDepartment) => `${dept}_${date}_${shift}`;
 
@@ -1865,7 +1920,9 @@ const tourColumns = Object.entries(
 
   const getSectionTarget = (section) => {
     if (section.target.flexible) return null;
-    return section.target[personalShift] ?? section.target.default ?? 0;
+    const shiftTarget = section.target?.[personalShift];
+    if (shiftTarget === null || shiftTarget === "") return null;
+    return Number(shiftTarget ?? section.target?.default ?? 0);
   };
 
   const getSectionColor = (section) => {
@@ -2006,6 +2063,76 @@ const tourColumns = Object.entries(
     }
 
     resetPersonnelEmployeeForm();
+  };
+
+  const openPersonnelDepartmentEditor = () => {
+    setDepartmentDraft(currentSections().map((section) => ({
+      name: section.name,
+      target: Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [shift.key, section.target?.[shift.key] ?? ""])),
+    })));
+    setPersonnelDepartmentModal(true);
+  };
+
+  const savePersonnelDepartments = () => {
+    const cleaned = departmentDraft.map((section) => ({
+      name: section.name.trim(),
+      target: Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => {
+        const rawValue = section.target?.[shift.key];
+        return [shift.key, rawValue === "" || rawValue === null ? null : Number(rawValue)];
+      })),
+    }));
+
+    if (cleaned.some((section) => !section.name)) {
+      window.alert("Jede Abteilung benötigt einen Namen.");
+      return;
+    }
+    if (new Set(cleaned.map((section) => section.name.toLowerCase())).size !== cleaned.length) {
+      window.alert("Jeder Abteilungsname darf nur einmal vorkommen.");
+      return;
+    }
+    if (cleaned.some((section) => Object.values(section.target).some((value) => value !== null && (!Number.isFinite(value) || value < 0)))) {
+      window.alert("Soll-Personen bitte als positive Zahl oder 0 eingeben.");
+      return;
+    }
+
+    const oldSections = currentSections();
+    const renames = oldSections
+      .map((section, index) => ({ oldName: section.name, newName: cleaned[index]?.name || section.name }))
+      .filter(({ oldName, newName }) => oldName !== newName);
+
+    setPersonnelSectionsByDept((prev) => ({ ...prev, [personalDepartment]: cleaned }));
+
+    if (renames.length) {
+      setPersonalPlan((prev) => {
+        const next = {};
+        Object.entries(prev).forEach(([key, plan]) => {
+          if (!key.startsWith(`${personalDepartment}_`)) {
+            next[key] = plan;
+            return;
+          }
+          const nextPlan = { ...(plan || {}) };
+          renames.forEach(({ oldName, newName }) => {
+            const oldNames = Array.isArray(nextPlan[oldName]) ? nextPlan[oldName] : [];
+            const newNames = Array.isArray(nextPlan[newName]) ? nextPlan[newName] : [];
+            nextPlan[newName] = [...new Set([...newNames, ...oldNames])];
+            delete nextPlan[oldName];
+          });
+          next[key] = nextPlan;
+        });
+        return next;
+      });
+
+      setPersonnelEmployeesByDept((prev) => ({
+        ...prev,
+        [personalDepartment]: (prev[personalDepartment] || []).map((employee) => {
+          const preferred1 = renames.find((rename) => rename.oldName === employee.preferredWorkplace1)?.newName || employee.preferredWorkplace1;
+          const preferred2 = renames.find((rename) => rename.oldName === employee.preferredWorkplace2)?.newName || employee.preferredWorkplace2;
+          return { ...employee, preferredWorkplace1: preferred1, preferredWorkplace2: preferred2 };
+        }),
+      }));
+    }
+
+    setPersonnelDepartmentModal(false);
   };
 
   const copyWholePersonalDay = () => {
@@ -2196,16 +2323,20 @@ const tourColumns = Object.entries(
     "urlaub",
     "za",
     "krank",
+    "autoZa",
   ];
 
   const applyPersonnelSuggestions = () => {
     const currentKey = getPersonalKey();
     const currentPlan = personalPlan[currentKey] || {};
 
+    const previousAutoZa = new Set(currentPlan.autoZa || []);
+    const manualZa = (currentPlan.za || []).filter((name) => !previousAutoZa.has(name));
     const nextPlan = {
       urlaub: [...(currentPlan.urlaub || [])],
-      za: [...(currentPlan.za || [])],
+      za: [...manualZa],
       krank: [...(currentPlan.krank || [])],
+      autoZa: [],
     };
 
     currentSections().forEach((section) => {
@@ -2237,6 +2368,31 @@ const tourColumns = Object.entries(
         sectionCounts,
         mostAssignedSection: mostAssigned?.[1] > 0 ? mostAssigned[0] : "",
       };
+    });
+
+    const dayStrength = PERSONNEL_DAY_STRENGTHS.find((entry) => entry.key === getPersonnelDayStrength()) || PERSONNEL_DAY_STRENGTHS[1];
+    const additionalZaCount = Math.max(0, dayStrength.zaTarget - manualZa.length);
+    const automaticZaCandidates = currentEmployees()
+      .filter((employee) => getEmployeeStatus(employee.name) === "anwesend")
+      .filter((employee) => isEmployeeRegularDay(employee))
+      .filter((employee) => !unavailable.has(employee.name))
+      .map((employee) => {
+        const history = historyByEmployee[employee.name];
+        const bestStationScore = currentSections().reduce((best, section) => {
+          let score = (history?.sectionCounts?.[section.name] || 0) * 30;
+          if (employee.preferredWorkplace1 === section.name) score += 1000;
+          if (employee.preferredWorkplace2 === section.name) score += 600;
+          if (history?.mostAssignedSection === section.name) score += 180;
+          return Math.max(best, score);
+        }, 0);
+        return { employee, bestStationScore };
+      })
+      .sort((a, b) => a.bestStationScore - b.bestStationScore || String(a.employee.name).localeCompare(String(b.employee.name), "de", { numeric: true }));
+
+    automaticZaCandidates.slice(0, additionalZaCount).forEach(({ employee }) => {
+      nextPlan.za.push(employee.name);
+      nextPlan.autoZa.push(employee.name);
+      unavailable.add(employee.name);
     });
 
     const assigned = new Set(unavailable);
@@ -3090,6 +3246,58 @@ const tourColumns = Object.entries(
         </div>
       )}
 
+      {personnelDepartmentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
+              <div>
+                <h2 className="text-xl font-black">Abteilungen bearbeiten</h2>
+                <p className="text-sm text-slate-500">{currentDepartmentConfig().label}</p>
+              </div>
+              <Button onClick={() => setPersonnelDepartmentModal(false)}>Schließen</Button>
+            </div>
+
+            <div className="overflow-auto p-5">
+              <div className="min-w-[720px] overflow-hidden rounded-xl border">
+                <div className="grid grid-cols-[1fr_150px_150px_150px] bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">
+                  <div>Name</div>
+                  {PERSONNEL_SHIFTS.map((shift, index) => <div key={shift.key}>Soll {index + 1}. Schicht</div>)}
+                </div>
+                {departmentDraft.map((section, sectionIndex) => (
+                  <div key={sectionIndex} className="grid grid-cols-[1fr_150px_150px_150px] gap-2 border-t p-2">
+                    <Input
+                      className="w-full"
+                      value={section.name}
+                      onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, name: event.target.value } : entry))}
+                    />
+                    {PERSONNEL_SHIFTS.map((shift) => (
+                      <Input
+                        key={shift.key}
+                        type="number"
+                        min="0"
+                        step="1"
+                        className="w-full text-center"
+                        placeholder="bei Bedarf"
+                        value={section.target?.[shift.key] ?? ""}
+                        onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? {
+                          ...entry,
+                          target: { ...entry.target, [shift.key]: event.target.value },
+                        } : entry))}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 flex justify-end gap-2 border-t pt-4">
+                <Button onClick={() => setPersonnelDepartmentModal(false)}>Abbrechen</Button>
+                <Button className="bg-blue-700 text-white" onClick={savePersonnelDepartments}>Abteilungen speichern</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tourModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
@@ -3552,6 +3760,20 @@ const tourColumns = Object.entries(
                   <Input type="date" value={copyPersonalDate} onChange={(e) => setCopyPersonalDate(e.target.value)} />
                   <Button onClick={copyWholePersonalDay}>Tag kopieren</Button>
                   <Button onClick={() => openPersonnelEmployeeEditor()}>Mitarbeiter bearbeiten</Button>
+                  <Button onClick={openPersonnelDepartmentEditor}>Abteilungen bearbeiten</Button>
+                  <div className="flex items-center rounded-xl border bg-slate-50 p-1">
+                    <span className="px-2 text-xs font-black text-slate-600">Umsatz:</span>
+                    {PERSONNEL_DAY_STRENGTHS.map((strength) => (
+                      <button
+                        type="button"
+                        key={strength.key}
+                        onClick={() => setPersonnelDayStrength(strength.key)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-black ${getPersonnelDayStrength() === strength.key ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-white"}`}
+                      >
+                        {strength.label}
+                      </button>
+                    ))}
+                  </div>
                   <button
                     type="button"
                     onClick={applyPersonnelSuggestions}
