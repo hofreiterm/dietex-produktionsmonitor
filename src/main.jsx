@@ -256,6 +256,8 @@ const EMPTY_EMPLOYEE_FORM = {
   hours: "",
   preferredWorkplace1: "",
   preferredWorkplace2: "",
+  noGoWorkplace1: "",
+  noGoWorkplace2: "",
   regularDays: [1, 2, 3, 4, 5],
   regularShifts: ["07-12", "12-15", "15-schluss"],
 };
@@ -265,6 +267,8 @@ function normalizePersonnelEmployee(employee) {
     ...employee,
     preferredWorkplace1: employee?.preferredWorkplace1 || "",
     preferredWorkplace2: employee?.preferredWorkplace2 || "",
+    noGoWorkplace1: employee?.noGoWorkplace1 || "",
+    noGoWorkplace2: employee?.noGoWorkplace2 || "",
     regularDays: Array.isArray(employee?.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5],
     regularShifts: Array.isArray(employee?.regularShifts) ? employee.regularShifts : ["07-12", "12-15", "15-schluss"],
   };
@@ -1914,6 +1918,15 @@ const tourColumns = Object.entries(
   };
 
   const setEmployeeToSection = (employeeName, sectionName, targetShift = personalShift) => {
+    const employee = currentEmployees().find((entry) => entry.name === employeeName);
+    const isWorkplace = currentSections().some((section) => section.name === sectionName);
+    const noGoWorkplaces = [employee?.noGoWorkplace1, employee?.noGoWorkplace2].filter(Boolean);
+
+    if (isWorkplace && noGoWorkplaces.includes(sectionName)) {
+      window.alert(`${employeeName} darf laut Mitarbeiterstamm nicht bei ${sectionName} eingeteilt werden.`);
+      return false;
+    }
+
     setPersonalPlan((prev) => {
       const allZones = allPlanningZones();
       const globalZones = new Set(["urlaub", "za", "krank", "waescherei"]);
@@ -2032,8 +2045,9 @@ const tourColumns = Object.entries(
       if (!destination) return;
 
       const shift = resolvePersonnelCommandShift(commandPart);
-      setEmployeeToSection(entry.employee.name, destination, shift);
-      appliedAssignments += 1;
+      if (setEmployeeToSection(entry.employee.name, destination, shift)) {
+        appliedAssignments += 1;
+      }
     });
 
     const changes = [];
@@ -2149,6 +2163,8 @@ const tourColumns = Object.entries(
       hours: employee.hours ?? "",
       preferredWorkplace1: employee.preferredWorkplace1 || "",
       preferredWorkplace2: employee.preferredWorkplace2 || "",
+      noGoWorkplace1: employee.noGoWorkplace1 || "",
+      noGoWorkplace2: employee.noGoWorkplace2 || "",
       regularDays: Array.isArray(employee.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5],
       regularShifts: Array.isArray(employee.regularShifts) ? employee.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key),
     } : {
@@ -2182,7 +2198,17 @@ const tourColumns = Object.entries(
       return;
     }
     if (employeeForm.preferredWorkplace1 && employeeForm.preferredWorkplace1 === employeeForm.preferredWorkplace2) {
-      window.alert("Bitte zwei unterschiedliche Lieblingsarbeitsplätze auswählen.");
+      window.alert("Bitte zwei unterschiedliche Prioritäten auswählen.");
+      return;
+    }
+    if (employeeForm.noGoWorkplace1 && employeeForm.noGoWorkplace1 === employeeForm.noGoWorkplace2) {
+      window.alert("Bitte zwei unterschiedliche No-Go-Arbeitsplätze auswählen.");
+      return;
+    }
+    const priorities = [employeeForm.preferredWorkplace1, employeeForm.preferredWorkplace2].filter(Boolean);
+    const noGoWorkplaces = [employeeForm.noGoWorkplace1, employeeForm.noGoWorkplace2].filter(Boolean);
+    if (priorities.some((workplace) => noGoWorkplaces.includes(workplace))) {
+      window.alert("Eine Priorität kann nicht gleichzeitig als No-Go festgelegt werden.");
       return;
     }
     if (!employeeForm.regularDays.length) {
@@ -2203,6 +2229,8 @@ const tourColumns = Object.entries(
       hours,
       preferredWorkplace1: employeeForm.preferredWorkplace1,
       preferredWorkplace2: employeeForm.preferredWorkplace2,
+      noGoWorkplace1: employeeForm.noGoWorkplace1,
+      noGoWorkplace2: employeeForm.noGoWorkplace2,
       regularDays: [...employeeForm.regularDays].sort(),
       regularShifts: [...employeeForm.regularShifts],
     });
@@ -2215,26 +2243,33 @@ const tourColumns = Object.entries(
       return { ...prev, [personalDepartment]: getSortedEmployees(next) };
     });
 
-    if (editingEmployeeName && editingEmployeeName !== name) {
+    if (editingEmployeeName) {
       setPersonalPlan((prev) => {
         const next = {};
         Object.entries(prev).forEach(([key, plan]) => {
           next[key] = {};
           Object.entries(plan || {}).forEach(([section, names]) => {
-            next[key][section] = (names || []).map((assignedName) => assignedName === editingEmployeeName ? name : assignedName);
+            const renamedNames = (names || []).map((assignedName) => assignedName === editingEmployeeName ? name : assignedName);
+            const isNoGoSection = key.startsWith(`${personalDepartment}_`)
+              && [savedEmployee.noGoWorkplace1, savedEmployee.noGoWorkplace2].filter(Boolean).includes(section);
+            next[key][section] = isNoGoSection
+              ? renamedNames.filter((assignedName) => assignedName !== name)
+              : renamedNames;
           });
         });
         return next;
       });
 
-      setEmployeeStatus((prev) => {
-        const next = { ...prev };
-        const oldKey = `${personalDepartment}_${editingEmployeeName}`;
-        const newKey = `${personalDepartment}_${name}`;
-        if (Object.prototype.hasOwnProperty.call(next, oldKey)) next[newKey] = next[oldKey];
-        delete next[oldKey];
-        return next;
-      });
+      if (editingEmployeeName !== name) {
+        setEmployeeStatus((prev) => {
+          const next = { ...prev };
+          const oldKey = `${personalDepartment}_${editingEmployeeName}`;
+          const newKey = `${personalDepartment}_${name}`;
+          if (Object.prototype.hasOwnProperty.call(next, oldKey)) next[newKey] = next[oldKey];
+          delete next[oldKey];
+          return next;
+        });
+      }
     }
 
     resetPersonnelEmployeeForm();
@@ -2333,10 +2368,14 @@ const tourColumns = Object.entries(
         [personalDepartment]: (prev[personalDepartment] || []).map((employee) => {
           const preferred1 = renames.find((rename) => rename.oldName === employee.preferredWorkplace1)?.newName || employee.preferredWorkplace1;
           const preferred2 = renames.find((rename) => rename.oldName === employee.preferredWorkplace2)?.newName || employee.preferredWorkplace2;
+          const noGo1 = renames.find((rename) => rename.oldName === employee.noGoWorkplace1)?.newName || employee.noGoWorkplace1;
+          const noGo2 = renames.find((rename) => rename.oldName === employee.noGoWorkplace2)?.newName || employee.noGoWorkplace2;
           return {
             ...employee,
             preferredWorkplace1: deletedNames.includes(preferred1) ? "" : preferred1,
             preferredWorkplace2: deletedNames.includes(preferred2) ? "" : preferred2,
+            noGoWorkplace1: deletedNames.includes(noGo1) ? "" : noGo1,
+            noGoWorkplace2: deletedNames.includes(noGo2) ? "" : noGo2,
           };
         }),
       }));
@@ -2590,6 +2629,7 @@ const tourColumns = Object.entries(
         .filter((emp) => isEmployeeRegularDay(emp))
         .filter((emp) => isEmployeeRegularShift(emp))
         .filter((emp) => !assigned.has(emp.name))
+        .filter((emp) => emp.noGoWorkplace1 !== section.name && emp.noGoWorkplace2 !== section.name)
         .map((emp) => {
           let score = 0;
           const history = historyByEmployee[emp.name];
@@ -3559,7 +3599,7 @@ const tourColumns = Object.entries(
                     />
                   </label>
                   <label className="block text-sm font-bold">
-                    1. liebster Arbeitsplatz
+                    Priorität 1
                     <select
                       className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
                       value={employeeForm.preferredWorkplace1}
@@ -3570,11 +3610,33 @@ const tourColumns = Object.entries(
                     </select>
                   </label>
                   <label className="block text-sm font-bold">
-                    2. liebster Arbeitsplatz
+                    Priorität 2
                     <select
                       className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
                       value={employeeForm.preferredWorkplace2}
                       onChange={(e) => setEmployeeForm((prev) => ({ ...prev, preferredWorkplace2: e.target.value }))}
+                    >
+                      <option value="">Keine Angabe</option>
+                      {currentSections().map((section) => <option key={section.name} value={section.name}>{section.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-bold">
+                    No-Go 1
+                    <select
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
+                      value={employeeForm.noGoWorkplace1}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, noGoWorkplace1: e.target.value }))}
+                    >
+                      <option value="">Keine Angabe</option>
+                      {currentSections().map((section) => <option key={section.name} value={section.name}>{section.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm font-bold">
+                    No-Go 2
+                    <select
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
+                      value={employeeForm.noGoWorkplace2}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, noGoWorkplace2: e.target.value }))}
                     >
                       <option value="">Keine Angabe</option>
                       {currentSections().map((section) => <option key={section.name} value={section.name}>{section.name}</option>)}
