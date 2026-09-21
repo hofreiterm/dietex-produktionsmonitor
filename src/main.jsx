@@ -89,9 +89,9 @@ const PERSONNEL_SHIFTS = [
 ];
 
 const PERSONNEL_DAY_STRENGTHS = [
-  { key: "schwach", label: "Schwach", zaTarget: 2 },
-  { key: "mittel", label: "Mittel", zaTarget: 1 },
-  { key: "stark", label: "Stark", zaTarget: 0 },
+  { key: "schwach", label: "Schwach" },
+  { key: "mittel", label: "Mittel" },
+  { key: "stark", label: "Stark" },
 ];
 
 const PERSONNEL_SECTIONS = [
@@ -197,20 +197,28 @@ function normalizePersonnelPlan(plan) {
 
   const normalized = {};
   Object.entries(plan).forEach(([key, dayPlan]) => {
-    if (!dayPlan || typeof dayPlan !== "object" || !key.startsWith("putzerei_")) {
+    if (!dayPlan || typeof dayPlan !== "object") {
       normalized[key] = dayPlan;
       return;
     }
 
     const nextDayPlan = { ...dayPlan };
-    Object.entries(PUTZEREI_SECTION_ALIASES).forEach(([oldName, newName]) => {
-      const oldAssignments = Array.isArray(nextDayPlan[oldName]) ? nextDayPlan[oldName] : [];
-      const newAssignments = Array.isArray(nextDayPlan[newName]) ? nextDayPlan[newName] : [];
-      if (oldAssignments.length || newAssignments.length) {
-        nextDayPlan[newName] = [...new Set([...newAssignments, ...oldAssignments])];
-      }
-      delete nextDayPlan[oldName];
-    });
+    const previousAutoZa = new Set(Array.isArray(nextDayPlan.autoZa) ? nextDayPlan.autoZa : []);
+    if (previousAutoZa.size && Array.isArray(nextDayPlan.za)) {
+      nextDayPlan.za = nextDayPlan.za.filter((name) => !previousAutoZa.has(name));
+    }
+    delete nextDayPlan.autoZa;
+
+    if (key.startsWith("putzerei_")) {
+      Object.entries(PUTZEREI_SECTION_ALIASES).forEach(([oldName, newName]) => {
+        const oldAssignments = Array.isArray(nextDayPlan[oldName]) ? nextDayPlan[oldName] : [];
+        const newAssignments = Array.isArray(nextDayPlan[newName]) ? nextDayPlan[newName] : [];
+        if (oldAssignments.length || newAssignments.length) {
+          nextDayPlan[newName] = [...new Set([...newAssignments, ...oldAssignments])];
+        }
+        delete nextDayPlan[oldName];
+      });
+    }
     normalized[key] = nextDayPlan;
   });
 
@@ -2505,7 +2513,6 @@ const tourColumns = Object.entries(
     "urlaub",
     "za",
     "krank",
-    "autoZa",
     "waescherei",
   ];
 
@@ -2513,13 +2520,10 @@ const tourColumns = Object.entries(
     const currentKey = getPersonalKey();
     const currentPlan = personalPlan[currentKey] || {};
 
-    const previousAutoZa = new Set(currentPlan.autoZa || []);
-    const manualZa = (currentPlan.za || []).filter((name) => !previousAutoZa.has(name));
     const nextPlan = {
       urlaub: [...(currentPlan.urlaub || [])],
-      za: [...manualZa],
+      za: [...(currentPlan.za || [])],
       krank: [...(currentPlan.krank || [])],
-      autoZa: [],
       waescherei: [...(currentPlan.waescherei || [])],
     };
 
@@ -2590,32 +2594,6 @@ const tourColumns = Object.entries(
         nextPlan[section.name].push(emp.name);
         assigned.add(emp.name);
       });
-    });
-
-    const dayStrength = PERSONNEL_DAY_STRENGTHS.find((entry) => entry.key === getPersonnelDayStrength()) || PERSONNEL_DAY_STRENGTHS[1];
-    const additionalZaCount = Math.max(0, dayStrength.zaTarget - manualZa.length);
-    const automaticZaCandidates = currentEmployees()
-      .filter((employee) => getEmployeeStatus(employee.name) === "anwesend")
-      .filter((employee) => isEmployeeRegularDay(employee))
-      .filter((employee) => isEmployeeRegularShift(employee))
-      .filter((employee) => !assigned.has(employee.name))
-      .map((employee) => {
-        const history = historyByEmployee[employee.name];
-        const bestStationScore = currentSections().reduce((best, section) => {
-          let score = (history?.sectionCounts?.[section.name] || 0) * 30;
-          if (employee.preferredWorkplace1 === section.name) score += 1000;
-          if (employee.preferredWorkplace2 === section.name) score += 600;
-          if (history?.mostAssignedSection === section.name) score += 180;
-          return Math.max(best, score);
-        }, 0);
-        return { employee, bestStationScore };
-      })
-      .sort((a, b) => a.bestStationScore - b.bestStationScore || String(a.employee.name).localeCompare(String(b.employee.name), "de", { numeric: true }));
-
-    automaticZaCandidates.slice(0, additionalZaCount).forEach(({ employee }) => {
-      nextPlan.za.push(employee.name);
-      nextPlan.autoZa.push(employee.name);
-      assigned.add(employee.name);
     });
 
     setPersonalPlan((prev) => ({
