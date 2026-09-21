@@ -139,30 +139,54 @@ const PERSONNEL_EMPLOYEES = [
 
 const PUTZEREI_SECTIONS = [
   { name: "Übernahme", target: { default: 1 } },
-  { name: "Waschmaschinen", target: { default: 1 } },
-  { name: "Putzmaschinen", target: { default: 1 } },
-  { name: "Tunnelfinisher", target: { default: 1 } },
-  { name: "Hemdenabteilung", target: { default: 2 } },
-  { name: "Bügeltische", target: { default: 5 } },
-  { name: "Verpackung", target: { default: 1 } },
-  { name: "Kleinwäscheabteilung", target: { default: 1 } },
   { name: "Expedit", target: { default: 1 } },
+  { name: "Kleinteile", target: { default: 3 } },
+  { name: "Verpackung", target: { default: 1 } },
+  { name: "Waschmaschinen", target: { default: 1 } },
+  { name: "Reinigungsmaschinen", target: { default: 1 } },
+  { name: "Tunnelfinisher", target: { default: 1 } },
+  { name: "Hemden", target: { default: 2 } },
+  { name: "Bügeln", target: { default: 5 } },
 ];
 
 const PUTZEREI_GROUPS = [
   {
-    name: "Annahme / Waschen",
-    sections: ["Übernahme", "Waschmaschinen", "Putzmaschinen"],
-  },
-  {
-    name: "Finish",
-    sections: ["Tunnelfinisher", "Hemdenabteilung", "Bügeltische"],
-  },
-  {
-    name: "Verpackung",
-    sections: ["Verpackung", "Kleinwäscheabteilung", "Expedit"],
+    name: "Putzerei",
+    sections: PUTZEREI_SECTIONS.map((section) => section.name),
   },
 ];
+
+const PUTZEREI_SECTION_ALIASES = {
+  Putzmaschinen: "Reinigungsmaschinen",
+  Kleinwäscheabteilung: "Kleinteile",
+  Hemdenabteilung: "Hemden",
+  Bügeltische: "Bügeln",
+};
+
+function normalizePersonnelPlan(plan) {
+  if (!plan || typeof plan !== "object") return {};
+
+  const normalized = {};
+  Object.entries(plan).forEach(([key, dayPlan]) => {
+    if (!dayPlan || typeof dayPlan !== "object" || !key.startsWith("putzerei_")) {
+      normalized[key] = dayPlan;
+      return;
+    }
+
+    const nextDayPlan = { ...dayPlan };
+    Object.entries(PUTZEREI_SECTION_ALIASES).forEach(([oldName, newName]) => {
+      const oldAssignments = Array.isArray(nextDayPlan[oldName]) ? nextDayPlan[oldName] : [];
+      const newAssignments = Array.isArray(nextDayPlan[newName]) ? nextDayPlan[newName] : [];
+      if (oldAssignments.length || newAssignments.length) {
+        nextDayPlan[newName] = [...new Set([...newAssignments, ...oldAssignments])];
+      }
+      delete nextDayPlan[oldName];
+    });
+    normalized[key] = nextDayPlan;
+  });
+
+  return normalized;
+}
 
 const PUTZEREI_EMPLOYEES = [
   { name: "Elfi", hours: 40 },
@@ -417,7 +441,7 @@ function App() {
   const [personalShift, setPersonalShift] = useState("07-12");
   const [personalPlan, setPersonalPlan] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem("dietexPersonalPlan") || "{}");
+      return normalizePersonnelPlan(JSON.parse(localStorage.getItem("dietexPersonalPlan") || "{}"));
     } catch {
       return {};
     }
@@ -1755,6 +1779,18 @@ const tourColumns = Object.entries(
   };
 
   const setEmployeeToSection = (employeeName, sectionName) => {
+    if (sectionName !== "pool" && personalDepartment === "putzerei") {
+      const section = currentSections().find((entry) => entry.name === sectionName);
+      const maximum = section ? getSectionTarget(section) : null;
+      const assigned = getEmployeesInSection(sectionName);
+
+      if (getEmployeeAssignment(employeeName) === sectionName) return;
+      if (maximum !== null && assigned.length >= maximum) {
+        window.alert(`${sectionName} ist bereits voll (maximal ${maximum} ${maximum === 1 ? "Person" : "Personen"}).`);
+        return;
+      }
+    }
+
     setPersonalPlan((prev) => {
       const key = getPersonalKey();
       const current = prev[key] || {};
@@ -2360,6 +2396,78 @@ const tourColumns = Object.entries(
   }
 
   function PersonnelMapOverview({ compact = false }) {
+    if (personalDepartment === "putzerei") {
+      return (
+        <div className="rounded-2xl border bg-white p-3 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-lg font-black">Stationsfolge Putzerei</h3>
+              {!compact && <p className="text-sm text-slate-500">Mitarbeiter werden per Ziehen einer Station zugeteilt.</p>}
+            </div>
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+              {personalDate} | {PERSONNEL_SHIFTS.find((s) => s.key === personalShift)?.label || personalShift}
+            </div>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {currentSections().map((section, index) => {
+              const assigned = getEmployeesInSection(section.name);
+              const maximum = getSectionTarget(section) ?? 0;
+              const freePlaces = Math.max(0, maximum - assigned.length);
+
+              return (
+                <div
+                  key={section.name}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, section.name)}
+                  className={`min-h-28 rounded-xl border-2 p-3 ${getSectionColor(section)}`}
+                >
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-black text-white">
+                        {index + 1}
+                      </span>
+                      <h4 className="break-words text-sm font-black leading-tight">{section.name}</h4>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-700">
+                      {assigned.length}/{maximum}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-1 sm:grid-cols-2">
+                    {assigned.map((name) => {
+                      const employee = currentEmployees().find((entry) => entry.name === name);
+                      return (
+                        <div
+                          key={name}
+                          draggable
+                          onDragStart={() => setDragEmployee(name)}
+                          className="cursor-grab rounded-md border border-blue-200 bg-white px-2 py-1.5 shadow-sm"
+                        >
+                          <div className="text-[11px] font-black leading-tight">{name}</div>
+                          <div className="text-[9px] leading-none text-slate-500">
+                            {employee?.hours ? `${employee.hours} h/Woche` : "Chef"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {Array.from({ length: freePlaces }, (_, placeIndex) => (
+                      <div
+                        key={`free-${placeIndex}`}
+                        className="flex min-h-10 items-center justify-center rounded-md border border-dashed border-slate-300 bg-white/60 px-2 py-1 text-[10px] font-bold text-slate-400"
+                      >
+                        Freier Platz
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     const map = PERSONNEL_MAPS[personalDepartment];
     if (!map) return null;
 
