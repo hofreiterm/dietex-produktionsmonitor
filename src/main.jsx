@@ -165,7 +165,7 @@ const PUTZEREI_GROUPS = [
 
 function normalizePersonnelSections(sections, fallback) {
   const source = Array.isArray(sections) && sections.length ? sections : fallback;
-  return source.map((section) => {
+  return source.map((section, index) => {
     const baseTarget = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
       shift.key,
       section.target?.[shift.key] ?? section.target?.default ?? (section.target?.flexible ? null : 0),
@@ -173,6 +173,7 @@ function normalizePersonnelSections(sections, fallback) {
 
     return {
       ...section,
+      id: section.id || `section-${index}-${String(section.name || "abteilung").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       target: baseTarget,
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
@@ -2241,6 +2242,7 @@ const tourColumns = Object.entries(
 
   const openPersonnelDepartmentEditor = () => {
     setDepartmentDraft(currentSections().map((section) => ({
+      id: section.id,
       name: section.name,
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
@@ -2264,12 +2266,17 @@ const tourColumns = Object.entries(
       ]));
 
       return {
+        id: section.id,
         name: section.name.trim(),
         target: { ...targetsByStrength.mittel },
         targetsByStrength,
       };
     });
 
+    if (!cleaned.length) {
+      window.alert("Mindestens eine Abteilung muss bestehen bleiben.");
+      return;
+    }
     if (cleaned.some((section) => !section.name)) {
       window.alert("Jede Abteilung benötigt einen Namen.");
       return;
@@ -2287,12 +2294,20 @@ const tourColumns = Object.entries(
 
     const oldSections = currentSections();
     const renames = oldSections
-      .map((section, index) => ({ oldName: section.name, newName: cleaned[index]?.name || section.name }))
+      .map((section) => ({
+        oldName: section.name,
+        newName: cleaned.find((entry) => entry.id === section.id)?.name || section.name,
+        exists: cleaned.some((entry) => entry.id === section.id),
+      }))
+      .filter(({ exists }) => exists)
       .filter(({ oldName, newName }) => oldName !== newName);
+    const deletedNames = oldSections
+      .filter((section) => !cleaned.some((entry) => entry.id === section.id))
+      .map((section) => section.name);
 
     setPersonnelSectionsByDept((prev) => ({ ...prev, [personalDepartment]: cleaned }));
 
-    if (renames.length) {
+    if (renames.length || deletedNames.length) {
       setPersonalPlan((prev) => {
         const next = {};
         Object.entries(prev).forEach(([key, plan]) => {
@@ -2307,6 +2322,7 @@ const tourColumns = Object.entries(
             nextPlan[newName] = [...new Set([...newNames, ...oldNames])];
             delete nextPlan[oldName];
           });
+          deletedNames.forEach((deletedName) => delete nextPlan[deletedName]);
           next[key] = nextPlan;
         });
         return next;
@@ -2317,7 +2333,11 @@ const tourColumns = Object.entries(
         [personalDepartment]: (prev[personalDepartment] || []).map((employee) => {
           const preferred1 = renames.find((rename) => rename.oldName === employee.preferredWorkplace1)?.newName || employee.preferredWorkplace1;
           const preferred2 = renames.find((rename) => rename.oldName === employee.preferredWorkplace2)?.newName || employee.preferredWorkplace2;
-          return { ...employee, preferredWorkplace1: preferred1, preferredWorkplace2: preferred2 };
+          return {
+            ...employee,
+            preferredWorkplace1: deletedNames.includes(preferred1) ? "" : preferred1,
+            preferredWorkplace2: deletedNames.includes(preferred2) ? "" : preferred2,
+          };
         }),
       }));
     }
@@ -2995,6 +3015,7 @@ const tourColumns = Object.entries(
 
     const map = PERSONNEL_MAPS[personalDepartment];
     if (!map) return null;
+    const extraSections = currentSections().slice(map.zones.length);
 
     return (
       <div className="rounded-2xl border bg-white p-3 shadow-sm">
@@ -3028,7 +3049,8 @@ const tourColumns = Object.entries(
 
           {map.zones.map((zone, index) => {
             const section = currentSections()[index];
-            const sectionName = section?.name || zone.section;
+            if (!section) return null;
+            const sectionName = section.name;
             const names = getEmployeesInSection(sectionName);
 
             return (
@@ -3047,20 +3069,60 @@ const tourColumns = Object.entries(
                 <div className="mb-1 truncate text-[9px] font-black text-blue-900">{sectionName}</div>
                 <div className="flex flex-wrap gap-1">
                   {names.map((name) => (
-                    <span
+                    <button
+                      type="button"
                       key={name}
                       draggable
                       onDragStart={() => setDragEmployee(name)}
-                      className="cursor-grab rounded-md bg-blue-700 px-1.5 py-0.5 text-[9px] font-black leading-tight text-white"
+                      onClick={() => selectPersonnelEmployee(name)}
+                      className="cursor-pointer rounded-md bg-blue-700 px-1.5 py-0.5 text-[9px] font-black leading-tight text-white"
                     >
                       {name}
-                    </span>
+                    </button>
                   ))}
                 </div>
               </div>
             );
           })}
         </div>
+
+        {extraSections.length > 0 && (
+          <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {extraSections.map((section) => {
+              const names = getEmployeesInSection(section.name);
+              const target = getSectionTarget(section);
+              return (
+                <div
+                  key={section.id}
+                  onClick={() => assignSelectedPersonnelEmployee(section.name)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => dragEmployee && setEmployeeToSection(dragEmployee, section.name)}
+                  className={`min-h-20 rounded-xl border-2 p-2 ${getSectionColor(section)}`}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-sm font-black">{section.name}</div>
+                    <div className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black">{names.length}/{target === null ? "Bedarf" : target}</div>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {names.map((name) => (
+                      <button
+                        type="button"
+                        key={name}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          selectPersonnelEmployee(name);
+                        }}
+                        className="rounded-md bg-blue-700 px-2 py-1 text-[10px] font-black text-white"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   }
@@ -3499,15 +3561,24 @@ const tourColumns = Object.entries(
             <div className="overflow-auto p-5">
               <div className="grid gap-3">
                 {departmentDraft.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="rounded-xl border bg-slate-50 p-3">
-                    <label className="mb-3 block text-xs font-black text-slate-600">
-                      Abteilungsname
-                      <Input
-                        className="mt-1 w-full bg-white"
-                        value={section.name}
-                        onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, name: event.target.value } : entry))}
-                      />
-                    </label>
+                  <div key={section.id} className="rounded-xl border bg-slate-50 p-3">
+                    <div className="mb-3 flex items-end gap-2">
+                      <label className="block min-w-0 flex-1 text-xs font-black text-slate-600">
+                        Abteilungsname
+                        <Input
+                          className="mt-1 w-full bg-white"
+                          value={section.name}
+                          onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, name: event.target.value } : entry))}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="rounded-xl border border-red-300 bg-white px-3 py-2 text-sm font-black text-red-700 hover:bg-red-50"
+                        onClick={() => setDepartmentDraft((prev) => prev.filter((entry) => entry.id !== section.id))}
+                      >
+                        Löschen
+                      </button>
+                    </div>
 
                     <div className="min-w-[650px] overflow-hidden rounded-lg border bg-white">
                       <div className="grid grid-cols-[130px_1fr_1fr_1fr] bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">
@@ -3544,6 +3615,20 @@ const tourColumns = Object.entries(
                   </div>
                 ))}
               </div>
+
+              <Button
+                className="mt-3 border-blue-300 bg-blue-50 text-blue-900"
+                onClick={() => setDepartmentDraft((prev) => [...prev, {
+                  id: `custom-${Date.now()}`,
+                  name: "Neue Abteilung",
+                  targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
+                    strength.key,
+                    Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [shift.key, 0])),
+                  ])),
+                }])}
+              >
+                Neue Abteilung hinzufügen
+              </Button>
 
               <div className="mt-5 flex justify-end gap-2 border-t pt-4">
                 <Button onClick={() => setPersonnelDepartmentModal(false)}>Abbrechen</Button>
