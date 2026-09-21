@@ -246,8 +246,8 @@ const EMPTY_EMPLOYEE_FORM = {
   hours: "",
   preferredWorkplace1: "",
   preferredWorkplace2: "",
-  regularHours: "",
   regularDays: [1, 2, 3, 4, 5],
+  regularShifts: ["07-12", "12-15", "15-schluss"],
 };
 
 function normalizePersonnelEmployee(employee) {
@@ -255,8 +255,8 @@ function normalizePersonnelEmployee(employee) {
     ...employee,
     preferredWorkplace1: employee?.preferredWorkplace1 || "",
     preferredWorkplace2: employee?.preferredWorkplace2 || "",
-    regularHours: employee?.regularHours || "",
     regularDays: Array.isArray(employee?.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5],
+    regularShifts: Array.isArray(employee?.regularShifts) ? employee.regularShifts : ["07-12", "12-15", "15-schluss"],
   };
 }
 
@@ -1863,7 +1863,22 @@ const tourColumns = Object.entries(
 
   const currentSections = () => personnelSectionsByDept[personalDepartment] || currentDepartmentConfig().sections;
   const currentGroups = () => currentDepartmentConfig().groups;
-  const currentEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
+  const currentBaseEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
+  const currentEmployees = () => {
+    const baseEmployees = currentBaseEmployees();
+    if (personalDepartment !== "waescherei") return baseEmployees;
+
+    const putzereiPlanKey = getPersonalKey(personalDate, personalShift, "putzerei");
+    const borrowedNames = personalPlan[putzereiPlanKey]?.waescherei || [];
+    const putzereiEmployees = personnelEmployeesByDept.putzerei || [];
+    const existingNames = new Set(baseEmployees.map((employee) => employee.name.toLowerCase()));
+    const borrowedEmployees = borrowedNames
+      .map((name) => putzereiEmployees.find((employee) => employee.name === name))
+      .filter((employee) => employee && !existingNames.has(employee.name.toLowerCase()))
+      .map((employee) => ({ ...employee, borrowedFrom: "putzerei" }));
+
+    return [...baseEmployees, ...borrowedEmployees];
+  };
 
   const getPersonnelDayStrengthKey = () => `${personalDepartment}_${personalDate}`;
   const getPersonnelDayStrength = () => personnelDayStrengthByDate[getPersonnelDayStrengthKey()] || "mittel";
@@ -1886,17 +1901,7 @@ const tourColumns = Object.entries(
   };
 
   const setEmployeeToSection = (employeeName, sectionName) => {
-    if (sectionName !== "pool" && personalDepartment === "putzerei") {
-      const section = currentSections().find((entry) => entry.name === sectionName);
-      const maximum = section ? getSectionTarget(section) : null;
-      const assigned = getEmployeesInSection(sectionName);
-
-      if (getEmployeeAssignment(employeeName) === sectionName) return true;
-      if (maximum !== null && assigned.length >= maximum) {
-        window.alert(`${sectionName} ist bereits voll (maximal ${maximum} ${maximum === 1 ? "Person" : "Personen"}).`);
-        return false;
-      }
-    }
+    if (getEmployeeAssignment(employeeName) === sectionName) return true;
 
     setPersonalPlan((prev) => {
       const key = getPersonalKey();
@@ -1913,7 +1918,20 @@ const tourColumns = Object.entries(
         next[sectionName] = [...(next[sectionName] || []), employeeName];
       }
 
-      return { ...prev, [key]: next };
+      const updatedPlans = { ...prev, [key]: next };
+
+      if (personalDepartment === "putzerei") {
+        const waeschereiKey = getPersonalKey(personalDate, personalShift, "waescherei");
+        const waeschereiPlan = prev[waeschereiKey] || {};
+        updatedPlans[waeschereiKey] = Object.fromEntries(
+          Object.entries(waeschereiPlan).map(([zone, names]) => [
+            zone,
+            Array.isArray(names) ? names.filter((name) => name !== employeeName) : names,
+          ])
+        );
+      }
+
+      return updatedPlans;
     });
     return true;
   };
@@ -1944,8 +1962,8 @@ const tourColumns = Object.entries(
     if (target === null) return "border-slate-300 bg-slate-50";
 
     const actual = getEmployeesInSection(section.name).length;
-    if (actual < target) return "border-red-300 bg-red-50";
-    if (actual > target) return "border-yellow-300 bg-yellow-50";
+    if (actual < target) return "border-yellow-400 bg-yellow-50";
+    if (actual > target) return "border-red-400 bg-red-50";
     return "border-green-300 bg-green-50";
   };
 
@@ -1963,6 +1981,11 @@ const tourColumns = Object.entries(
   const isEmployeeRegularDay = (employee) => {
     const days = Array.isArray(employee.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5];
     return days.includes(getPersonalWeekday());
+  };
+
+  const isEmployeeRegularShift = (employee) => {
+    const shifts = Array.isArray(employee.regularShifts) ? employee.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key);
+    return shifts.includes(personalShift);
   };
 
   const getActiveEmployees = () => currentEmployees().filter(
@@ -1993,22 +2016,30 @@ const tourColumns = Object.entries(
   };
 
   const openPersonnelEmployeeEditor = (employeeName = null) => {
-    const employee = employeeName ? currentEmployees().find((entry) => entry.name === employeeName) : null;
+    const employee = employeeName ? currentBaseEmployees().find((entry) => entry.name === employeeName) : null;
     setEditingEmployeeName(employee?.name || null);
     setEmployeeForm(employee ? {
       name: employee.name,
       hours: employee.hours ?? "",
       preferredWorkplace1: employee.preferredWorkplace1 || "",
       preferredWorkplace2: employee.preferredWorkplace2 || "",
-      regularHours: employee.regularHours || "",
       regularDays: Array.isArray(employee.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5],
-    } : { ...EMPTY_EMPLOYEE_FORM, regularDays: [...EMPTY_EMPLOYEE_FORM.regularDays] });
+      regularShifts: Array.isArray(employee.regularShifts) ? employee.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key),
+    } : {
+      ...EMPTY_EMPLOYEE_FORM,
+      regularDays: [...EMPTY_EMPLOYEE_FORM.regularDays],
+      regularShifts: [...EMPTY_EMPLOYEE_FORM.regularShifts],
+    });
     setPersonnelEmployeeModal(true);
   };
 
   const resetPersonnelEmployeeForm = () => {
     setEditingEmployeeName(null);
-    setEmployeeForm({ ...EMPTY_EMPLOYEE_FORM, regularDays: [...EMPTY_EMPLOYEE_FORM.regularDays] });
+    setEmployeeForm({
+      ...EMPTY_EMPLOYEE_FORM,
+      regularDays: [...EMPTY_EMPLOYEE_FORM.regularDays],
+      regularShifts: [...EMPTY_EMPLOYEE_FORM.regularShifts],
+    });
   };
 
   const savePersonnelEmployee = () => {
@@ -2032,7 +2063,11 @@ const tourColumns = Object.entries(
       window.alert("Bitte mindestens einen Stamm-Arbeitstag auswählen.");
       return;
     }
-    if (currentEmployees().some((employee) => employee.name.toLowerCase() === name.toLowerCase() && employee.name !== editingEmployeeName)) {
+    if (!employeeForm.regularShifts.length) {
+      window.alert("Bitte mindestens eine Stamm-Schicht auswählen.");
+      return;
+    }
+    if (currentBaseEmployees().some((employee) => employee.name.toLowerCase() === name.toLowerCase() && employee.name !== editingEmployeeName)) {
       window.alert("Dieser Mitarbeiter existiert bereits.");
       return;
     }
@@ -2042,8 +2077,8 @@ const tourColumns = Object.entries(
       hours,
       preferredWorkplace1: employeeForm.preferredWorkplace1,
       preferredWorkplace2: employeeForm.preferredWorkplace2,
-      regularHours: employeeForm.regularHours.trim(),
       regularDays: [...employeeForm.regularDays].sort(),
+      regularShifts: [...employeeForm.regularShifts],
     });
 
     setPersonnelEmployeesByDept((prev) => {
@@ -2354,6 +2389,7 @@ const tourColumns = Object.entries(
     "za",
     "krank",
     "autoZa",
+    "waescherei",
   ];
 
   const applyPersonnelSuggestions = () => {
@@ -2367,6 +2403,7 @@ const tourColumns = Object.entries(
       za: [...manualZa],
       krank: [...(currentPlan.krank || [])],
       autoZa: [],
+      waescherei: [...(currentPlan.waescherei || [])],
     };
 
     currentSections().forEach((section) => {
@@ -2377,6 +2414,7 @@ const tourColumns = Object.entries(
       ...nextPlan.urlaub,
       ...nextPlan.za,
       ...nextPlan.krank,
+      ...nextPlan.waescherei,
     ]);
 
     const historyPlans = Object.entries(personalPlan)
@@ -2405,6 +2443,7 @@ const tourColumns = Object.entries(
     const automaticZaCandidates = currentEmployees()
       .filter((employee) => getEmployeeStatus(employee.name) === "anwesend")
       .filter((employee) => isEmployeeRegularDay(employee))
+      .filter((employee) => isEmployeeRegularShift(employee))
       .filter((employee) => !unavailable.has(employee.name))
       .map((employee) => {
         const history = historyByEmployee[employee.name];
@@ -2434,6 +2473,7 @@ const tourColumns = Object.entries(
       const candidates = currentEmployees()
         .filter((emp) => getEmployeeStatus(emp.name) === "anwesend")
         .filter((emp) => isEmployeeRegularDay(emp))
+        .filter((emp) => isEmployeeRegularShift(emp))
         .filter((emp) => !assigned.has(emp.name))
         .map((emp) => {
           let score = 0;
@@ -2892,15 +2932,14 @@ const tourColumns = Object.entries(
           />
 
           {map.zones.map((zone, index) => {
-            const sectionName = currentSections()[index]?.name || zone.section;
+            const section = currentSections()[index];
+            const sectionName = section?.name || zone.section;
             const names = getEmployeesInSection(sectionName);
 
             return (
               <div
                 key={sectionName}
-                className={`absolute rounded-lg border p-1 shadow-md backdrop-blur-sm ${
-                  names.length ? "border-blue-300 bg-white/90" : "border-slate-300 bg-white/50"
-                }`}
+                className={`absolute rounded-lg border-2 p-1 shadow-md backdrop-blur-sm ${section ? getSectionColor(section) : "border-slate-300 bg-white/80"}`}
                 style={{
                   left: `${zone.x}%`,
                   top: `${zone.y}%`,
@@ -2936,6 +2975,7 @@ const tourColumns = Object.entries(
       { key: "urlaub", title: "Urlaub" },
       { key: "za", title: "ZA" },
       { key: "krank", title: "Krank" },
+      ...(personalDepartment === "putzerei" ? [{ key: "waescherei", title: "Wäscherei" }] : []),
     ];
 
     return (
@@ -2976,7 +3016,9 @@ const tourColumns = Object.entries(
                 className={`cursor-pointer rounded-md border px-2 py-1 text-left ${selectedPersonnelEmployee === emp.name ? "border-blue-600 bg-blue-50 ring-2 ring-blue-400" : "bg-slate-50"}`}
               >
                 <div className="text-[11px] font-black leading-tight">{emp.name}</div>
-                <div className="text-[9px] text-slate-500 leading-none">{emp.hours ? `${emp.hours} h` : "Chef"}</div>
+                <div className="text-[9px] text-slate-500 leading-none">
+                  {emp.borrowedFrom ? "Aus Putzerei" : emp.hours ? `${emp.hours} h` : "Chef"}
+                </div>
               </button>
             ))}
           </div>
@@ -3085,6 +3127,63 @@ const tourColumns = Object.entries(
         </div>
       </header>
 
+      {selectedPersonnelEmployee && view === "personalplanung" && !personnelEmployeeModal && !personnelDepartmentModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-slate-500">Mitarbeiter verschieben</div>
+                <h2 className="text-2xl font-black">{selectedPersonnelEmployee}</h2>
+                <div className="text-sm text-slate-500">
+                  Aktuell: {getEmployeeAssignment(selectedPersonnelEmployee) || "Nicht eingeteilt"}
+                </div>
+              </div>
+              <Button onClick={() => setSelectedPersonnelEmployee(null)}>Abbrechen</Button>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => assignSelectedPersonnelEmployee("pool")}
+                className="min-h-16 rounded-xl border-2 border-slate-300 bg-slate-50 px-3 py-2 text-left font-black hover:border-blue-500"
+              >
+                Nicht eingeteilt
+              </button>
+              {currentSections().map((section) => {
+                const target = getSectionTarget(section);
+                const actual = getEmployeesInSection(section.name).length;
+                return (
+                  <button
+                    type="button"
+                    key={section.name}
+                    onClick={() => assignSelectedPersonnelEmployee(section.name)}
+                    className="min-h-16 rounded-xl border-2 border-blue-200 bg-blue-50 px-3 py-2 text-left hover:border-blue-600"
+                  >
+                    <div className="font-black">{section.name}</div>
+                    <div className="text-xs font-bold text-slate-500">{actual}/{target === null ? "bei Bedarf" : target} Personen</div>
+                  </button>
+                );
+              })}
+              {[
+                { key: "urlaub", label: "Urlaub" },
+                { key: "za", label: "ZA" },
+                { key: "krank", label: "Krankenstand" },
+                ...(personalDepartment === "putzerei" ? [{ key: "waescherei", label: "Wäscherei" }] : []),
+              ].map((destination) => (
+                <button
+                  type="button"
+                  key={destination.key}
+                  onClick={() => assignSelectedPersonnelEmployee(destination.key)}
+                  className="min-h-16 rounded-xl border-2 border-slate-300 bg-white px-3 py-2 text-left font-black hover:border-blue-500"
+                >
+                  {destination.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {pinModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl">
@@ -3141,7 +3240,7 @@ const tourColumns = Object.entries(
                   Neuen Mitarbeiter anlegen
                 </Button>
                 <div className="space-y-2">
-                  {getSortedEmployees(currentEmployees()).map((employee) => {
+                  {getSortedEmployees(currentBaseEmployees()).map((employee) => {
                     const assignmentStats = getEmployeeAssignmentStats(employee.name);
                     const topAssignment = assignmentStats[0];
                     const isEditing = editingEmployeeName === employee.name;
@@ -3216,16 +3315,31 @@ const tourColumns = Object.entries(
                       {currentSections().map((section) => <option key={section.name} value={section.name}>{section.name}</option>)}
                     </select>
                   </label>
-                  <label className="block text-sm font-bold lg:col-span-2">
-                    Stammzeiten
-                    <Input
-                      className="mt-1 w-full"
-                      placeholder="z. B. 07:00 bis 15:30"
-                      value={employeeForm.regularHours}
-                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, regularHours: e.target.value }))}
-                    />
-                  </label>
                 </div>
+
+                <fieldset className="mt-5">
+                  <legend className="mb-2 text-sm font-black">Stammschichten</legend>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {PERSONNEL_SHIFTS.map((shift, index) => {
+                      const checked = employeeForm.regularShifts.includes(shift.key);
+                      return (
+                        <label key={shift.key} className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold ${checked ? "border-blue-400 bg-blue-50 text-blue-900" : "bg-white text-slate-500"}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setEmployeeForm((prev) => ({
+                              ...prev,
+                              regularShifts: checked
+                                ? prev.regularShifts.filter((key) => key !== shift.key)
+                                : [...prev.regularShifts, shift.key],
+                            }))}
+                          />
+                          {index + 1}. Schicht
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
 
                 <fieldset className="mt-5">
                   <legend className="mb-2 text-sm font-black">Stammtage</legend>
