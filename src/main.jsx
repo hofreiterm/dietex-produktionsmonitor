@@ -2,6 +2,7 @@ import "./index.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
+import { Mic } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const supabase = createClient(
@@ -561,6 +562,9 @@ function App() {
   const [employeeForm, setEmployeeForm] = useState(EMPTY_EMPLOYEE_FORM);
   const [personnelDepartmentModal, setPersonnelDepartmentModal] = useState(false);
   const [departmentDraft, setDepartmentDraft] = useState([]);
+  const [personnelAssistantText, setPersonnelAssistantText] = useState("");
+  const [personnelAssistantMessage, setPersonnelAssistantMessage] = useState("");
+  const [personnelAssistantListening, setPersonnelAssistantListening] = useState(false);
 
   const [tourModal, setTourModal] = useState(null);
   const [tourContainerCount, setTourContainerCount] = useState("");
@@ -1900,35 +1904,45 @@ const tourColumns = Object.entries(
     return null;
   };
 
-  const setEmployeeToSection = (employeeName, sectionName) => {
-    if (getEmployeeAssignment(employeeName) === sectionName) return true;
-
+  const setEmployeeToSection = (employeeName, sectionName, targetShift = personalShift) => {
     setPersonalPlan((prev) => {
-      const key = getPersonalKey();
-      const current = prev[key] || {};
-      const next = {};
-
       const allZones = allPlanningZones();
+      const globalZones = new Set(["urlaub", "za", "krank", "waescherei"]);
+      const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
+        const shiftPlan = prev[getPersonalKey(personalDate, shift.key, personalDepartment)] || {};
+        return [...globalZones].some((zone) => (shiftPlan[zone] || []).includes(employeeName));
+      });
+      const applyToAllShifts = globalZones.has(sectionName) || (sectionName === "pool" && hasGlobalAssignment);
+      const shiftsToUpdate = applyToAllShifts ? PERSONNEL_SHIFTS.map((shift) => shift.key) : [targetShift];
+      const updatedPlans = { ...prev };
 
-      allZones.forEach((zone) => {
-        next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
+      shiftsToUpdate.forEach((shiftKey) => {
+        const key = getPersonalKey(personalDate, shiftKey, personalDepartment);
+        const current = prev[key] || {};
+        const next = {};
+
+        allZones.forEach((zone) => {
+          next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
+        });
+
+        if (sectionName !== "pool") {
+          next[sectionName] = [...(next[sectionName] || []), employeeName];
+        }
+
+        updatedPlans[key] = next;
       });
 
-      if (sectionName !== "pool") {
-        next[sectionName] = [...(next[sectionName] || []), employeeName];
-      }
-
-      const updatedPlans = { ...prev, [key]: next };
-
       if (personalDepartment === "putzerei") {
-        const waeschereiKey = getPersonalKey(personalDate, personalShift, "waescherei");
-        const waeschereiPlan = prev[waeschereiKey] || {};
-        updatedPlans[waeschereiKey] = Object.fromEntries(
-          Object.entries(waeschereiPlan).map(([zone, names]) => [
-            zone,
-            Array.isArray(names) ? names.filter((name) => name !== employeeName) : names,
-          ])
-        );
+        shiftsToUpdate.forEach((shiftKey) => {
+          const waeschereiKey = getPersonalKey(personalDate, shiftKey, "waescherei");
+          const waeschereiPlan = prev[waeschereiKey] || {};
+          updatedPlans[waeschereiKey] = Object.fromEntries(
+            Object.entries(waeschereiPlan).map(([zone, names]) => [
+              zone,
+              Array.isArray(names) ? names.filter((name) => name !== employeeName) : names,
+            ])
+          );
+        });
       }
 
       return updatedPlans;
@@ -1945,6 +1959,109 @@ const tourColumns = Object.entries(
     if (setEmployeeToSection(selectedPersonnelEmployee, sectionName)) {
       setSelectedPersonnelEmployee(null);
     }
+  };
+
+  const normalizePersonnelCommandText = (value) => String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const resolvePersonnelCommandShift = (text) => {
+    const normalized = normalizePersonnelCommandText(text);
+    if (/\b(1|erste|ersten)\.?\s*schicht\b/.test(normalized)) return "07-12";
+    if (/\b(2|zweite|zweiten)\.?\s*schicht\b/.test(normalized)) return "12-15";
+    if (/\b(3|dritte|dritten)\.?\s*schicht\b/.test(normalized)) return "15-schluss";
+    return personalShift;
+  };
+
+  const resolvePersonnelCommandDestination = (text) => {
+    const normalized = normalizePersonnelCommandText(text);
+    if (/\b(krankenstand|krank)\b/.test(normalized)) return "krank";
+    if (/\burlaub\b/.test(normalized)) return "urlaub";
+    if (/\b(zeitausgleich|za)\b/.test(normalized)) return "za";
+    if (/\bwascherei\b/.test(normalized) && personalDepartment === "putzerei") return "waescherei";
+    if (/\b(nicht eingeteilt|frei|pool)\b/.test(normalized)) return "pool";
+
+    return [...currentSections()]
+      .sort((a, b) => b.name.length - a.name.length)
+      .find((section) => normalized.includes(normalizePersonnelCommandText(section.name)))?.name || null;
+  };
+
+  const applyPersonnelAssistantCommand = () => {
+    const input = personnelAssistantText.trim();
+    if (!input) {
+      setPersonnelAssistantMessage("Bitte zuerst eine Information eingeben oder einsprechen.");
+      return;
+    }
+
+    const normalizedInput = normalizePersonnelCommandText(input);
+    const strength = PERSONNEL_DAY_STRENGTHS.find((entry) => normalizedInput.includes(entry.key));
+    if (strength) setPersonnelDayStrength(strength.key);
+
+    const employeeOccurrences = currentEmployees()
+      .map((employee) => ({
+        employee,
+        index: normalizedInput.indexOf(normalizePersonnelCommandText(employee.name)),
+      }))
+      .filter((entry) => entry.index >= 0)
+      .sort((a, b) => a.index - b.index);
+
+    const destinationsInText = [
+      resolvePersonnelCommandDestination(input),
+      ...currentSections()
+        .filter((section) => normalizedInput.includes(normalizePersonnelCommandText(section.name)))
+        .map((section) => section.name),
+    ].filter(Boolean);
+    const uniqueDestinations = [...new Set(destinationsInText)];
+    let appliedAssignments = 0;
+
+    employeeOccurrences.forEach((entry, index) => {
+      const nextIndex = employeeOccurrences[index + 1]?.index ?? normalizedInput.length;
+      const commandPart = normalizedInput.slice(entry.index, nextIndex);
+      const destination = resolvePersonnelCommandDestination(commandPart)
+        || (uniqueDestinations.length === 1 ? uniqueDestinations[0] : null);
+      if (!destination) return;
+
+      const shift = resolvePersonnelCommandShift(commandPart);
+      setEmployeeToSection(entry.employee.name, destination, shift);
+      appliedAssignments += 1;
+    });
+
+    const changes = [];
+    if (strength) changes.push(`Tagesstärke ${strength.label}`);
+    if (appliedAssignments) changes.push(`${appliedAssignments} Einteilung${appliedAssignments === 1 ? "" : "en"}`);
+
+    if (!changes.length) {
+      setPersonnelAssistantMessage("Keine eindeutige Anweisung erkannt. Bitte Namen und Ziel gemeinsam angeben.");
+      return;
+    }
+
+    setPersonnelAssistantMessage(`Übernommen: ${changes.join(", ")}.`);
+    setPersonnelAssistantText("");
+  };
+
+  const startPersonnelVoiceInput = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      window.alert("Die Spracheingabe wird von diesem Browser nicht unterstützt.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "de-AT";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setPersonnelAssistantListening(true);
+    recognition.onend = () => setPersonnelAssistantListening(false);
+    recognition.onerror = () => {
+      setPersonnelAssistantListening(false);
+      setPersonnelAssistantMessage("Spracheingabe konnte nicht gestartet werden.");
+    };
+    recognition.onresult = (event) => {
+      const transcript = event.results?.[0]?.[0]?.transcript || "";
+      setPersonnelAssistantText((current) => current ? `${current}, ${transcript}` : transcript);
+    };
+    recognition.start();
   };
 
   const getSectionTarget = (section) => {
@@ -3951,6 +4068,37 @@ const tourColumns = Object.entries(
                   <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
                   <Button className="bg-blue-700 text-white" onClick={printPersonalPlanSafe}>Drucken</Button>
                 </div>
+              </div>
+
+              <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-black text-blue-950">KI-Planungsassistent</h3>
+                  {personnelAssistantListening && <span className="text-xs font-black text-red-700">Aufnahme läuft</span>}
+                </div>
+                <div className="grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                  <textarea
+                    className="min-h-20 w-full resize-y rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                    placeholder="Planungsinformation eingeben"
+                    value={personnelAssistantText}
+                    onChange={(event) => {
+                      setPersonnelAssistantText(event.target.value);
+                      setPersonnelAssistantMessage("");
+                    }}
+                  />
+                  <button
+                    type="button"
+                    title="Spracheingabe"
+                    aria-label="Spracheingabe"
+                    onClick={startPersonnelVoiceInput}
+                    className={`flex h-11 w-11 items-center justify-center self-end rounded-xl border ${personnelAssistantListening ? "border-red-500 bg-red-100 text-red-800" : "border-blue-300 bg-white text-blue-800"}`}
+                  >
+                    <Mic size={20} />
+                  </button>
+                  <Button className="self-end bg-blue-700 text-white" onClick={applyPersonnelAssistantCommand}>Übernehmen</Button>
+                </div>
+                {personnelAssistantMessage && (
+                  <div className="mt-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700">{personnelAssistantMessage}</div>
+                )}
               </div>
 
               <div className="grid gap-3 xl:grid-cols-[310px_1fr]">
