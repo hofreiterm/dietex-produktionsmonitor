@@ -454,9 +454,10 @@ function displaySubcategory(subcategory) {
 function App() {
   const params = new URLSearchParams(window.location.search);
   const initialView = params.get("view") || "annahme";
+  const personnelDisplayMode = initialView === "personaldisplay" || params.get("display") === "waescherei-gang";
   const initialStationKey = params.get("station");
   const initialStation = STATIONS.find((s) => s.key === initialStationKey) || STATIONS[0];
-  const fixedView = params.get("fixed") === "1";
+  const fixedView = params.get("fixed") === "1" || personnelDisplayMode;
   const expeditMode = params.get("view") === "expedit";
   const takeoverMode = fixedView && (initialView === "annahme" || initialView === "uebernahme" || params.get("mode") === "uebernahme");
   const requestedInitialView = takeoverMode
@@ -574,6 +575,7 @@ function App() {
   const [employeeForm, setEmployeeForm] = useState(EMPTY_EMPLOYEE_FORM);
   const [personnelDepartmentModal, setPersonnelDepartmentModal] = useState(false);
   const [departmentDraft, setDepartmentDraft] = useState([]);
+  const [personnelSyncStatus, setPersonnelSyncStatus] = useState("loading");
 
   const [tourModal, setTourModal] = useState(null);
   const [tourContainerCount, setTourContainerCount] = useState("");
@@ -588,8 +590,156 @@ function App() {
   const reloadDueAt = useRef(0);
   const loadAllRunning = useRef(false);
   const loadAllQueued = useRef(false);
+  const personnelSyncReady = useRef(false);
+  const personnelSyncAvailable = useRef(false);
+  const personnelSaveTimer = useRef(null);
+  const lastPersonnelStateJson = useRef("");
+
+  const createPersonnelStatePayload = () => ({
+    plan: personalPlan,
+    employeeStatus,
+    employeesByDept: personnelEmployeesByDept,
+    sectionsByDept: personnelSectionsByDept,
+    dayStrengthByDate: personnelDayStrengthByDate,
+  });
+
+  const applyRemotePersonnelState = (remoteState) => {
+    if (!remoteState || typeof remoteState !== "object") return;
+
+    const nextState = {
+      plan: normalizePersonnelPlan(remoteState.plan || {}),
+      employeeStatus: remoteState.employeeStatus && typeof remoteState.employeeStatus === "object" ? remoteState.employeeStatus : {},
+      employeesByDept: {
+        waescherei: normalizePersonnelEmployees(remoteState.employeesByDept?.waescherei, PERSONNEL_EMPLOYEES),
+        putzerei: normalizePersonnelEmployees(remoteState.employeesByDept?.putzerei, PUTZEREI_EMPLOYEES),
+      },
+      sectionsByDept: {
+        waescherei: normalizePersonnelSections(remoteState.sectionsByDept?.waescherei, PERSONNEL_SECTIONS),
+        putzerei: normalizePersonnelSections(remoteState.sectionsByDept?.putzerei, PUTZEREI_SECTIONS),
+      },
+      dayStrengthByDate: remoteState.dayStrengthByDate && typeof remoteState.dayStrengthByDate === "object" ? remoteState.dayStrengthByDate : {},
+    };
+
+    lastPersonnelStateJson.current = JSON.stringify(nextState);
+    setPersonalPlan(nextState.plan);
+    setEmployeeStatus(nextState.employeeStatus);
+    setPersonnelEmployeesByDept(nextState.employeesByDept);
+    setPersonnelSectionsByDept(nextState.sectionsByDept);
+    setPersonnelDayStrengthByDate(nextState.dayStrengthByDate);
+    setPersonnelSyncStatus("connected");
+  };
 
   useEffect(() => {
+    let active = true;
+
+    const loadRemotePersonnelState = async () => {
+      const { data, error } = await supabase
+        .from("personnel_planning_state")
+        .select("state, updated_at")
+        .eq("id", "main")
+        .maybeSingle();
+
+      if (!active) return;
+      if (error) {
+        personnelSyncAvailable.current = false;
+        personnelSyncReady.current = false;
+        setPersonnelSyncStatus(error.code === "42P01" || error.code === "PGRST205" ? "setup_required" : "error");
+        return;
+      }
+
+      personnelSyncAvailable.current = true;
+      if (data?.state) {
+        const hasUnsavedLocalChanges = personnelSyncReady.current
+          && !personnelDisplayMode
+          && JSON.stringify(createPersonnelStatePayload()) !== lastPersonnelStateJson.current;
+        if (hasUnsavedLocalChanges) return;
+        applyRemotePersonnelState(data.state);
+        personnelSyncReady.current = true;
+        return;
+      }
+
+      if (personnelDisplayMode) {
+        setPersonnelSyncStatus("waiting");
+        return;
+      }
+
+      const localState = createPersonnelStatePayload();
+      const localJson = JSON.stringify(localState);
+      const { error: insertError } = await supabase.from("personnel_planning_state").upsert({
+        id: "main",
+        state: localState,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
+
+      if (!active) return;
+      if (insertError) {
+        setPersonnelSyncStatus("error");
+        return;
+      }
+      lastPersonnelStateJson.current = localJson;
+      personnelSyncReady.current = true;
+      setPersonnelSyncStatus("connected");
+    };
+
+    const channel = supabase
+      .channel("dietex-personnel-planning-live")
+      .on("postgres_changes", {
+        event: "*",
+        schema: "public",
+        table: "personnel_planning_state",
+        filter: "id=eq.main",
+      }, (payload) => {
+        if (payload.new?.state) {
+          applyRemotePersonnelState(payload.new.state);
+          personnelSyncAvailable.current = true;
+          personnelSyncReady.current = true;
+        }
+      })
+      .subscribe();
+
+    loadRemotePersonnelState();
+    const pollInterval = window.setInterval(loadRemotePersonnelState, 15000);
+
+    return () => {
+      active = false;
+      window.clearInterval(pollInterval);
+      if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (personnelDisplayMode || !personnelSyncReady.current || !personnelSyncAvailable.current) return undefined;
+
+    const nextState = createPersonnelStatePayload();
+    const nextJson = JSON.stringify(nextState);
+    if (nextJson === lastPersonnelStateJson.current) return undefined;
+
+    if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
+    personnelSaveTimer.current = window.setTimeout(async () => {
+      const { error } = await supabase.from("personnel_planning_state").upsert({
+        id: "main",
+        state: nextState,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
+
+      if (error) {
+        setPersonnelSyncStatus("error");
+        personnelSaveTimer.current = null;
+        return;
+      }
+      lastPersonnelStateJson.current = nextJson;
+      setPersonnelSyncStatus("connected");
+      personnelSaveTimer.current = null;
+    }, 500);
+
+    return () => {
+      if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
+    };
+  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate]);
+
+  useEffect(() => {
+    if (personnelDisplayMode) return undefined;
     scheduleLoadAll(0);
     const channel = supabase
       .channel("dietex-live")
@@ -685,6 +835,16 @@ function App() {
   }, [personalDepartment, personalDate, personalShift]);
 
   useEffect(() => {
+    if (!personnelDisplayMode) return;
+    const now = new Date(tick);
+    const hour = now.getHours();
+    const shift = hour < 12 ? "07-12" : hour < 15 ? "12-15" : "15-schluss";
+    setPersonalDepartment("waescherei");
+    setPersonalDate(localDateKey(now));
+    setPersonalShift(shift);
+  }, [personnelDisplayMode, tick]);
+
+  useEffect(() => {
     return () => {
       Object.values(washTimers.current).forEach((timer) => clearTimeout(timer));
     };
@@ -694,7 +854,7 @@ function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       setTick(Date.now());
-      autoMoveFinishedToTourAtMidnight();
+      if (!personnelDisplayMode) autoMoveFinishedToTourAtMidnight();
     }, 1000);
     return () => clearInterval(interval);
   }, [orders, items]);
@@ -3446,6 +3606,43 @@ const tourColumns = Object.entries(
       </aside>
     );
   }
+
+  function PersonnelDisplayStatusPanel() {
+    const plan = getCurrentPersonalPlan();
+    const zones = [
+      { key: "pool", title: "Nicht eingeteilt", names: getUnassignedEmployees().map((employee) => employee.name) },
+      { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
+      { key: "za", title: "ZA", names: plan.za || [] },
+      { key: "krank", title: "Krank", names: plan.krank || [] },
+      { key: "putzerei", title: "Putzerei", names: plan.putzerei || [] },
+    ];
+
+    return (
+      <aside className="rounded-xl border bg-white p-3 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-2 border-b pb-2">
+          <h3 className="text-lg font-black">Mitarbeiterstatus</h3>
+          <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black">{currentEmployees().length}</span>
+        </div>
+        <div className="grid gap-2">
+          {zones.map((zone) => (
+            <div key={zone.key} className="rounded-lg border bg-slate-50 p-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="text-sm font-black">{zone.title}</div>
+                <div className="rounded-full bg-white px-2 py-0.5 text-xs font-black">{zone.names.length}</div>
+              </div>
+              <div className="flex min-h-8 flex-wrap content-start gap-1">
+                {getSortedEmployees(zone.names.map((name) => ({ name }))).map((employee) => (
+                  <span key={employee.name} className="rounded-md border bg-white px-2 py-1 text-xs font-bold">
+                    {employee.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+    );
+  }
   /*
         }`}
       >
@@ -3486,7 +3683,9 @@ const tourColumns = Object.entries(
       <header className={`border-b bg-white px-8 ${fixedView ? "py-2" : "py-4"}`}>
         <div className="grid grid-cols-3 items-center">
           <Logo />
-          <div className={`${fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>{expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}</div>
+          <div className={`${fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>
+            {personnelDisplayMode ? "Personalplanung Wäscherei" : expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}
+          </div>
           <div className="flex items-center justify-end gap-3">
             {!fixedView && (adminUnlocked ? (
               <Button className="border-emerald-200 bg-emerald-50 text-emerald-800" onClick={lockAdminArea}>
@@ -4322,6 +4521,9 @@ const tourColumns = Object.entries(
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className="text-xl font-black">Personalplanung</h2>
+                  <div className={`mt-1 text-xs font-bold ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-amber-700"}`}>
+                    {personnelSyncStatus === "connected" ? "Zentral gespeichert" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : personnelSyncStatus === "loading" ? "Zentrale Planung wird geladen" : "Derzeit nur lokal gespeichert"}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(PERSONNEL_DEPARTMENTS).map(([deptKey, dept]) => (
@@ -4598,6 +4800,29 @@ const tourColumns = Object.entries(
                   ))}
                 </div>
               </div>}
+            </div>
+          </section>
+        )}
+
+        {view === "personaldisplay" && (
+          <section className="space-y-2">
+            <div className="flex items-center justify-between rounded-xl border bg-white px-4 py-2 shadow-sm">
+              <div>
+                <h2 className="text-2xl font-black">Aktuelle Einteilung Wäscherei</h2>
+                <div className="text-sm font-bold text-slate-500">
+                  {new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-black">{PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label}</div>
+                <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-red-700"}`}>
+                  {personnelSyncStatus === "connected" ? "Automatisch aktuell" : personnelSyncStatus === "waiting" ? "Warte auf die erste Planung" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-3 xl:grid-cols-[300px_1fr]">
+              {PersonnelDisplayStatusPanel()}
+              <div className="pointer-events-none">{PersonnelMapOverview({ compact: true })}</div>
             </div>
           </section>
         )}
