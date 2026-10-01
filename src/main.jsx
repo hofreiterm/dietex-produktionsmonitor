@@ -2,7 +2,6 @@ import "./index.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
-import { Mic } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const supabase = createClient(
@@ -575,9 +574,6 @@ function App() {
   const [employeeForm, setEmployeeForm] = useState(EMPTY_EMPLOYEE_FORM);
   const [personnelDepartmentModal, setPersonnelDepartmentModal] = useState(false);
   const [departmentDraft, setDepartmentDraft] = useState([]);
-  const [personnelAssistantText, setPersonnelAssistantText] = useState("");
-  const [personnelAssistantMessage, setPersonnelAssistantMessage] = useState("");
-  const [personnelAssistantListening, setPersonnelAssistantListening] = useState(false);
 
   const [tourModal, setTourModal] = useState(null);
   const [tourContainerCount, setTourContainerCount] = useState("");
@@ -1883,16 +1879,16 @@ const tourColumns = Object.entries(
   const currentBaseEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
   const currentEmployees = () => {
     const baseEmployees = currentBaseEmployees();
-    if (personalDepartment !== "waescherei") return baseEmployees;
-
-    const putzereiPlanKey = getPersonalKey(personalDate, personalShift, "putzerei");
-    const borrowedNames = personalPlan[putzereiPlanKey]?.waescherei || [];
-    const putzereiEmployees = personnelEmployeesByDept.putzerei || [];
+    const sourceDepartment = personalDepartment === "waescherei" ? "putzerei" : "waescherei";
+    const transferZone = personalDepartment === "waescherei" ? "waescherei" : "putzerei";
+    const sourcePlanKey = getPersonalKey(personalDate, personalShift, sourceDepartment);
+    const borrowedNames = personalPlan[sourcePlanKey]?.[transferZone] || [];
+    const sourceEmployees = personnelEmployeesByDept[sourceDepartment] || [];
     const existingNames = new Set(baseEmployees.map((employee) => employee.name.toLowerCase()));
     const borrowedEmployees = borrowedNames
-      .map((name) => putzereiEmployees.find((employee) => employee.name === name))
+      .map((name) => sourceEmployees.find((employee) => employee.name === name))
       .filter((employee) => employee && !existingNames.has(employee.name.toLowerCase()))
-      .map((employee) => ({ ...employee, borrowedFrom: "putzerei" }));
+      .map((employee) => ({ ...employee, borrowedFrom: sourceDepartment }));
 
     return [...baseEmployees, ...borrowedEmployees];
   };
@@ -1929,7 +1925,7 @@ const tourColumns = Object.entries(
 
     setPersonalPlan((prev) => {
       const allZones = allPlanningZones();
-      const globalZones = new Set(["urlaub", "za", "krank", "waescherei"]);
+      const globalZones = new Set(["urlaub", "za", "krank", "waescherei", "putzerei"]);
       const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
         const shiftPlan = prev[getPersonalKey(personalDate, shift.key, personalDepartment)] || {};
         return [...globalZones].some((zone) => (shiftPlan[zone] || []).includes(employeeName));
@@ -1954,12 +1950,13 @@ const tourColumns = Object.entries(
         updatedPlans[key] = next;
       });
 
-      if (personalDepartment === "putzerei") {
+      if (!employee?.borrowedFrom) {
+        const counterpartDepartment = personalDepartment === "putzerei" ? "waescherei" : "putzerei";
         shiftsToUpdate.forEach((shiftKey) => {
-          const waeschereiKey = getPersonalKey(personalDate, shiftKey, "waescherei");
-          const waeschereiPlan = prev[waeschereiKey] || {};
-          updatedPlans[waeschereiKey] = Object.fromEntries(
-            Object.entries(waeschereiPlan).map(([zone, names]) => [
+          const counterpartKey = getPersonalKey(personalDate, shiftKey, counterpartDepartment);
+          const counterpartPlan = prev[counterpartKey] || {};
+          updatedPlans[counterpartKey] = Object.fromEntries(
+            Object.entries(counterpartPlan).map(([zone, names]) => [
               zone,
               Array.isArray(names) ? names.filter((name) => name !== employeeName) : names,
             ])
@@ -1981,110 +1978,6 @@ const tourColumns = Object.entries(
     if (setEmployeeToSection(selectedPersonnelEmployee, sectionName)) {
       setSelectedPersonnelEmployee(null);
     }
-  };
-
-  const normalizePersonnelCommandText = (value) => String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-
-  const resolvePersonnelCommandShift = (text) => {
-    const normalized = normalizePersonnelCommandText(text);
-    if (/\b(1|erste|ersten)\.?\s*schicht\b/.test(normalized)) return "07-12";
-    if (/\b(2|zweite|zweiten)\.?\s*schicht\b/.test(normalized)) return "12-15";
-    if (/\b(3|dritte|dritten)\.?\s*schicht\b/.test(normalized)) return "15-schluss";
-    return personalShift;
-  };
-
-  const resolvePersonnelCommandDestination = (text) => {
-    const normalized = normalizePersonnelCommandText(text);
-    if (/\b(krankenstand|krank)\b/.test(normalized)) return "krank";
-    if (/\burlaub\b/.test(normalized)) return "urlaub";
-    if (/\b(zeitausgleich|za)\b/.test(normalized)) return "za";
-    if (/\bwascherei\b/.test(normalized) && personalDepartment === "putzerei") return "waescherei";
-    if (/\b(nicht eingeteilt|frei|pool)\b/.test(normalized)) return "pool";
-
-    return [...currentSections()]
-      .sort((a, b) => b.name.length - a.name.length)
-      .find((section) => normalized.includes(normalizePersonnelCommandText(section.name)))?.name || null;
-  };
-
-  const applyPersonnelAssistantCommand = () => {
-    const input = personnelAssistantText.trim();
-    if (!input) {
-      setPersonnelAssistantMessage("Bitte zuerst eine Information eingeben oder einsprechen.");
-      return;
-    }
-
-    const normalizedInput = normalizePersonnelCommandText(input);
-    const strength = PERSONNEL_DAY_STRENGTHS.find((entry) => normalizedInput.includes(entry.key));
-    if (strength) setPersonnelDayStrength(strength.key);
-
-    const employeeOccurrences = currentEmployees()
-      .map((employee) => ({
-        employee,
-        index: normalizedInput.indexOf(normalizePersonnelCommandText(employee.name)),
-      }))
-      .filter((entry) => entry.index >= 0)
-      .sort((a, b) => a.index - b.index);
-
-    const destinationsInText = [
-      resolvePersonnelCommandDestination(input),
-      ...currentSections()
-        .filter((section) => normalizedInput.includes(normalizePersonnelCommandText(section.name)))
-        .map((section) => section.name),
-    ].filter(Boolean);
-    const uniqueDestinations = [...new Set(destinationsInText)];
-    let appliedAssignments = 0;
-
-    employeeOccurrences.forEach((entry, index) => {
-      const nextIndex = employeeOccurrences[index + 1]?.index ?? normalizedInput.length;
-      const commandPart = normalizedInput.slice(entry.index, nextIndex);
-      const destination = resolvePersonnelCommandDestination(commandPart)
-        || (uniqueDestinations.length === 1 ? uniqueDestinations[0] : null);
-      if (!destination) return;
-
-      const shift = resolvePersonnelCommandShift(commandPart);
-      if (setEmployeeToSection(entry.employee.name, destination, shift)) {
-        appliedAssignments += 1;
-      }
-    });
-
-    const changes = [];
-    if (strength) changes.push(`Tagesstärke ${strength.label}`);
-    if (appliedAssignments) changes.push(`${appliedAssignments} Einteilung${appliedAssignments === 1 ? "" : "en"}`);
-
-    if (!changes.length) {
-      setPersonnelAssistantMessage("Keine eindeutige Anweisung erkannt. Bitte Namen und Ziel gemeinsam angeben.");
-      return;
-    }
-
-    setPersonnelAssistantMessage(`Übernommen: ${changes.join(", ")}.`);
-    setPersonnelAssistantText("");
-  };
-
-  const startPersonnelVoiceInput = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      window.alert("Die Spracheingabe wird von diesem Browser nicht unterstützt.");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.lang = "de-AT";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => setPersonnelAssistantListening(true);
-    recognition.onend = () => setPersonnelAssistantListening(false);
-    recognition.onerror = () => {
-      setPersonnelAssistantListening(false);
-      setPersonnelAssistantMessage("Spracheingabe konnte nicht gestartet werden.");
-    };
-    recognition.onresult = (event) => {
-      const transcript = event.results?.[0]?.[0]?.transcript || "";
-      setPersonnelAssistantText((current) => current ? `${current}, ${transcript}` : transcript);
-    };
-    recognition.start();
   };
 
   const getSectionTarget = (section) => {
@@ -2573,6 +2466,7 @@ const tourColumns = Object.entries(
     "za",
     "krank",
     "waescherei",
+    "putzerei",
   ];
 
   const applyPersonnelSuggestions = () => {
@@ -2584,6 +2478,7 @@ const tourColumns = Object.entries(
       za: [...(currentPlan.za || [])],
       krank: [...(currentPlan.krank || [])],
       waescherei: [...(currentPlan.waescherei || [])],
+      putzerei: [...(currentPlan.putzerei || [])],
     };
 
     currentSections().forEach((section) => {
@@ -2595,6 +2490,7 @@ const tourColumns = Object.entries(
       ...nextPlan.za,
       ...nextPlan.krank,
       ...nextPlan.waescherei,
+      ...nextPlan.putzerei,
     ]);
 
     const historyPlans = Object.entries(personalPlan)
@@ -2817,6 +2713,173 @@ const tourColumns = Object.entries(
     win.document.close();
   };
 
+  const exportPersonalPlanImage = async () => {
+    const plan = getCurrentPersonalPlan();
+    const departmentLabel = currentDepartmentConfig().label;
+    const shiftLabel = PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label || personalShift;
+    const canvasWidth = 1600;
+    const horizontalPadding = 70;
+    const contentWidth = canvasWidth - horizontalPadding * 2;
+    const titleColumnWidth = 360;
+    const targetColumnWidth = 150;
+    const namesColumnWidth = contentWidth - titleColumnWidth - targetColumnWidth;
+    const lineHeight = 32;
+
+    const sectionGroups = personalDepartment === "waescherei"
+      ? [
+          { title: "Schmutzwäscheabteilung", names: ["Übernahme", "Waschstraßen", "Waschmaschinen"] },
+          { title: "Finishabteilung", names: ["Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT"] },
+          { title: "Fertigstellung", names: ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"] },
+          { title: "Weitere Abteilungen", names: currentSections()
+            .filter((section) => !["Übernahme", "Waschstraßen", "Waschmaschinen", "Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT", "Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"].includes(section.name))
+            .map((section) => section.name) },
+        ]
+      : [{ title: "Putzerei", names: currentSections().map((section) => section.name) }];
+
+    const specialZones = [
+      { key: "pool", title: "Nicht eingeteilt", names: getUnassignedEmployees().map((employee) => employee.name) },
+      { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
+      { key: "za", title: "ZA", names: plan.za || [] },
+      { key: "krank", title: "Krank", names: plan.krank || [] },
+      ...(personalDepartment === "waescherei" ? [{ key: "putzerei", title: "Putzerei", names: plan.putzerei || [] }] : []),
+      ...(personalDepartment === "putzerei" ? [{ key: "waescherei", title: "Wäscherei", names: plan.waescherei || [] }] : []),
+    ];
+
+    const measureCanvas = document.createElement("canvas");
+    const measureContext = measureCanvas.getContext("2d");
+    measureContext.font = "700 27px Arial";
+
+    const wrapText = (context, text, maxWidth) => {
+      const words = String(text || "").split(/\s+/).filter(Boolean);
+      if (!words.length) return ["-"];
+      const lines = [];
+      let line = "";
+      words.forEach((word) => {
+        const candidate = line ? `${line} ${word}` : word;
+        if (line && context.measureText(candidate).width > maxWidth) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = candidate;
+        }
+      });
+      if (line) lines.push(line);
+      return lines;
+    };
+
+    const imageRows = [];
+    sectionGroups.forEach((group) => {
+      const sections = group.names
+        .map((name) => currentSections().find((section) => section.name === name))
+        .filter(Boolean);
+      if (!sections.length) return;
+      imageRows.push({ type: "group", title: group.title });
+      sections.forEach((section) => {
+        const names = plan[section.name] || [];
+        const target = getSectionTarget(section);
+        imageRows.push({
+          type: "row",
+          title: section.name === "Waschstraßen" ? "Waschstraße" : section.name,
+          target: target === null ? "Bedarf" : String(target),
+          names,
+          state: target === null ? "neutral" : names.length < target ? "under" : names.length > target ? "over" : "optimal",
+        });
+      });
+    });
+    imageRows.push({ type: "group", title: "Mitarbeiterstatus" });
+    specialZones.forEach((zone) => imageRows.push({ type: "row", title: zone.title, target: "", names: zone.names, state: "neutral" }));
+
+    const rowHeights = imageRows.map((row) => {
+      if (row.type === "group") return 66;
+      const nameLines = wrapText(measureContext, row.names.join(", "), namesColumnWidth - 48);
+      return Math.max(74, nameLines.length * lineHeight + 34);
+    });
+    const canvasHeight = 210 + rowHeights.reduce((sum, height) => sum + height, 0) + 60;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const context = canvas.getContext("2d");
+
+    context.fillStyle = "#f8fafc";
+    context.fillRect(0, 0, canvasWidth, canvasHeight);
+    context.fillStyle = "#0f172a";
+    context.font = "900 54px Arial";
+    context.fillText(`DieTex Personalplanung ${departmentLabel}`, horizontalPadding, 82);
+    context.fillStyle = "#475569";
+    context.font = "700 28px Arial";
+    context.fillText(`Datum: ${personalDate}   |   Schicht: ${shiftLabel}   |   Umsatz: ${PERSONNEL_DAY_STRENGTHS.find((entry) => entry.key === getPersonnelDayStrength())?.label || "Mittel"}`, horizontalPadding, 132);
+
+    let y = 172;
+    imageRows.forEach((row, index) => {
+      const height = rowHeights[index];
+      if (row.type === "group") {
+        context.fillStyle = "#1d4ed8";
+        context.fillRect(horizontalPadding, y + 8, contentWidth, height - 16);
+        context.fillStyle = "#ffffff";
+        context.font = "900 30px Arial";
+        context.fillText(row.title, horizontalPadding + 24, y + 48);
+        y += height;
+        return;
+      }
+
+      const stateColors = {
+        under: "#fef3c7",
+        optimal: "#dcfce7",
+        over: "#fee2e2",
+        neutral: "#ffffff",
+      };
+      context.fillStyle = stateColors[row.state] || stateColors.neutral;
+      context.strokeStyle = "#cbd5e1";
+      context.lineWidth = 2;
+      context.fillRect(horizontalPadding, y, contentWidth, height - 6);
+      context.strokeRect(horizontalPadding, y, contentWidth, height - 6);
+      context.beginPath();
+      context.moveTo(horizontalPadding + titleColumnWidth, y);
+      context.lineTo(horizontalPadding + titleColumnWidth, y + height - 6);
+      context.moveTo(horizontalPadding + titleColumnWidth + targetColumnWidth, y);
+      context.lineTo(horizontalPadding + titleColumnWidth + targetColumnWidth, y + height - 6);
+      context.stroke();
+
+      context.fillStyle = "#0f172a";
+      context.font = "900 27px Arial";
+      context.fillText(row.title, horizontalPadding + 22, y + 45);
+      context.textAlign = "center";
+      context.fillText(row.target, horizontalPadding + titleColumnWidth + targetColumnWidth / 2, y + 45);
+      context.textAlign = "left";
+      context.font = "700 27px Arial";
+      wrapText(context, row.names.join(", "), namesColumnWidth - 48).forEach((line, lineIndex) => {
+        context.fillText(line, horizontalPadding + titleColumnWidth + targetColumnWidth + 24, y + 42 + lineIndex * lineHeight);
+      });
+      y += height;
+    });
+
+    const fileName = `personalplan-${personalDepartment}-${personalDate}-${personalShift}.png`;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 1));
+    if (!blob) {
+      window.alert("Die Bilddatei konnte nicht erstellt werden.");
+      return;
+    }
+
+    const file = new File([blob], fileName, { type: "image/png" });
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: `Personalplan ${departmentLabel} ${personalDate}` });
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+
+    const imageUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    downloadLink.href = imageUrl;
+    downloadLink.download = fileName;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    window.setTimeout(() => URL.revokeObjectURL(imageUrl), 1000);
+  };
+
   function openPinModal(nextView = null) {
     setPinInput("");
     setPinError("");
@@ -2965,11 +3028,11 @@ const tourColumns = Object.entries(
   function PersonnelMapOverview({ compact = false }) {
     if (personalDepartment === "waescherei") {
       const rowDefinitions = [
-        ["Übernahme", "Waschstraßen", "Waschmaschinen"],
-        ["Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT"],
-        ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"],
+        { title: "Schmutzwäscheabteilung", sections: ["Übernahme", "Waschstraßen", "Waschmaschinen"] },
+        { title: "Finishabteilung", sections: ["Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT"] },
+        { title: "Fertigstellung", sections: ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"] },
       ];
-      const listedNames = new Set(rowDefinitions.flat());
+      const listedNames = new Set(rowDefinitions.flatMap((row) => row.sections));
       const additionalSections = currentSections().filter((section) => !listedNames.has(section.name));
 
       const renderSectionField = (section, stationNumber) => {
@@ -3018,7 +3081,7 @@ const tourColumns = Object.entries(
                   >
                     <div className="text-[11px] font-black leading-tight">{name}</div>
                     <div className="text-[9px] leading-none text-slate-500">
-                      {employee?.borrowedFrom ? "Aus Putzerei" : employee?.hours ? `${employee.hours} h/Woche` : "Chef"}
+                      {employee?.borrowedFrom ? `Aus ${employee.borrowedFrom === "waescherei" ? "Wäscherei" : "Putzerei"}` : employee?.hours ? `${employee.hours} h/Woche` : "Chef"}
                     </div>
                   </button>
                 );
@@ -3048,12 +3111,15 @@ const tourColumns = Object.entries(
 
           <div className="space-y-2">
             {rowDefinitions.map((row, rowIndex) => {
-              const sections = row.map((name) => currentSections().find((section) => section.name === name)).filter(Boolean);
+              const sections = row.sections.map((name) => currentSections().find((section) => section.name === name)).filter(Boolean);
               const rowStart = stationNumber;
               stationNumber += sections.length;
               return (
-                <div key={rowIndex} className={`grid gap-2 ${rowIndex === 0 ? "md:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-5"}`}>
-                  {sections.map((section, index) => renderSectionField(section, rowStart + index + 1))}
+                <div key={row.title}>
+                  <h4 className="mb-2 mt-3 text-sm font-black text-slate-700 first:mt-0">{row.title}</h4>
+                  <div className={`grid gap-2 ${rowIndex === 0 ? "md:grid-cols-3" : "md:grid-cols-2 xl:grid-cols-5"}`}>
+                    {sections.map((section, index) => renderSectionField(section, rowStart + index + 1))}
+                  </div>
                 </div>
               );
             })}
@@ -3281,6 +3347,7 @@ const tourColumns = Object.entries(
       { key: "za", title: "ZA" },
       { key: "krank", title: "Krank" },
       ...(personalDepartment === "putzerei" ? [{ key: "waescherei", title: "Wäscherei" }] : []),
+      ...(personalDepartment === "waescherei" ? [{ key: "putzerei", title: "Putzerei" }] : []),
     ];
 
     return (
@@ -3307,7 +3374,10 @@ const tourColumns = Object.entries(
               {getUnassignedEmployees().length}
             </div>
           </div>
-          <div className="grid max-h-[28vh] grid-cols-2 gap-1 overflow-auto">
+          <div
+            className="grid h-[46vh] min-h-56 grid-cols-2 content-start gap-1 overflow-y-auto overscroll-contain pr-1 touch-pan-y"
+            style={{ WebkitOverflowScrolling: "touch" }}
+          >
             {getUnassignedEmployees().map((emp) => (
               <button
                 type="button"
@@ -3322,7 +3392,7 @@ const tourColumns = Object.entries(
               >
                 <div className="text-[11px] font-black leading-tight">{emp.name}</div>
                 <div className="text-[9px] text-slate-500 leading-none">
-                  {emp.borrowedFrom ? "Aus Putzerei" : emp.hours ? `${emp.hours} h` : "Chef"}
+                  {emp.borrowedFrom ? `Aus ${emp.borrowedFrom === "waescherei" ? "Wäscherei" : "Putzerei"}` : emp.hours ? `${emp.hours} h` : "Chef"}
                 </div>
               </button>
             ))}
@@ -3474,6 +3544,7 @@ const tourColumns = Object.entries(
                 { key: "za", label: "ZA" },
                 { key: "krank", label: "Krankenstand" },
                 ...(personalDepartment === "putzerei" ? [{ key: "waescherei", label: "Wäscherei" }] : []),
+                ...(personalDepartment === "waescherei" ? [{ key: "putzerei", label: "Putzerei" }] : []),
               ].map((destination) => (
                 <button
                   type="button"
@@ -4299,44 +4370,14 @@ const tourColumns = Object.entries(
                   ))}
                   <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
                   <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
+                  <Button className="bg-emerald-700 text-white" onClick={exportPersonalPlanImage}>Als Bild teilen</Button>
                   <Button className="bg-blue-700 text-white" onClick={printPersonalPlanSafe}>Drucken</Button>
                 </div>
               </div>
 
-              <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50 p-3">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-black text-blue-950">KI-Planungsassistent</h3>
-                  {personnelAssistantListening && <span className="text-xs font-black text-red-700">Aufnahme läuft</span>}
-                </div>
-                <div className="grid gap-2 md:grid-cols-[1fr_auto_auto]">
-                  <textarea
-                    className="min-h-20 w-full resize-y rounded-xl border border-blue-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
-                    placeholder="Planungsinformation eingeben"
-                    value={personnelAssistantText}
-                    onChange={(event) => {
-                      setPersonnelAssistantText(event.target.value);
-                      setPersonnelAssistantMessage("");
-                    }}
-                  />
-                  <button
-                    type="button"
-                    title="Spracheingabe"
-                    aria-label="Spracheingabe"
-                    onClick={startPersonnelVoiceInput}
-                    className={`flex h-11 w-11 items-center justify-center self-end rounded-xl border ${personnelAssistantListening ? "border-red-500 bg-red-100 text-red-800" : "border-blue-300 bg-white text-blue-800"}`}
-                  >
-                    <Mic size={20} />
-                  </button>
-                  <Button className="self-end bg-blue-700 text-white" onClick={applyPersonnelAssistantCommand}>Übernehmen</Button>
-                </div>
-                {personnelAssistantMessage && (
-                  <div className="mt-2 rounded-lg bg-white px-3 py-2 text-xs font-bold text-slate-700">{personnelAssistantMessage}</div>
-                )}
-              </div>
-
               <div className="grid gap-3 xl:grid-cols-[310px_1fr]">
-                <PersonnelSidePanel />
-                <PersonnelMapOverview compact />
+                {PersonnelSidePanel()}
+                {PersonnelMapOverview({ compact: true })}
               </div>
 
               {false && <div className="mb-4 rounded-2xl border bg-slate-50 p-3">
@@ -4374,7 +4415,7 @@ const tourColumns = Object.entries(
                 </div>
               </div>}
 
-              {false && <PersonnelMapOverview />}
+              {false && PersonnelMapOverview({})}
 
               {false && <div className="grid gap-5 lg:grid-cols-[310px_1fr]">
                 <aside className="rounded-3xl border bg-slate-50 p-3">
