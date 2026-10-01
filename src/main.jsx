@@ -337,6 +337,49 @@ const PERSONNEL_MAPS = {
   },
 };
 
+const COMBINED_PERSONNEL_ZONES = [
+  { department: "waescherei", section: "Übernahme", x: 5.5, y: 87, w: 8.5 },
+  { department: "waescherei", section: "Waschstraßen", x: 8.5, y: 43, w: 8.5 },
+  { department: "waescherei", section: "Waschmaschinen", x: 16.5, y: 43, w: 8.5 },
+  { department: "waescherei", section: "Absortierung", x: 24, y: 20, w: 8.5 },
+  { department: "waescherei", section: "Mangel 1", x: 29, y: 29, w: 8.5 },
+  { department: "waescherei", section: "Mangel 2", x: 29, y: 49, w: 8.5 },
+  { department: "waescherei", section: "Frottee 1", x: 43, y: 18, w: 8.5 },
+  { department: "waescherei", section: "Frottee 2", x: 43, y: 43, w: 8.5 },
+  { department: "waescherei", section: "BM + SPLT", x: 45, y: 63, w: 8.5 },
+  { department: "waescherei", section: "Jenway Großteile", x: 20, y: 33, w: 8.5 },
+  { department: "waescherei", section: "Jenway Kleinteile", x: 20, y: 54, w: 8.5 },
+  { department: "waescherei", section: "Jenway Frottee", x: 20, y: 70, w: 8.5 },
+  { department: "waescherei", section: "Poolwäsche", x: 29, y: 82, w: 8.5 },
+  { department: "waescherei", section: "Expedit", x: 46, y: 84, w: 7 },
+  { department: "waescherei", section: "Wäsche auspacken", x: 39, y: 75, w: 8.5 },
+  { department: "putzerei", section: "Übernahme", x: 55, y: 88, w: 8 },
+  { department: "putzerei", section: "Expedit", x: 55, y: 56, w: 8 },
+  { department: "putzerei", section: "Kleinteile", x: 64, y: 79, w: 8 },
+  { department: "putzerei", section: "Verpackung", x: 94, y: 48, w: 8 },
+  { department: "putzerei", section: "Waschmaschinen", x: 61, y: 39, w: 9.5 },
+  { department: "putzerei", section: "Reinigungsmaschinen", x: 72, y: 39, w: 10.5 },
+  { department: "putzerei", section: "Tunnelfinisher", x: 85, y: 24, w: 9 },
+  { department: "putzerei", section: "Hemden", x: 89, y: 79, w: 8 },
+  { department: "putzerei", section: "Bügeln", x: 80, y: 59, w: 8 },
+];
+
+function normalizePersonnelFloorPlanZones(value) {
+  const savedByKey = new Map(
+    (Array.isArray(value) ? value : []).map((zone) => [`${zone.department}-${zone.section}`, zone]),
+  );
+  return COMBINED_PERSONNEL_ZONES.map((fallback) => {
+    const saved = savedByKey.get(`${fallback.department}-${fallback.section}`) || {};
+    const x = Number(saved.x);
+    const y = Number(saved.y);
+    return {
+      ...fallback,
+      x: Number.isFinite(x) ? Math.min(98, Math.max(2, x)) : fallback.x,
+      y: Number.isFinite(y) ? Math.min(98, Math.max(2, y)) : fallback.y,
+    };
+  });
+}
+
 function Button({ children, active, className = "", ...props }) {
   return (
     <button
@@ -453,7 +496,8 @@ function displaySubcategory(subcategory) {
 
 function App() {
   const params = new URLSearchParams(window.location.search);
-  const initialView = params.get("view") || "annahme";
+  const externalPersonnelPortal = params.get("portal") === "personalplanung";
+  const initialView = externalPersonnelPortal ? (params.get("view") === "personalmonitor" ? "personalmonitor" : "personalplanung") : (params.get("view") || "annahme");
   const personnelDisplayMode = initialView === "personaldisplay" || params.get("display") === "waescherei-gang";
   const initialStationKey = params.get("station");
   const initialStation = STATIONS.find((s) => s.key === initialStationKey) || STATIONS[0];
@@ -469,7 +513,7 @@ function App() {
         : initialView === "uebernahme"
         ? "annahme"
         : initialView;
-  const initialAdminUnlocked = isAdminSessionUnlocked();
+  const initialAdminUnlocked = externalPersonnelPortal || isAdminSessionUnlocked();
 
   const [view, setView] = useState(() => (isProtectedView(requestedInitialView) && !initialAdminUnlocked ? "annahme" : requestedInitialView));
   const [adminUnlocked, setAdminUnlocked] = useState(initialAdminUnlocked);
@@ -520,6 +564,15 @@ function App() {
       return {};
     }
   });
+  const [personnelFloorPlanZones, setPersonnelFloorPlanZones] = useState(() => {
+    try {
+      return normalizePersonnelFloorPlanZones(JSON.parse(localStorage.getItem("dietexPersonnelFloorPlanZones") || "null"));
+    } catch {
+      return normalizePersonnelFloorPlanZones(null);
+    }
+  });
+  const [floorPlanEditMode, setFloorPlanEditMode] = useState(false);
+  const [floorPlanDraft, setFloorPlanDraft] = useState(() => normalizePersonnelFloorPlanZones(null));
   const [personnelSectionsByDept, setPersonnelSectionsByDept] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("dietexPersonnelSectionsByDept") || "null");
@@ -594,6 +647,8 @@ function App() {
   const personnelSyncAvailable = useRef(false);
   const personnelSaveTimer = useRef(null);
   const lastPersonnelStateJson = useRef("");
+  const floorPlanRef = useRef(null);
+  const floorPlanDrag = useRef(null);
 
   const createPersonnelStatePayload = () => ({
     plan: personalPlan,
@@ -601,6 +656,7 @@ function App() {
     employeesByDept: personnelEmployeesByDept,
     sectionsByDept: personnelSectionsByDept,
     dayStrengthByDate: personnelDayStrengthByDate,
+    floorPlanZones: personnelFloorPlanZones,
   });
 
   const applyRemotePersonnelState = (remoteState) => {
@@ -618,6 +674,7 @@ function App() {
         putzerei: normalizePersonnelSections(remoteState.sectionsByDept?.putzerei, PUTZEREI_SECTIONS),
       },
       dayStrengthByDate: remoteState.dayStrengthByDate && typeof remoteState.dayStrengthByDate === "object" ? remoteState.dayStrengthByDate : {},
+      floorPlanZones: normalizePersonnelFloorPlanZones(remoteState.floorPlanZones),
     };
 
     lastPersonnelStateJson.current = JSON.stringify(nextState);
@@ -626,6 +683,7 @@ function App() {
     setPersonnelEmployeesByDept(nextState.employeesByDept);
     setPersonnelSectionsByDept(nextState.sectionsByDept);
     setPersonnelDayStrengthByDate(nextState.dayStrengthByDate);
+    setPersonnelFloorPlanZones(nextState.floorPlanZones);
     setPersonnelSyncStatus("connected");
   };
 
@@ -736,7 +794,7 @@ function App() {
     return () => {
       if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
     };
-  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate]);
+  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones]);
 
   useEffect(() => {
     if (personnelDisplayMode) return undefined;
@@ -828,6 +886,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelDayStrengthByDate", JSON.stringify(personnelDayStrengthByDate));
   }, [personnelDayStrengthByDate]);
+
+  useEffect(() => {
+    localStorage.setItem("dietexPersonnelFloorPlanZones", JSON.stringify(personnelFloorPlanZones));
+  }, [personnelFloorPlanZones]);
 
   useEffect(() => {
     setSelectedPersonnelEmployee(null);
@@ -2037,6 +2099,18 @@ const tourColumns = Object.entries(
   const currentSections = () => personnelSectionsByDept[personalDepartment] || currentDepartmentConfig().sections;
   const currentGroups = () => currentDepartmentConfig().groups;
   const currentBaseEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
+  const sectionsForDepartment = (department) => personnelSectionsByDept[department] || PERSONNEL_DEPARTMENTS[department]?.sections || [];
+  const planForDepartment = (department) => personalPlan[getPersonalKey(personalDate, personalShift, department)] || {};
+  const sectionTargetForDepartment = (section, department) => {
+    if (!section || section.target?.flexible) return null;
+    const strength = personnelDayStrengthByDate[`${department}_${personalDate}`] || "mittel";
+    const strengthTargets = section.targetsByStrength?.[strength];
+    const shiftTarget = strengthTargets && Object.prototype.hasOwnProperty.call(strengthTargets, personalShift)
+      ? strengthTargets[personalShift]
+      : section.target?.[personalShift];
+    if (shiftTarget === null || shiftTarget === "") return null;
+    return Number(shiftTarget ?? section.target?.default ?? 0);
+  };
   const currentEmployees = () => {
     const baseEmployees = currentBaseEmployees();
     const sourceDepartment = personalDepartment === "waescherei" ? "putzerei" : "waescherei";
@@ -3047,6 +3121,11 @@ const tourColumns = Object.entries(
   }
 
   function goToView(nextView) {
+    if (externalPersonnelPortal && !["personalplanung", "personalmonitor"].includes(nextView)) {
+      setView("personalplanung");
+      return;
+    }
+
     if (takeoverMode && !["annahme", "station"].includes(nextView)) {
       setView("annahme");
       return;
@@ -3181,6 +3260,112 @@ const tourColumns = Object.entries(
             ℹ {row.info}
           </div>
         )}
+      </div>
+    );
+  }
+
+  const beginFloorPlanEdit = () => {
+    setFloorPlanDraft(personnelFloorPlanZones.map((zone) => ({ ...zone })));
+    setFloorPlanEditMode(true);
+  };
+
+  const saveFloorPlanPositions = () => {
+    setPersonnelFloorPlanZones(normalizePersonnelFloorPlanZones(floorPlanDraft));
+    setFloorPlanEditMode(false);
+    floorPlanDrag.current = null;
+  };
+
+  const cancelFloorPlanEdit = () => {
+    setFloorPlanDraft(personnelFloorPlanZones.map((zone) => ({ ...zone })));
+    setFloorPlanEditMode(false);
+    floorPlanDrag.current = null;
+  };
+
+  const resetFloorPlanDraft = () => {
+    setFloorPlanDraft(normalizePersonnelFloorPlanZones(null));
+  };
+
+  const moveFloorPlanZone = (event, zoneKey) => {
+    if (!floorPlanEditMode || floorPlanDrag.current !== zoneKey || !floorPlanRef.current) return;
+    const bounds = floorPlanRef.current.getBoundingClientRect();
+    const x = Math.min(98, Math.max(2, ((event.clientX - bounds.left) / bounds.width) * 100));
+    const y = Math.min(98, Math.max(2, ((event.clientY - bounds.top) / bounds.height) * 100));
+    setFloorPlanDraft((current) => current.map((zone) => (
+      `${zone.department}-${zone.section}` === zoneKey ? { ...zone, x, y } : zone
+    )));
+  };
+
+  function CombinedPersonnelFloorPlan({ editable = false } = {}) {
+    const visibleZones = editable ? floorPlanDraft : personnelFloorPlanZones;
+    return (
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "4638 / 2274" }}>
+          <img
+            src="/plan-waescherei-putzerei.jpg"
+            alt="Gebäudeplan Wäscherei und Putzerei"
+            className="absolute inset-0 h-full w-full object-fill"
+          />
+
+          <div className="absolute left-[23%] top-2 -translate-x-1/2 rounded-md border-2 border-blue-700 bg-white/95 px-3 py-1 text-sm font-black text-blue-950 shadow">
+            Wäscherei
+          </div>
+          <div className="absolute left-[75%] top-2 -translate-x-1/2 rounded-md border-2 border-violet-700 bg-white/95 px-3 py-1 text-sm font-black text-violet-950 shadow">
+            Putzerei
+          </div>
+
+          {visibleZones.map((zone) => {
+            const section = sectionsForDepartment(zone.department).find((entry) => entry.name === zone.section);
+            if (!section) return null;
+            const assigned = planForDepartment(zone.department)[section.name] || [];
+            const target = sectionTargetForDepartment(section, zone.department);
+            const occupancyClass = target === null
+              ? "border-slate-500"
+              : assigned.length < target
+                ? "border-yellow-500"
+                : assigned.length > target
+                  ? "border-red-500"
+                  : "border-green-600";
+            const departmentClass = zone.department === "waescherei" ? "text-blue-950" : "text-violet-950";
+            const displayName = section.name
+              .replace("Waschmaschinen", "Wasch\u00admaschinen")
+              .replace("Reinigungsmaschinen", "Reinigungs\u00admaschinen");
+            const zoneKey = `${zone.department}-${zone.section}`;
+
+            return (
+              <div
+                key={zoneKey}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 ${editable ? "cursor-grab touch-none select-none rounded bg-white/55 p-1 ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : ""}`}
+                style={{ left: `${zone.x}%`, top: `${zone.y}%`, width: `${zone.w}%` }}
+                onPointerDown={editable ? (event) => {
+                  event.preventDefault();
+                  floorPlanDrag.current = zoneKey;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                } : undefined}
+                onPointerMove={editable ? (event) => moveFloorPlanZone(event, zoneKey) : undefined}
+                onPointerUp={editable ? (event) => {
+                  floorPlanDrag.current = null;
+                  if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                } : undefined}
+                onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
+              >
+                <div className={`flex items-start justify-between gap-1 border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
+                  <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
+                  <span className="shrink-0 px-0.5 text-[8px] text-slate-700">
+                    {assigned.length}/{target === null ? "B" : target}
+                  </span>
+                </div>
+                <div className="mt-0.5 flex flex-col items-start gap-px">
+                  {assigned.map((name) => (
+                    <span key={name} className={`block max-w-full bg-white/95 px-1 py-0.5 text-[9px] font-black leading-none shadow-sm ${departmentClass}`}>
+                      {name}
+                    </span>
+                  ))}
+                  {!assigned.length && <span className="bg-white/90 px-1 py-0.5 text-[8px] font-bold text-slate-500 shadow-sm">nicht besetzt</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -3683,11 +3868,16 @@ const tourColumns = Object.entries(
       <header className={`border-b bg-white px-8 ${fixedView ? "py-2" : "py-4"}`}>
         <div className="grid grid-cols-3 items-center">
           <Logo />
-          <div className={`${fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>
-            {personnelDisplayMode ? "Personalplanung Wäscherei" : expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}
+          <div className={`${personnelDisplayMode && fixedView ? "text-xl" : fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>
+            {personnelDisplayMode ? "Personalplanung Wäscherei + Putzerei" : expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}
           </div>
           <div className="flex items-center justify-end gap-3">
-            {!fixedView && (adminUnlocked ? (
+            {!fixedView && externalPersonnelPortal && (
+              <Button onClick={() => supabase.auth.signOut()}>
+                Abmelden
+              </Button>
+            )}
+            {!fixedView && !externalPersonnelPortal && (adminUnlocked ? (
               <Button className="border-emerald-200 bg-emerald-50 text-emerald-800" onClick={lockAdminArea}>
                 Admin sperren
               </Button>
@@ -4177,6 +4367,11 @@ const tourColumns = Object.entries(
                   ["monitor", "Verpackungsmonitor"],
                   ["touren", "Touren"],
                 ]
+              : externalPersonnelPortal
+              ? [
+                  ["personalplanung", "Personalplanung"],
+                  ["personalmonitor", "Personalübersicht"],
+                ]
               : [
                   ["annahme", "Kunden übernehmen"],
                   ["waschplan", "Waschplan"],
@@ -4185,6 +4380,7 @@ const tourColumns = Object.entries(
                   ["touren", "Touren"],
                   ["stammdaten", "Stammdaten"],
                   ["leitung", "Produktionsleitung"],
+                  ["personalmonitor", "Personalübersicht"],
                   ["personalplanung", "Personalplanung"],
                 ]).map(([key, label]) => (
               <Button key={key} active={view === key} onClick={() => goToView(key)}>
@@ -4808,7 +5004,7 @@ const tourColumns = Object.entries(
           <section className="space-y-2">
             <div className="flex items-center justify-between rounded-xl border bg-white px-4 py-2 shadow-sm">
               <div>
-                <h2 className="text-2xl font-black">Aktuelle Einteilung Wäscherei</h2>
+                <h2 className="text-2xl font-black">Aktuelle Einteilung Wäscherei + Putzerei</h2>
                 <div className="text-sm font-bold text-slate-500">
                   {new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
                 </div>
@@ -4820,10 +5016,45 @@ const tourColumns = Object.entries(
                 </div>
               </div>
             </div>
-            <div className="grid gap-3 xl:grid-cols-[300px_1fr]">
-              {PersonnelDisplayStatusPanel()}
-              <div className="pointer-events-none">{PersonnelMapOverview({ compact: true })}</div>
+            <div className="pointer-events-none">{CombinedPersonnelFloorPlan()}</div>
+          </section>
+        )}
+
+        {view === "personalmonitor" && (
+          <section className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3 shadow-sm">
+              <div>
+                <h2 className="text-2xl font-black">Personalübersicht Wäscherei + Putzerei</h2>
+                <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-amber-700"}`}>
+                  {personnelSyncStatus === "connected" ? "Zentral gespeichert und automatisch aktuell" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {!floorPlanEditMode && (
+                  <>
+                    <Input type="date" value={personalDate} onChange={(event) => setPersonalDate(event.target.value)} />
+                    {PERSONNEL_SHIFTS.map((shift) => (
+                      <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
+                        {shift.label}
+                      </Button>
+                    ))}
+                    <Button active onClick={beginFloorPlanEdit}>
+                      Positionen bearbeiten
+                    </Button>
+                  </>
+                )}
+                {floorPlanEditMode && (
+                  <>
+                    <Button onClick={resetFloorPlanDraft}>Standardpositionen</Button>
+                    <Button onClick={cancelFloorPlanEdit}>Abbrechen</Button>
+                    <Button active onClick={saveFloorPlanPositions}>
+                      Positionen speichern
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
+            {CombinedPersonnelFloorPlan({ editable: floorPlanEditMode })}
           </section>
         )}
 
@@ -5141,4 +5372,89 @@ const tourColumns = Object.entries(
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+function ExternalPersonnelPortal() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSession(data.session || null);
+      setLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const signIn = async (event) => {
+    event.preventDefault();
+    if (!email.trim() || !password) return;
+    setLoginBusy(true);
+    setLoginError("");
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) {
+      setLoginError("E-Mail-Adresse oder Passwort ist falsch.");
+      setLoginBusy(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-lg font-black text-slate-600">Anmeldung wird geprüft</div>;
+  }
+
+  if (session) return <App />;
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4 text-slate-900">
+      <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-lg">
+        <div className="mb-6 flex justify-center"><Logo /></div>
+        <h1 className="text-center text-2xl font-black">Personalplanung</h1>
+        <p className="mt-1 text-center text-sm font-semibold text-slate-500">Benutzerzugang für die Produktionsleitung</p>
+        <form className="mt-6 space-y-3" onSubmit={signIn}>
+          <label className="block text-sm font-black text-slate-700">
+            E-Mail-Adresse
+            <Input
+              className="mt-1 w-full"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <label className="block text-sm font-black text-slate-700">
+            Passwort
+            <Input
+              className="mt-1 w-full"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          {loginError && <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{loginError}</div>}
+          <Button active className="w-full" disabled={loginBusy || !email.trim() || !password}>
+            {loginBusy ? "Anmeldung läuft" : "Anmelden"}
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+const externalPersonnelPortal = new URLSearchParams(window.location.search).get("portal") === "personalplanung";
+ReactDOM.createRoot(document.getElementById("root")).render(externalPersonnelPortal ? <ExternalPersonnelPortal /> : <App />);
