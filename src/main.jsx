@@ -505,7 +505,7 @@ function App() {
   const fixedView = params.get("fixed") === "1" || personnelDisplayMode;
   const expeditMode = params.get("view") === "expedit";
   const takeoverMode = fixedView && (initialView === "annahme" || initialView === "uebernahme" || params.get("mode") === "uebernahme");
-  const requestedInitialView = takeoverMode
+  const requestedInitialViewRaw = takeoverMode
     ? "annahme"
     : expeditMode
       ? "monitor"
@@ -514,6 +514,11 @@ function App() {
         : initialView === "uebernahme"
         ? "annahme"
         : initialView;
+  const requestedInitialView = requestedInitialViewRaw === "station"
+    ? "annahme"
+    : requestedInitialViewRaw === "touren"
+      ? "monitor"
+      : requestedInitialViewRaw;
   const initialAdminUnlocked = externalPersonnelPortal || isAdminSessionUnlocked();
 
   const [view, setView] = useState(() => (isProtectedView(requestedInitialView) && !initialAdminUnlocked ? "annahme" : requestedInitialView));
@@ -549,6 +554,10 @@ function App() {
   const [leitungDateFrom, setLeitungDateFrom] = useState(fmtDateInput());
   const [leitungDateTo, setLeitungDateTo] = useState(fmtDateInput());
   const [leitungSort, setLeitungSort] = useState("customer_asc");
+  const [leitungDeleteModal, setLeitungDeleteModal] = useState(false);
+  const [leitungDeleteFrom, setLeitungDeleteFrom] = useState(() => `${fmtDateInput()}T00:00`);
+  const [leitungDeleteTo, setLeitungDeleteTo] = useState(() => `${fmtDateInput()}T23:59`);
+  const [leitungDeleteBusy, setLeitungDeleteBusy] = useState(false);
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
 
@@ -634,7 +643,6 @@ function App() {
   const [tourModal, setTourModal] = useState(null);
   const [tourContainerCount, setTourContainerCount] = useState("");
   const [tourNumberInput, setTourNumberInput] = useState("");
-  const [dragOrderId, setDragOrderId] = useState(null);
   const [pendingWash, setPendingWash] = useState({});
   const [pendingFinishedOrders, setPendingFinishedOrders] = useState({});
   const [monitorDetailOrder, setMonitorDetailOrder] = useState(null);
@@ -1575,9 +1583,10 @@ function App() {
     scheduleLoadAll(5000);
   }
 
-  async function moveOrder(order, direction) {
-    const current = sortedOrders.findIndex((o) => o.id === order.id);
-    const other = sortedOrders[current + direction];
+  async function moveOrder(order, direction, category = null) {
+    const visibleOrders = category ? washRowsForCategory(category) : sortedOrders;
+    const current = visibleOrders.findIndex((entry) => entry.id === order.id);
+    const other = visibleOrders[current + direction];
     if (!other) return;
 
     const aSort = Number(order.sort_order || current * 10);
@@ -1587,27 +1596,6 @@ function App() {
       supabase.from("orders").update({ sort_order: bSort }).eq("id", order.id),
       supabase.from("orders").update({ sort_order: aSort }).eq("id", other.id),
     ]);
-    loadAll();
-  }
-
-  async function reorderOrder(draggedId, targetId) {
-    if (!draggedId || !targetId || draggedId === targetId) return;
-
-    const currentList = [...sortedOrders];
-    const fromIndex = currentList.findIndex((o) => o.id === draggedId);
-    const toIndex = currentList.findIndex((o) => o.id === targetId);
-    if (fromIndex < 0 || toIndex < 0) return;
-
-    const [dragged] = currentList.splice(fromIndex, 1);
-    currentList.splice(toIndex, 0, dragged);
-
-    await Promise.all(
-      currentList.map((order, index) =>
-        supabase.from("orders").update({ sort_order: (index + 1) * 10 }).eq("id", order.id)
-      )
-    );
-
-    setDragOrderId(null);
     loadAll();
   }
 
@@ -1736,6 +1724,21 @@ function App() {
   const workingRows = monitorRows.filter((r) => r.monitorState === "bearbeitung" && r.status !== "auf_tour");
   const finishedRows = monitorRows.filter((r) => r.monitorState === "fertig" && r.status !== "auf_tour");
   const tourRows = monitorRows.filter((r) => r.monitorState === "auf_tour");
+  const packagingInfoRows = sortedOrders
+    .filter((order) => order.status !== "auf_tour")
+    .map((order) => {
+      const laundryItems = enabledItemsForOrder(order).filter((item) => item.category !== "Putzerei");
+      const washItems = laundryItems.filter((item) => WASH_CATEGORIES.includes(item.category));
+      const washedItems = washItems.filter((item) => item.washed_at);
+      const latestWashedAt = washedItems.map((item) => item.washed_at).filter(Boolean).sort().at(-1) || null;
+      return {
+        ...order,
+        groups: getOrderCategories(order.id).join(", ") || "-",
+        washed: washedItems.length,
+        washTotal: washItems.length,
+        latestWashedAt,
+      };
+    });
   const todayKey = new Date().toISOString().slice(0, 10);
 
   function monitorDetailItems(order) {
@@ -1984,6 +1987,66 @@ const tourColumns = Object.entries(
     scheduleLoadAll(1000);
   }
 
+  async function deleteProductionOrdersInRange() {
+    const fromDate = new Date(leitungDeleteFrom);
+    const toDate = new Date(leitungDeleteTo);
+    if (!leitungDeleteFrom || !leitungDeleteTo || Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      alert("Bitte Von und Bis mit Datum und Uhrzeit vollständig eingeben.");
+      return;
+    }
+    if (fromDate > toDate) {
+      alert("Der Von-Zeitpunkt muss vor dem Bis-Zeitpunkt liegen.");
+      return;
+    }
+
+    setLeitungDeleteBusy(true);
+    try {
+      const { data: matchingOrders, error: selectError } = await supabase
+        .from("orders")
+        .select("id, customer_number, customer_name, created_at")
+        .gte("created_at", fromDate.toISOString())
+        .lte("created_at", toDate.toISOString())
+        .order("created_at", { ascending: true });
+
+      if (selectError) throw selectError;
+      if (!matchingOrders?.length) {
+        alert("In diesem Zeitraum wurden keine Kundenaufträge gefunden.");
+        return;
+      }
+
+      const fromLabel = fromDate.toLocaleString("de-AT");
+      const toLabel = toDate.toLocaleString("de-AT");
+      if (!window.confirm(
+        `${matchingOrders.length} Kundenaufträge von ${fromLabel} bis ${toLabel} endgültig löschen?\n\nArtikelzeilen, Container und Historieneinträge dieser Aufträge werden ebenfalls gelöscht.`
+      )) return;
+
+      const ids = matchingOrders.map((order) => order.id);
+      const chunks = [];
+      for (let index = 0; index < ids.length; index += 150) chunks.push(ids.slice(index, index + 150));
+
+      for (const chunk of chunks) {
+        for (const table of ["order_history", "containers", "order_categories", "orders"]) {
+          const column = table === "orders" ? "id" : "order_id";
+          const { error } = await supabase.from(table).delete().in(column, chunk);
+          if (error) throw new Error(`${table}: ${error.message}`);
+        }
+      }
+
+      const deletedIds = new Set(ids);
+      setOrders((current) => current.filter((order) => !deletedIds.has(order.id)));
+      setItems((current) => current.filter((item) => !deletedIds.has(item.order_id)));
+      setContainers((current) => current.filter((container) => !deletedIds.has(container.order_id)));
+      setHistory((current) => current.filter((entry) => !deletedIds.has(entry.order_id)));
+      setLeitungDeleteModal(false);
+      alert(`${ids.length} Kundenaufträge wurden gelöscht.`);
+      scheduleLoadAll(1000);
+    } catch (error) {
+      alert("Kunden konnten nicht vollständig gelöscht werden: " + (error?.message || String(error)));
+    } finally {
+      setLeitungDeleteBusy(false);
+    }
+  }
+
   async function changeProductionStatus(order, nextStatus) {
     const enabled = enabledItemsForOrder(order);
     const laundryEnabled = enabled.filter((i) => i.category !== "Putzerei");
@@ -2168,7 +2231,7 @@ const tourColumns = Object.entries(
           const next = { ...current };
           const zonesToClear = shift.key === "07-12"
             ? allPlanningZones()
-            : ["start12", "urlaub", "za", "krank", "waescherei", "putzerei"];
+            : ["start12", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"];
           zonesToClear.forEach((zone) => {
             next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
           });
@@ -2182,7 +2245,7 @@ const tourColumns = Object.entries(
 
     setPersonalPlan((prev) => {
       const allZones = allPlanningZones();
-      const globalZones = new Set(["urlaub", "za", "krank", "waescherei", "putzerei"]);
+      const globalZones = new Set(["urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"]);
       const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
         const shiftPlan = prev[getPersonalKey(personalDate, shift.key, personalDepartment)] || {};
         return [...globalZones].some((zone) => (shiftPlan[zone] || []).includes(employeeName));
@@ -2729,6 +2792,7 @@ const tourColumns = Object.entries(
     "urlaub",
     "za",
     "krank",
+    "sonstiges",
     "waescherei",
     "putzerei",
   ];
@@ -2745,6 +2809,7 @@ const tourColumns = Object.entries(
       urlaub: [...(currentPlan.urlaub || [])],
       za: [...(currentPlan.za || [])],
       krank: [...(currentPlan.krank || [])],
+      sonstiges: [...(currentPlan.sonstiges || [])],
       waescherei: [...(currentPlan.waescherei || [])],
       putzerei: [...(currentPlan.putzerei || [])],
     };
@@ -2757,6 +2822,7 @@ const tourColumns = Object.entries(
       ...nextPlan.urlaub,
       ...nextPlan.za,
       ...nextPlan.krank,
+      ...nextPlan.sonstiges,
       ...nextPlan.waescherei,
       ...nextPlan.putzerei,
       ...(personalDepartment === "waescherei" && personalShift === "07-12" ? start12Names : []),
@@ -3016,6 +3082,7 @@ const tourColumns = Object.entries(
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
       { key: "krank", title: "Krank", names: plan.krank || [] },
+      { key: "sonstiges", title: "Büro/Tour/Sonstiges", names: plan.sonstiges || [] },
       ...(personalDepartment === "waescherei" ? [{ key: "putzerei", title: "Putzerei", names: plan.putzerei || [] }] : []),
       ...(personalDepartment === "putzerei" ? [{ key: "waescherei", title: "Wäscherei", names: plan.waescherei || [] }] : []),
     ];
@@ -3244,32 +3311,38 @@ const tourColumns = Object.entries(
     );
   }
 
-  function WashCard({ row, category, compact = false }) {
+  function WashCard({ row, category, compact = false, canMoveUp = true, canMoveDown = true }) {
     const washKey = getWashKey(row.id, category);
     const isPending = Boolean(pendingWash[washKey]);
     const categoryIcons = categoryIconsForRow(row);
 
     return (
       <div
-        draggable
-        onDragStart={(e) => {
-          setDragOrderId(row.id);
-          e.dataTransfer.effectAllowed = "move";
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "move";
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          reorderOrder(dragOrderId, row.id);
-        }}
         className={`w-full rounded-xl border ${compact ? "px-2 py-1.5" : "px-3 py-2"} text-left shadow-sm transition ${
           isPending ? "border-emerald-500 bg-emerald-100 ring-2 ring-emerald-300" : "bg-white hover:ring-2 hover:ring-blue-300"
-        } ${dragOrderId === row.id ? "ring-2 ring-blue-400 opacity-70" : ""}`}
+        }`}
       >
-        <div className={`grid ${compact ? "grid-cols-[20px_62px_1fr_auto] gap-1.5" : "grid-cols-[28px_84px_1fr_auto] gap-3"} items-center`}>
-          <div className="cursor-grab select-none text-lg text-slate-400" title="Ziehen">↕</div>
+        <div className={`grid ${compact ? "grid-cols-[48px_62px_1fr_auto] gap-1.5" : "grid-cols-[58px_84px_1fr_auto] gap-3"} items-center`}>
+          <div className="grid grid-cols-2 gap-1">
+            <button
+              type="button"
+              disabled={!canMoveUp}
+              onClick={() => moveOrder(row, -1, category)}
+              className={`${compact ? "h-7 w-5" : "h-9 w-7"} rounded border border-slate-300 bg-slate-100 font-black text-slate-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-25`}
+              title="Nach oben verschieben"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              disabled={!canMoveDown}
+              onClick={() => moveOrder(row, 1, category)}
+              className={`${compact ? "h-7 w-5" : "h-9 w-7"} rounded border border-slate-300 bg-slate-100 font-black text-slate-800 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-25`}
+              title="Nach unten verschieben"
+            >
+              ↓
+            </button>
+          </div>
           <div className={`font-mono ${compact ? "text-[12px]" : "text-[15px]"} leading-tight`}>{row.customer_number}</div>
           <button
             type="button"
@@ -3360,6 +3433,7 @@ const tourColumns = Object.entries(
       { key: "urlaub", title: "Urlaub", names: uniqueSortedNames([...(waeschereiPlan.urlaub || []), ...(putzereiPlan.urlaub || [])]), color: "border-blue-500 bg-blue-50/95 text-blue-950" },
       { key: "za", title: "ZA", names: uniqueSortedNames([...(waeschereiPlan.za || []), ...(putzereiPlan.za || [])]), color: "border-amber-500 bg-amber-50/95 text-amber-950" },
       { key: "krank", title: "Krank", names: uniqueSortedNames([...(waeschereiPlan.krank || []), ...(putzereiPlan.krank || [])]), color: "border-red-500 bg-red-50/95 text-red-950" },
+      { key: "sonstiges", title: "Büro/Tour/Sonstiges", names: uniqueSortedNames([...(waeschereiPlan.sonstiges || []), ...(putzereiPlan.sonstiges || [])]), color: "border-slate-600 bg-slate-100/95 text-slate-950" },
       { key: "waescherei", title: "In Wäscherei", names: uniqueSortedNames(putzereiPlan.waescherei || []), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
       { key: "putzerei", title: "In Putzerei", names: uniqueSortedNames(waeschereiPlan.putzerei || []), color: "border-violet-600 bg-violet-50/95 text-violet-950" },
       { key: "pool", title: "Nicht eingeteilt", names: uniqueSortedNames([
@@ -3785,6 +3859,7 @@ const tourColumns = Object.entries(
       { key: "urlaub", title: "Urlaub" },
       { key: "za", title: "ZA" },
       { key: "krank", title: "Krank" },
+      { key: "sonstiges", title: "Büro/Tour/Sonstiges" },
       ...(personalDepartment === "putzerei" ? [{ key: "waescherei", title: "Wäscherei" }] : []),
       ...(personalDepartment === "waescherei" ? [{ key: "putzerei", title: "Putzerei" }] : []),
     ];
@@ -3896,6 +3971,7 @@ const tourColumns = Object.entries(
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
       { key: "krank", title: "Krank", names: plan.krank || [] },
+      { key: "sonstiges", title: "Büro/Tour/Sonstiges", names: plan.sonstiges || [] },
       { key: "putzerei", title: "Putzerei", names: plan.putzerei || [] },
     ];
 
@@ -4030,6 +4106,7 @@ const tourColumns = Object.entries(
                 { key: "urlaub", label: "Urlaub" },
                 { key: "za", label: "ZA" },
                 { key: "krank", label: "Krankenstand" },
+                { key: "sonstiges", label: "Büro/Tour/Sonstiges" },
                 ...(personalDepartment === "putzerei" ? [{ key: "waescherei", label: "Wäscherei" }] : []),
                 ...(personalDepartment === "waescherei" ? [{ key: "putzerei", label: "Putzerei" }] : []),
               ].map((destination) => (
@@ -4367,6 +4444,44 @@ const tourColumns = Object.entries(
         </div>
       )}
 
+      {leitungDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+            <h2 className="text-2xl font-black text-red-800">Kundenaufträge löschen</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-600">
+              Gelöscht werden alle Aufträge, die im angegebenen Zeitraum übernommen wurden.
+            </p>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">Von</span>
+                <Input className="w-full" type="datetime-local" value={leitungDeleteFrom} onChange={(event) => setLeitungDeleteFrom(event.target.value)} />
+              </label>
+              <label>
+                <span className="mb-1 block text-xs font-black uppercase text-slate-500">Bis</span>
+                <Input className="w-full" type="datetime-local" value={leitungDeleteTo} onChange={(event) => setLeitungDeleteTo(event.target.value)} />
+              </label>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
+              Diese Löschung entfernt auch die zugehörigen Artikelzeilen, Container und Historieneinträge und kann nicht rückgängig gemacht werden.
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <Button disabled={leitungDeleteBusy} onClick={() => setLeitungDeleteModal(false)}>Abbrechen</Button>
+              <button
+                type="button"
+                disabled={leitungDeleteBusy}
+                onClick={deleteProductionOrdersInRange}
+                className="rounded-xl bg-red-700 px-4 py-2 text-sm font-black text-white hover:bg-red-800 disabled:opacity-50"
+              >
+                {leitungDeleteBusy ? "Wird geprüft..." : "Zeitraum endgültig löschen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tourModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
@@ -4458,12 +4573,10 @@ const tourColumns = Object.entries(
             {(takeoverMode
               ? [
                   ["annahme", "Kunden übernehmen"],
-                  ["station", "Station"],
                 ]
               : expeditMode
               ? [
                   ["monitor", "Verpackungsmonitor"],
-                  ["touren", "Touren"],
                 ]
               : externalPersonnelPortal
               ? [
@@ -4473,9 +4586,7 @@ const tourColumns = Object.entries(
               : [
                   ["annahme", "Kunden übernehmen"],
                   ["waschplan", "Waschplan"],
-                  ["station", "Station"],
                   ["monitor", "Verpackungsmonitor"],
-                  ["touren", "Touren"],
                   ["stammdaten", "Stammdaten"],
                   ["leitung", "Produktionsleitung"],
                   ["personalmonitor", "Personalübersicht"],
@@ -4635,8 +4746,15 @@ const tourColumns = Object.entries(
                     <span className="mr-2">{CAT_ICON[cat]}</span>{cat}
                   </h2>
                   <div className="grid gap-2">
-                    {rows.map((row) => (
-                      <WashCard key={`${row.id}-${cat}`} row={row} category={cat} compact={fixedView} />
+                    {rows.map((row, index) => (
+                      <WashCard
+                        key={`${row.id}-${cat}`}
+                        row={row}
+                        category={cat}
+                        compact={fixedView}
+                        canMoveUp={index > 0}
+                        canMoveDown={index < rows.length - 1}
+                      />
                     ))}
                   </div>
                 </div>
@@ -4708,28 +4826,67 @@ const tourColumns = Object.entries(
         )}
 
         {view === "monitor" && (
-          <section className="grid gap-5 lg:grid-cols-4">
-            {splitIntoColumns(workingRows, 2).map((col, idx) => (
-              <div key={`work-${idx}`} className="rounded-3xl border border-orange-100 bg-orange-50/40 p-4">
-                <h2 className="mb-3 border-b-2 border-orange-400 pb-2 text-center font-black">IN BEARBEITUNG</h2>
-                <div className="space-y-2">{col.map((r) => <SmallCustomerCard key={r.id} row={r} onClick={() => setMonitorDetailOrder(r)} />)}</div>
+          <section className="rounded-3xl border bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="text-2xl font-black">Verpackungsmonitor</h2>
+                <p className="text-slate-500">Reine Übersicht aller übernommenen Kunden und ihres Waschstatus.</p>
               </div>
-            ))}
-            {splitIntoColumns(finishedRows, 2).map((col, idx) => (
-              <div key={`done-${idx}`} className="rounded-3xl border border-green-100 bg-green-50/40 p-4">
-                <h2 className="mb-3 border-b-2 border-green-500 pb-2 text-center font-black">FERTIG</h2>
-                <div className="space-y-2">
-                  {col.map((r) => (
-                    <SmallCustomerCard
-                      key={r.id}
-                      row={r}
-                      pending={Boolean(pendingFinishedOrders[r.id])}
-                      onClick={() => archiveFinishedOrders([r.id])}
-                    />
-                  ))}
-                </div>
+              <div className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">
+                {packagingInfoRows.length} Kunden
               </div>
-            ))}
+            </div>
+
+            <div className="overflow-x-auto rounded-2xl border">
+              <table className="w-full min-w-[880px] border-collapse text-left">
+                <thead className="bg-slate-100 text-sm">
+                  <tr>
+                    <th className="px-4 py-3">Kundennummer</th>
+                    <th className="px-4 py-3">Kunde</th>
+                    <th className="px-4 py-3">Übernommen</th>
+                    <th className="px-4 py-3">Artikelgruppen</th>
+                    <th className="px-4 py-3">Bereits gewaschen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {packagingInfoRows.map((order) => {
+                    const noWashRequired = order.washTotal === 0;
+                    const fullyWashed = order.washTotal > 0 && order.washed === order.washTotal;
+                    const partiallyWashed = order.washed > 0 && !fullyWashed;
+                    return (
+                      <tr key={order.id} className="border-t text-sm">
+                        <td className="px-4 py-3 font-mono font-bold">{order.customer_number}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-black">{order.customer_name}</div>
+                          {order.info && <div className="mt-1 text-xs font-semibold text-blue-800">{order.info}</div>}
+                        </td>
+                        <td className="px-4 py-3 font-semibold">{fmtDateTime(order.created_at)}</td>
+                        <td className="px-4 py-3 font-semibold">{order.groups}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full border px-3 py-1 font-black ${
+                            noWashRequired
+                              ? "border-slate-300 bg-slate-100 text-slate-700"
+                              : fullyWashed
+                                ? "border-emerald-300 bg-emerald-100 text-emerald-800"
+                                : partiallyWashed
+                                  ? "border-blue-300 bg-blue-100 text-blue-800"
+                                  : "border-amber-300 bg-amber-100 text-amber-800"
+                          }`}>
+                            {noWashRequired ? "Kein Waschgang" : fullyWashed ? "Gewaschen" : `${order.washed}/${order.washTotal} gewaschen`}
+                          </span>
+                          {order.latestWashedAt && <div className="mt-1 text-xs font-semibold text-slate-500">{fmtDateTime(order.latestWashedAt)}</div>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!packagingInfoRows.length && (
+                    <tr>
+                      <td colSpan="5" className="px-4 py-10 text-center font-semibold text-slate-500">Keine übernommenen Kunden vorhanden.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
 
@@ -5230,6 +5387,13 @@ const tourColumns = Object.entries(
                   <p className="text-slate-500">Kunden nach letztem Produktionsstatus und Zeitraum filtern.</p>
                 </div>
                 <div className="flex flex-wrap items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLeitungDeleteModal(true)}
+                    className="rounded-xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-black text-red-800 hover:bg-red-100"
+                  >
+                    Kunden löschen
+                  </button>
                   <div>
                     <label className="mb-1 block text-xs font-bold uppercase text-slate-500">Status</label>
                     <select
