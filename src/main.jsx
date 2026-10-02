@@ -339,30 +339,30 @@ const PERSONNEL_MAPS = {
 };
 
 const COMBINED_PERSONNEL_ZONES = [
-  { department: "waescherei", section: "Übernahme", x: 5.5, y: 87, w: 8.5 },
-  { department: "waescherei", section: "Waschstraßen", x: 8.5, y: 43, w: 8.5 },
-  { department: "waescherei", section: "Waschmaschinen", x: 16.5, y: 43, w: 8.5 },
-  { department: "waescherei", section: "Absortierung", x: 24, y: 20, w: 8.5 },
-  { department: "waescherei", section: "Mangel 1", x: 29, y: 29, w: 8.5 },
-  { department: "waescherei", section: "Mangel 2", x: 29, y: 49, w: 8.5 },
-  { department: "waescherei", section: "Frottee 1", x: 43, y: 18, w: 8.5 },
-  { department: "waescherei", section: "Frottee 2", x: 43, y: 43, w: 8.5 },
-  { department: "waescherei", section: "BM + SPLT", x: 45, y: 63, w: 8.5 },
-  { department: "waescherei", section: "Jenway Großteile", x: 20, y: 33, w: 8.5 },
-  { department: "waescherei", section: "Jenway Kleinteile", x: 20, y: 54, w: 8.5 },
-  { department: "waescherei", section: "Jenway Frottee", x: 20, y: 70, w: 8.5 },
-  { department: "waescherei", section: "Poolwäsche", x: 29, y: 82, w: 8.5 },
-  { department: "waescherei", section: "Expedit", x: 46, y: 84, w: 7 },
-  { department: "waescherei", section: "Wäsche auspacken", x: 39, y: 75, w: 8.5 },
-  { department: "putzerei", section: "Übernahme", x: 55, y: 88, w: 8 },
-  { department: "putzerei", section: "Expedit", x: 55, y: 56, w: 8 },
-  { department: "putzerei", section: "Kleinteile", x: 64, y: 79, w: 8 },
-  { department: "putzerei", section: "Verpackung", x: 94, y: 48, w: 8 },
-  { department: "putzerei", section: "Waschmaschinen", x: 61, y: 39, w: 9.5 },
-  { department: "putzerei", section: "Reinigungsmaschinen", x: 72, y: 39, w: 10.5 },
-  { department: "putzerei", section: "Tunnelfinisher", x: 85, y: 24, w: 9 },
-  { department: "putzerei", section: "Hemden", x: 89, y: 79, w: 8 },
-  { department: "putzerei", section: "Bügeln", x: 80, y: 59, w: 8 },
+  { department: "waescherei", section: "Übernahme", x: 5.5, y: 87, w: 5.2 },
+  { department: "waescherei", section: "Waschstraßen", x: 8.5, y: 43, w: 5.2 },
+  { department: "waescherei", section: "Waschmaschinen", x: 16.5, y: 43, w: 5.8 },
+  { department: "waescherei", section: "Absortierung", x: 24, y: 20, w: 5.2 },
+  { department: "waescherei", section: "Mangel 1", x: 29, y: 29, w: 5.2 },
+  { department: "waescherei", section: "Mangel 2", x: 29, y: 49, w: 5.2 },
+  { department: "waescherei", section: "Frottee 1", x: 43, y: 18, w: 5.2 },
+  { department: "waescherei", section: "Frottee 2", x: 43, y: 43, w: 5.2 },
+  { department: "waescherei", section: "BM + SPLT", x: 45, y: 63, w: 5.2 },
+  { department: "waescherei", section: "Jenway Großteile", x: 20, y: 33, w: 6.2 },
+  { department: "waescherei", section: "Jenway Kleinteile", x: 20, y: 54, w: 6.2 },
+  { department: "waescherei", section: "Jenway Frottee", x: 20, y: 70, w: 5.8 },
+  { department: "waescherei", section: "Poolwäsche", x: 29, y: 82, w: 5.2 },
+  { department: "waescherei", section: "Expedit", x: 46, y: 84, w: 4.5 },
+  { department: "waescherei", section: "Wäsche auspacken", x: 39, y: 75, w: 6.2 },
+  { department: "putzerei", section: "Übernahme", x: 55, y: 88, w: 5.2 },
+  { department: "putzerei", section: "Expedit", x: 55, y: 56, w: 4.5 },
+  { department: "putzerei", section: "Kleinteile", x: 64, y: 79, w: 5.2 },
+  { department: "putzerei", section: "Verpackung", x: 94, y: 48, w: 5.2 },
+  { department: "putzerei", section: "Waschmaschinen", x: 61, y: 39, w: 5.8 },
+  { department: "putzerei", section: "Reinigungsmaschinen", x: 72, y: 39, w: 6.5 },
+  { department: "putzerei", section: "Tunnelfinisher", x: 85, y: 24, w: 5.8 },
+  { department: "putzerei", section: "Hemden", x: 89, y: 79, w: 4.8 },
+  { department: "putzerei", section: "Bügeln", x: 80, y: 59, w: 4.5 },
 ];
 
 function normalizePersonnelFloorPlanZones(value) {
@@ -3508,7 +3508,12 @@ const tourColumns = Object.entries(
               <div
                 key={zoneKey}
                 className={`absolute -translate-x-1/2 -translate-y-1/2 ${editable ? "cursor-grab touch-none select-none rounded bg-white/55 p-1 ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : ""}`}
-                style={{ left: `${zone.x}%`, top: `${zone.y}%`, width: `${zone.w}%` }}
+                style={{
+                  left: `${zone.x}%`,
+                  top: `${zone.y}%`,
+                  width: `${zone.w}%`,
+                  minWidth: section.name.length > 15 ? "100px" : section.name.length > 11 ? "86px" : "68px",
+                }}
                 onPointerDown={editable ? (event) => {
                   event.preventDefault();
                   floorPlanDrag.current = zoneKey;
@@ -3521,11 +3526,8 @@ const tourColumns = Object.entries(
                 } : undefined}
                 onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
               >
-                <div className={`flex items-start justify-between gap-1 border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
+                <div className={`border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
                   <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
-                  <span className="shrink-0 px-0.5 text-[8px] text-slate-700">
-                    {assigned.length}/{target === null ? "B" : target}
-                  </span>
                 </div>
                 <div className="mt-0.5 flex flex-col items-start gap-px">
                   {assigned.map((name) => (
@@ -3533,7 +3535,6 @@ const tourColumns = Object.entries(
                       {name}
                     </span>
                   ))}
-                  {!assigned.length && <span className="bg-white/90 px-1 py-0.5 text-[8px] font-bold text-slate-500 shadow-sm">nicht besetzt</span>}
                 </div>
               </div>
             );
