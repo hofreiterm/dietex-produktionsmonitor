@@ -1,0 +1,21 @@
+PERSONALPLANUNG AUF SIMPLEDS - EINRICHTUNG
+
+1. In Supabase den SQL Editor öffnen.
+2. Den gesamten Inhalt der Datei SUPABASE_PERSONALPLANUNG.sql einfügen und ausführen.
+3. Das neue Vercel-Paket deployen.
+4. Die Personalplanung einmal im normalen Programm öffnen.
+   Sobald unter der Überschrift "Zentral gespeichert" steht, ist die Verbindung aktiv.
+5. In simpleDS beim Bildschirm "Wäscherei Gang" einen Webseiten-Inhalt hinzufügen.
+6. Folgende URL verwenden:
+
+https://dietex-produktionsmonitor.vercel.app/personaldisplay?display=waescherei-gang&fixed=1
+
+Die Monitorseite zeigt die Wäscherei und Putzerei direkt auf dem Gebäudeplan und ist
+nur lesbar. Datum und aktuelle Schicht wechseln automatisch.
+Die Seite lädt alle 15 Sekunden mit einem neuen Cache-Schlüssel. Dadurch wechseln die
+drei Schichten auch in simpleDS zuverlässig und Änderungen werden automatisch übernommen.
+
+Im Produktionsmonitor ist dieselbe Ansicht über "Personalübersicht" erreichbar.
+
+Falls die Seite auf dem simpleDS-Monitor nicht geöffnet werden kann, muss die URL in
+der Vercel-Firewall für die Internetverbindung der simpleDS-Box freigegeben werden.

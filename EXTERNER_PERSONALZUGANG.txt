@@ -1,0 +1,41 @@
+EXTERNER PERSONALZUGANG FUER DIE PRODUKTIONSLEITUNG
+
+1. BENUTZER IN SUPABASE ANLEGEN
+
+- Supabase Dashboard oeffnen.
+- Authentication > Users waehlen.
+- Add user waehlen.
+- E-Mail-Adresse des Produktionsleiters und ein starkes Passwort eintragen.
+- Der Benutzer muss als bestaetigt angelegt werden.
+
+2. VERCEL-FIREWALL ERGAENZEN
+
+Die bestehende Sperre fuer Zugriffe ausserhalb des Firmennetzes bleibt bestehen.
+Oberhalb der bisherigen Sperrregel eine neue Custom Rule anlegen:
+
+Name: Externer Personalzugang
+Verknuepfung der Bedingungen: OR
+
+- Query, Schluessel "portal", Equals, Wert "personalplanung"
+- Request Path, Starts with, "/assets/"
+- Request Path, Equals, "/plan-waescherei-putzerei.jpg"
+- Request Path, Equals, "/manifest.json"
+- Request Path, Equals, "/icon-192.png"
+- Request Path, Equals, "/icon-512.png"
+
+Then: Bypass
+
+Die Regel muss VOR der bestehenden Regel stehen, die fremde IP-Adressen sperrt.
+Danach Review Changes und Publish ausfuehren.
+
+3. ZUGANG AM HANDY
+
+https://dietex-produktionsmonitor.vercel.app/?portal=personalplanung
+
+Nach der Anmeldung sind nur Personalplanung und Personaluebersicht erreichbar.
+Die Anmeldung bleibt auf dem Handy gespeichert, bis "Abmelden" gedrueckt wird.
+
+WICHTIG
+
+Die normale Adresse des Produktionsmonitors bleibt weiterhin auf das Firmennetz
+beschraenkt. Den externen Link nur an berechtigte Benutzer weitergeben.

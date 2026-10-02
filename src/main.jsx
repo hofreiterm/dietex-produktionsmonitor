@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import { MessageCircle, Phone } from "lucide-react";
+import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import personnelFloorPlanUrl from "./assets/plan-waescherei-putzerei.jpg";
 
@@ -401,8 +402,8 @@ function WhatsAppShareButton({ onClick }) {
     <button
       type="button"
       onClick={onClick}
-      title="Personalübersicht über WhatsApp teilen"
-      aria-label="Personalübersicht über WhatsApp teilen"
+      title="Tagesübersicht mit allen drei Schichten als PDF über WhatsApp teilen"
+      aria-label="Tagesübersicht mit allen drei Schichten als PDF über WhatsApp teilen"
       className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-green-700 bg-[#25D366] text-white shadow-sm transition hover:bg-[#1fbd59] active:scale-95"
     >
       <MessageCircle size={27} strokeWidth={2.4} />
@@ -2201,14 +2202,14 @@ const tourColumns = Object.entries(
   const currentGroups = () => currentDepartmentConfig().groups;
   const currentBaseEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
   const sectionsForDepartment = (department) => personnelSectionsByDept[department] || PERSONNEL_DEPARTMENTS[department]?.sections || [];
-  const planForDepartment = (department) => personalPlan[getPersonalKey(personalDate, personalShift, department)] || {};
-  const sectionTargetForDepartment = (section, department) => {
+  const planForDepartment = (department, shift = personalShift) => personalPlan[getPersonalKey(personalDate, shift, department)] || {};
+  const sectionTargetForDepartment = (section, department, shift = personalShift) => {
     if (!section || section.target?.flexible) return null;
     const strength = personnelDayStrengthByDate[`${department}_${personalDate}`] || "mittel";
     const strengthTargets = section.targetsByStrength?.[strength];
-    const shiftTarget = strengthTargets && Object.prototype.hasOwnProperty.call(strengthTargets, personalShift)
-      ? strengthTargets[personalShift]
-      : section.target?.[personalShift];
+    const shiftTarget = strengthTargets && Object.prototype.hasOwnProperty.call(strengthTargets, shift)
+      ? strengthTargets[shift]
+      : section.target?.[shift];
     if (shiftTarget === null || shiftTarget === "") return null;
     return Number(shiftTarget ?? section.target?.default ?? 0);
   };
@@ -3259,7 +3260,7 @@ const tourColumns = Object.entries(
     window.setTimeout(() => URL.revokeObjectURL(imageUrl), 1000);
   };
 
-  const sharePersonnelOverviewImage = async () => {
+  const createPersonnelOverviewCanvas = async (shiftKey) => {
     const canvasWidth = 2400;
     const headerHeight = 150;
     const floorHeight = Math.round(canvasWidth * 2274 / 4638);
@@ -3267,7 +3268,7 @@ const tourColumns = Object.entries(
     canvas.width = canvasWidth;
     canvas.height = headerHeight + floorHeight;
     const context = canvas.getContext("2d");
-    const shiftLabel = PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label || personalShift;
+    const shiftLabel = PERSONNEL_SHIFTS.find((shift) => shift.key === shiftKey)?.label || shiftKey;
     const displayDate = new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", {
       weekday: "long",
       day: "2-digit",
@@ -3313,8 +3314,8 @@ const tourColumns = Object.entries(
     personnelFloorPlanZones.forEach((zone) => {
       const section = sectionsForDepartment(zone.department).find((entry) => entry.name === zone.section);
       if (!section) return;
-      const assigned = planForDepartment(zone.department)[section.name] || [];
-      const target = sectionTargetForDepartment(section, zone.department);
+      const assigned = planForDepartment(zone.department, shiftKey)[section.name] || [];
+      const target = sectionTargetForDepartment(section, zone.department, shiftKey);
       const border = target === null
         ? "#64748b"
         : assigned.length < target
@@ -3340,8 +3341,8 @@ const tourColumns = Object.entries(
     });
 
     const plans = {
-      waescherei: planForDepartment("waescherei"),
-      putzerei: planForDepartment("putzerei"),
+      waescherei: planForDepartment("waescherei", shiftKey),
+      putzerei: planForDepartment("putzerei", shiftKey),
     };
     const assignedNames = new Set(
       Object.values(plans).flatMap((plan) => Object.values(plan).flatMap((names) => Array.isArray(names) ? names : [])),
@@ -3405,34 +3406,66 @@ const tourColumns = Object.entries(
       if (lineIndex < 3) context.fillText(line, x + 16, y + 58 + lineIndex * 27);
     });
 
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+    return canvas;
+  };
+
+  const sharePersonnelOverviewPdf = async () => {
+    let pdf = null;
+    for (let index = 0; index < PERSONNEL_SHIFTS.length; index += 1) {
+      const shift = PERSONNEL_SHIFTS[index];
+      const canvas = await createPersonnelOverviewCanvas(shift.key);
+      if (!canvas) {
+        window.alert("Die Personalübersicht konnte nicht als PDF erstellt werden.");
+        return;
+      }
+      if (!pdf) {
+        pdf = new jsPDF({
+          orientation: "landscape",
+          unit: "px",
+          format: [canvas.width, canvas.height],
+          hotfixes: ["px_scaling"],
+          compress: true,
+        });
+      } else {
+        pdf.addPage([canvas.width, canvas.height], "landscape");
+      }
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, canvas.width, canvas.height, undefined, "FAST");
+    }
+
+    const blob = pdf?.output("blob");
     if (!blob) {
-      window.alert("Die Personalübersicht konnte nicht als Bild erstellt werden.");
+      window.alert("Die Personalübersicht konnte nicht als PDF erstellt werden.");
       return;
     }
-    const fileName = `personaluebersicht-${personalDate}-${personalShift}.png`;
-    const file = new File([blob], fileName, { type: "image/png" });
+    const displayDate = new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    const fileName = `personaluebersicht-${personalDate}-alle-schichten.pdf`;
+    const file = new File([blob], fileName, { type: "application/pdf" });
     if (navigator.share && navigator.canShare?.({ files: [file] })) {
       try {
         await navigator.share({
           files: [file],
           title: `Personalübersicht ${displayDate}`,
-          text: `Personalübersicht ${shiftLabel}`,
+          text: "Personalübersicht für alle drei Schichten",
         });
         return;
       } catch (error) {
         if (error?.name === "AbortError") return;
       }
     }
-    const imageUrl = URL.createObjectURL(blob);
+    const pdfUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement("a");
-    downloadLink.href = imageUrl;
+    downloadLink.href = pdfUrl;
     downloadLink.download = fileName;
     document.body.appendChild(downloadLink);
     downloadLink.click();
     downloadLink.remove();
-    window.setTimeout(() => URL.revokeObjectURL(imageUrl), 1000);
-    window.alert("Das Bild wurde heruntergeladen. Auf diesem Gerät ist die direkte WhatsApp-Freigabe nicht verfügbar.");
+    window.setTimeout(() => URL.revokeObjectURL(pdfUrl), 1000);
+    window.alert("Die PDF wurde heruntergeladen. Auf diesem Gerät ist die direkte WhatsApp-Freigabe nicht verfügbar.");
   };
 
   function openPinModal(nextView = null) {
@@ -5234,7 +5267,7 @@ const tourColumns = Object.entries(
                 </div>
                 <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
                 <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
-                <WhatsAppShareButton onClick={sharePersonnelOverviewImage} />
+                <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
               </div>
 
               <div className="grid gap-3 xl:grid-cols-[310px_1fr]">
@@ -5498,7 +5531,7 @@ const tourColumns = Object.entries(
                   {!floorPlanEditMode && (
                     <>
                       <Input type="date" value={personalDate} onChange={(event) => setPersonalDate(event.target.value)} />
-                      <WhatsAppShareButton onClick={sharePersonnelOverviewImage} />
+                      <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
                       <Button active onClick={beginFloorPlanEdit}>
                         Positionen bearbeiten
                       </Button>

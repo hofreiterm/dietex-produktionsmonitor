@@ -1,0 +1,6 @@
+Fuer die Gesamtuebersicht in der Personalplanung muessen diese zwei JPG-Dateien im Projektstamm liegen:
+
+plan-skizze-waescherei.jpg
+plan-skizze-putzerei.jpg
+
+In GitHub also neben index.html, manifest.json und package.json hochladen.
