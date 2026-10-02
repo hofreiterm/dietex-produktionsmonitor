@@ -2,6 +2,7 @@ import "./index.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
+import { MessageCircle, Phone } from "lucide-react";
 import * as XLSX from "xlsx";
 import personnelFloorPlanUrl from "./assets/plan-waescherei-putzerei.jpg";
 
@@ -391,6 +392,21 @@ function Button({ children, active, className = "", ...props }) {
       {...props}
     >
       {children}
+    </button>
+  );
+}
+
+function WhatsAppShareButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Personalübersicht über WhatsApp teilen"
+      aria-label="Personalübersicht über WhatsApp teilen"
+      className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-green-700 bg-[#25D366] text-white shadow-sm transition hover:bg-[#1fbd59] active:scale-95"
+    >
+      <MessageCircle size={27} strokeWidth={2.4} />
+      <Phone className="absolute" size={12} strokeWidth={2.8} />
     </button>
   );
 }
@@ -5218,6 +5234,7 @@ const tourColumns = Object.entries(
                 </div>
                 <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
                 <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
+                <WhatsAppShareButton onClick={sharePersonnelOverviewImage} />
               </div>
 
               <div className="grid gap-3 xl:grid-cols-[310px_1fr]">
@@ -5481,9 +5498,7 @@ const tourColumns = Object.entries(
                   {!floorPlanEditMode && (
                     <>
                       <Input type="date" value={personalDate} onChange={(event) => setPersonalDate(event.target.value)} />
-                      <Button className="border-green-700 bg-green-600 text-white hover:bg-green-700" onClick={sharePersonnelOverviewImage}>
-                        Über WhatsApp teilen
-                      </Button>
+                      <WhatsAppShareButton onClick={sharePersonnelOverviewImage} />
                       <Button active onClick={beginFloorPlanEdit}>
                         Positionen bearbeiten
                       </Button>
