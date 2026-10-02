@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
+import personnelFloorPlanUrl from "./assets/plan-waescherei-putzerei.jpg";
 
 const supabase = createClient(
   "https://dkdusyigghttjxdpbofy.supabase.co",
@@ -3301,7 +3302,7 @@ const tourColumns = Object.entries(
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "4638 / 2274" }}>
           <img
-            src="/plan-waescherei-putzerei.jpg"
+            src={personnelFloorPlanUrl}
             alt="Gebäudeplan Wäscherei und Putzerei"
             className="absolute inset-0 h-full w-full object-fill"
           />
