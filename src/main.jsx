@@ -4573,7 +4573,7 @@ const tourColumns = Object.entries(
         </div>
       )}
 
-      <main className={`mx-auto max-w-[1800px] ${fixedView ? "p-2" : "p-5"}`}>
+      <main className={`mx-auto w-full ${view === "personalmonitor" || view === "personaldisplay" ? "max-w-none" : "max-w-[1800px]"} ${fixedView ? "p-2" : "p-5"}`}>
         {(!fixedView || takeoverMode) && (
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
             {(takeoverMode
