@@ -3456,13 +3456,6 @@ const tourColumns = Object.entries(
             className="absolute inset-0 h-full w-full object-fill"
           />
 
-          <div className="absolute left-[23%] top-2 -translate-x-1/2 rounded-md border-2 border-blue-700 bg-white/95 px-3 py-1 text-sm font-black text-blue-950 shadow">
-            Wäscherei
-          </div>
-          <div className="absolute left-[75%] top-2 -translate-x-1/2 rounded-md border-2 border-violet-700 bg-white/95 px-3 py-1 text-sm font-black text-violet-950 shadow">
-            Putzerei
-          </div>
-
           <div className="pointer-events-none absolute left-[55%] top-[5%] z-10 w-[42%] rounded-md border border-slate-300 bg-white/95 p-1.5 shadow-sm">
             <div className="mb-1 flex items-center justify-between border-b border-slate-200 pb-1 text-[9px] font-black leading-none text-slate-900">
               <span>Abwesenheiten &amp; Status</span>
@@ -3475,7 +3468,7 @@ const tourColumns = Object.entries(
                     <span className="truncate">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
                   </div>
-                  <div className="mt-0.5 text-[10px] font-bold leading-tight">
+                  <div className="mt-0.5 break-words text-[24px] font-black leading-tight">
                     {zone.names.length ? zone.names.join(", ") : "-"}
                   </div>
                 </div>
@@ -3531,7 +3524,7 @@ const tourColumns = Object.entries(
                 </div>
                 <div className="mt-0.5 flex flex-col items-start gap-px">
                   {assigned.map((name) => (
-                    <span key={name} className={`block max-w-full rounded-sm border px-1.5 py-0.5 text-[12px] font-black leading-tight shadow-sm ${employeeClass}`}>
+                    <span key={name} className={`block max-w-full break-words rounded-sm border px-1.5 py-0.5 text-[24px] font-black leading-tight shadow-sm ${employeeClass}`}>
                       {name}
                     </span>
                   ))}
