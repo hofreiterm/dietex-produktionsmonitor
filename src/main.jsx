@@ -796,12 +796,30 @@ function App() {
       })
       .subscribe();
 
+    const refreshPersonnelDisplay = () => {
+      if (!personnelDisplayMode || document.visibilityState === "visible") {
+        loadRemotePersonnelState();
+      }
+    };
+
     loadRemotePersonnelState();
-    const pollInterval = window.setInterval(loadRemotePersonnelState, 15000);
+    const pollInterval = window.setInterval(
+      refreshPersonnelDisplay,
+      personnelDisplayMode ? 3000 : 15000
+    );
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") loadRemotePersonnelState();
+    };
+    window.addEventListener("focus", refreshPersonnelDisplay);
+    window.addEventListener("pageshow", refreshPersonnelDisplay);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
       window.clearInterval(pollInterval);
+      window.removeEventListener("focus", refreshPersonnelDisplay);
+      window.removeEventListener("pageshow", refreshPersonnelDisplay);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
       supabase.removeChannel(channel);
     };
@@ -946,18 +964,6 @@ function App() {
     setPersonalDate(localDateKey(now));
     setPersonalShift(shift);
   }, [personnelDisplayMode, requestedDisplayShift, tick]);
-
-  useEffect(() => {
-    if (!personnelDisplayMode) return undefined;
-    const refreshMeta = document.createElement("meta");
-    const refreshUrl = new URL(window.location.href);
-    refreshUrl.searchParams.set("dietex_reload", Date.now().toString());
-    refreshMeta.httpEquiv = "refresh";
-    refreshMeta.content = `15;url=${refreshUrl.toString()}`;
-    refreshMeta.dataset.dietexPersonalDisplayRefresh = "true";
-    document.head.appendChild(refreshMeta);
-    return () => refreshMeta.remove();
-  }, [personnelDisplayMode]);
 
   useEffect(() => {
     return () => {
