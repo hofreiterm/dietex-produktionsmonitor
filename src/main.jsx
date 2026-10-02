@@ -3238,6 +3238,182 @@ const tourColumns = Object.entries(
     window.setTimeout(() => URL.revokeObjectURL(imageUrl), 1000);
   };
 
+  const sharePersonnelOverviewImage = async () => {
+    const canvasWidth = 2400;
+    const headerHeight = 150;
+    const floorHeight = Math.round(canvasWidth * 2274 / 4638);
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasWidth;
+    canvas.height = headerHeight + floorHeight;
+    const context = canvas.getContext("2d");
+    const shiftLabel = PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label || personalShift;
+    const displayDate = new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#0f172a";
+    context.font = "900 48px Arial";
+    context.fillText("DieTex Personalübersicht Wäscherei + Putzerei", 48, 62);
+    context.fillStyle = "#475569";
+    context.font = "700 30px Arial";
+    context.fillText(`${displayDate}   |   ${shiftLabel}`, 48, 112);
+
+    const floorPlanImage = await new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = personnelFloorPlanUrl;
+    });
+    context.drawImage(floorPlanImage, 0, headerHeight, canvasWidth, floorHeight);
+
+    const drawTextBox = (text, x, y, options = {}) => {
+      const font = options.font || "900 28px Arial";
+      const paddingX = options.paddingX ?? 10;
+      const paddingY = options.paddingY ?? 7;
+      context.font = font;
+      const width = context.measureText(text).width + paddingX * 2;
+      const height = options.height || 42;
+      const left = Math.max(4, Math.min(canvasWidth - width - 4, x));
+      context.fillStyle = options.background || "rgba(255,255,255,0.94)";
+      context.fillRect(left, y, width, height);
+      context.strokeStyle = options.border || "#cbd5e1";
+      context.lineWidth = options.lineWidth || 2;
+      context.strokeRect(left, y, width, height);
+      context.fillStyle = options.color || "#0f172a";
+      context.fillText(text, left + paddingX, y + height - paddingY);
+      return { width, height, left };
+    };
+
+    personnelFloorPlanZones.forEach((zone) => {
+      const section = sectionsForDepartment(zone.department).find((entry) => entry.name === zone.section);
+      if (!section) return;
+      const assigned = planForDepartment(zone.department)[section.name] || [];
+      const target = sectionTargetForDepartment(section, zone.department);
+      const border = target === null
+        ? "#64748b"
+        : assigned.length < target
+          ? "#eab308"
+          : assigned.length > target
+            ? "#dc2626"
+            : "#16a34a";
+      const centerX = zone.x / 100 * canvasWidth;
+      const top = headerHeight + zone.y / 100 * floorHeight;
+      const title = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
+      const titleWidth = context.measureText(title).width + 20;
+      const left = centerX - Math.max(120, titleWidth) / 2;
+      const titleBox = drawTextBox(title, left, top, { font: "900 20px Arial", height: 34, paddingY: 7, border, lineWidth: 5 });
+      assigned.forEach((name, index) => {
+        drawTextBox(name, titleBox.left, top + 38 + index * 48, {
+          font: "900 30px Arial",
+          height: 44,
+          paddingY: 7,
+          background: zone.department === "waescherei" ? "#dbeafe" : "#ede9fe",
+          border: zone.department === "waescherei" ? "#93c5fd" : "#c4b5fd",
+        });
+      });
+    });
+
+    const plans = {
+      waescherei: planForDepartment("waescherei"),
+      putzerei: planForDepartment("putzerei"),
+    };
+    const assignedNames = new Set(
+      Object.values(plans).flatMap((plan) => Object.values(plan).flatMap((names) => Array.isArray(names) ? names : [])),
+    );
+    const start12Names = personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [];
+    start12Names.forEach((name) => assignedNames.add(name));
+    const unassignedNames = Object.entries(personnelEmployeesByDept)
+      .flatMap(([department, employees]) => (employees || [])
+        .filter((employee) => (employeeStatus[`${department}_${employee.name}`] || "anwesend") === "anwesend")
+      .map((employee) => employee.name))
+      .filter((name) => !assignedNames.has(name))
+      .sort((a, b) => a.localeCompare(b, "de"));
+    const uniqueNames = (names) => [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
+    const statusRows = [
+      { title: "Start 12 Uhr", names: uniqueNames(start12Names), color: "#ecfdf5", border: "#059669" },
+      { title: "Urlaub", names: uniqueNames([...(plans.waescherei.urlaub || []), ...(plans.putzerei.urlaub || [])]), color: "#eff6ff", border: "#3b82f6" },
+      { title: "ZA", names: uniqueNames([...(plans.waescherei.za || []), ...(plans.putzerei.za || [])]), color: "#fffbeb", border: "#f59e0b" },
+      { title: "Krank", names: uniqueNames([...(plans.waescherei.krank || []), ...(plans.putzerei.krank || [])]), color: "#fef2f2", border: "#ef4444" },
+      { title: "Büro/Tour/Sonstiges", names: uniqueNames([...(plans.waescherei.sonstiges || []), ...(plans.putzerei.sonstiges || [])]), color: "#f8fafc", border: "#475569" },
+      { title: "Nicht eingeteilt", names: uniqueNames(unassignedNames), color: "#f8fafc", border: "#64748b" },
+    ];
+    const panelX = 1320;
+    const panelY = headerHeight + 55;
+    const panelWidth = 1020;
+    const cellWidth = panelWidth / 3;
+    const cellHeight = 125;
+    context.fillStyle = "rgba(255,255,255,0.96)";
+    context.fillRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * 2 + 58);
+    context.strokeStyle = "#94a3b8";
+    context.lineWidth = 3;
+    context.strokeRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * 2 + 58);
+    context.fillStyle = "#0f172a";
+    context.font = "900 24px Arial";
+    context.fillText("Abwesenheiten & Status", panelX, panelY - 10);
+    statusRows.forEach((status, index) => {
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+      const x = panelX + column * cellWidth;
+      const y = panelY + row * cellHeight;
+      context.fillStyle = status.color;
+      context.fillRect(x, y, cellWidth - 8, cellHeight - 8);
+      context.fillStyle = status.border;
+      context.fillRect(x, y, 7, cellHeight - 8);
+      context.fillStyle = "#0f172a";
+      context.font = "900 20px Arial";
+      context.fillText(`${status.title} (${status.names.length})`, x + 16, y + 28);
+      context.font = "900 22px Arial";
+      const words = (status.names.length ? status.names.join(", ") : "-").split(" ");
+      let line = "";
+      let lineIndex = 0;
+      words.forEach((word) => {
+        const candidate = line ? `${line} ${word}` : word;
+        if (line && context.measureText(candidate).width > cellWidth - 32 && lineIndex < 2) {
+          context.fillText(line, x + 16, y + 58 + lineIndex * 27);
+          line = word;
+          lineIndex += 1;
+        } else {
+          line = candidate;
+        }
+      });
+      if (lineIndex < 3) context.fillText(line, x + 16, y + 58 + lineIndex * 27);
+    });
+
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.95));
+    if (!blob) {
+      window.alert("Die Personalübersicht konnte nicht als Bild erstellt werden.");
+      return;
+    }
+    const fileName = `personaluebersicht-${personalDate}-${personalShift}.png`;
+    const file = new File([blob], fileName, { type: "image/png" });
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: `Personalübersicht ${displayDate}`,
+          text: `Personalübersicht ${shiftLabel}`,
+        });
+        return;
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+      }
+    }
+    const imageUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement("a");
+    downloadLink.href = imageUrl;
+    downloadLink.download = fileName;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    window.setTimeout(() => URL.revokeObjectURL(imageUrl), 1000);
+    window.alert("Das Bild wurde heruntergeladen. Auf diesem Gerät ist die direkte WhatsApp-Freigabe nicht verfügbar.");
+  };
+
   function openPinModal(nextView = null) {
     setPinInput("");
     setPinError("");
@@ -3450,8 +3626,6 @@ const tourColumns = Object.entries(
       { key: "za", title: "ZA", names: uniqueSortedNames([...(waeschereiPlan.za || []), ...(putzereiPlan.za || [])]), color: "border-amber-500 bg-amber-50/95 text-amber-950" },
       { key: "krank", title: "Krank", names: uniqueSortedNames([...(waeschereiPlan.krank || []), ...(putzereiPlan.krank || [])]), color: "border-red-500 bg-red-50/95 text-red-950" },
       { key: "sonstiges", title: "Büro/Tour/Sonstiges", names: uniqueSortedNames([...(waeschereiPlan.sonstiges || []), ...(putzereiPlan.sonstiges || [])]), color: "border-slate-600 bg-slate-100/95 text-slate-950" },
-      { key: "waescherei", title: "In Wäscherei", names: uniqueSortedNames(putzereiPlan.waescherei || []), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
-      { key: "putzerei", title: "In Putzerei", names: uniqueSortedNames(waeschereiPlan.putzerei || []), color: "border-violet-600 bg-violet-50/95 text-violet-950" },
       { key: "pool", title: "Nicht eingeteilt", names: uniqueSortedNames([
         ...unassignedNamesForDepartment("waescherei"),
         ...unassignedNamesForDepartment("putzerei"),
@@ -5287,37 +5461,46 @@ const tourColumns = Object.entries(
 
         {view === "personalmonitor" && (
           <section className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3 shadow-sm">
-              <div>
-                <h2 className="text-2xl font-black">Personalübersicht Wäscherei + Putzerei</h2>
-                <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-amber-700"}`}>
-                  {personnelSyncStatus === "connected" ? "Zentral gespeichert und automatisch aktuell" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
+            <div className="rounded-xl border bg-white px-4 py-3 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl font-black">Personalübersicht Wäscherei + Putzerei</h2>
+                  <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-amber-700"}`}>
+                    {personnelSyncStatus === "connected" ? "Zentral gespeichert und automatisch aktuell" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {!floorPlanEditMode && (
+                    <>
+                      <Input type="date" value={personalDate} onChange={(event) => setPersonalDate(event.target.value)} />
+                      <Button className="border-green-700 bg-green-600 text-white hover:bg-green-700" onClick={sharePersonnelOverviewImage}>
+                        Über WhatsApp teilen
+                      </Button>
+                      <Button active onClick={beginFloorPlanEdit}>
+                        Positionen bearbeiten
+                      </Button>
+                    </>
+                  )}
+                  {floorPlanEditMode && (
+                    <>
+                      <Button onClick={resetFloorPlanDraft}>Standardpositionen</Button>
+                      <Button onClick={cancelFloorPlanEdit}>Abbrechen</Button>
+                      <Button active onClick={saveFloorPlanPositions}>
+                        Positionen speichern
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {!floorPlanEditMode && (
-                  <>
-                    <Input type="date" value={personalDate} onChange={(event) => setPersonalDate(event.target.value)} />
-                    {PERSONNEL_SHIFTS.map((shift) => (
-                      <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
-                        {shift.label}
-                      </Button>
-                    ))}
-                    <Button active onClick={beginFloorPlanEdit}>
-                      Positionen bearbeiten
+              {!floorPlanEditMode && (
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {PERSONNEL_SHIFTS.map((shift) => (
+                    <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
+                      {shift.label}
                     </Button>
-                  </>
-                )}
-                {floorPlanEditMode && (
-                  <>
-                    <Button onClick={resetFloorPlanDraft}>Standardpositionen</Button>
-                    <Button onClick={cancelFloorPlanEdit}>Abbrechen</Button>
-                    <Button active onClick={saveFloorPlanPositions}>
-                      Positionen speichern
-                    </Button>
-                  </>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
             {CombinedPersonnelFloorPlan({ editable: floorPlanEditMode })}
           </section>
