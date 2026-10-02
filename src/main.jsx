@@ -497,8 +497,14 @@ function displaySubcategory(subcategory) {
 
 function App() {
   const params = new URLSearchParams(window.location.search);
+  const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
+  const personnelDisplayPath = pathname === "/personaldisplay";
   const externalPersonnelPortal = params.get("portal") === "personalplanung";
-  const initialView = externalPersonnelPortal ? (params.get("view") === "personalmonitor" ? "personalmonitor" : "personalplanung") : (params.get("view") || "annahme");
+  const initialView = personnelDisplayPath
+    ? "personaldisplay"
+    : externalPersonnelPortal
+      ? (params.get("view") === "personalmonitor" ? "personalmonitor" : "personalplanung")
+      : (params.get("view") || "annahme");
   const personnelDisplayMode = initialView === "personaldisplay" || params.get("display") === "waescherei-gang";
   const initialStationKey = params.get("station");
   const initialStation = STATIONS.find((s) => s.key === initialStationKey) || STATIONS[0];
