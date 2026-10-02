@@ -914,8 +914,8 @@ function App() {
   useEffect(() => {
     if (!personnelDisplayMode) return;
     const now = new Date(tick);
-    const hour = now.getHours();
-    const shift = hour < 12 ? "07-12" : hour < 15 ? "12-15" : "15-schluss";
+    const shiftIndex = Math.floor(now.getTime() / 15000) % PERSONNEL_SHIFTS.length;
+    const shift = PERSONNEL_SHIFTS[shiftIndex].key;
     setPersonalDepartment("waescherei");
     setPersonalDate(localDateKey(now));
     setPersonalShift(shift);
