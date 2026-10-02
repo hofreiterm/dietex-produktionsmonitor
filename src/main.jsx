@@ -2158,6 +2158,28 @@ const tourColumns = Object.entries(
       return false;
     }
 
+    if (sectionName === "start12") {
+      if (personalDepartment !== "waescherei") return false;
+      setPersonalPlan((prev) => {
+        const updatedPlans = { ...prev };
+        PERSONNEL_SHIFTS.forEach((shift) => {
+          const key = getPersonalKey(personalDate, shift.key, "waescherei");
+          const current = prev[key] || {};
+          const next = { ...current };
+          const zonesToClear = shift.key === "07-12"
+            ? allPlanningZones()
+            : ["start12", "urlaub", "za", "krank", "waescherei", "putzerei"];
+          zonesToClear.forEach((zone) => {
+            next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
+          });
+          if (shift.key === "07-12") next.start12 = [...(next.start12 || []), employeeName];
+          updatedPlans[key] = next;
+        });
+        return updatedPlans;
+      });
+      return true;
+    }
+
     setPersonalPlan((prev) => {
       const allZones = allPlanningZones();
       const globalZones = new Set(["urlaub", "za", "krank", "waescherei", "putzerei"]);
@@ -2263,8 +2285,14 @@ const tourColumns = Object.entries(
   const getSortedEmployees = (list) =>
     [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), "de", { numeric: true }));
 
-  const getUnassignedEmployees = () =>
-    getSortedEmployees(getActiveEmployees().filter((e) => !getEmployeeAssignment(e.name)));
+  const getUnassignedEmployees = () => {
+    const start12Names = personalDepartment === "waescherei"
+      ? personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []
+      : [];
+    return getSortedEmployees(
+      getActiveEmployees().filter((employee) => !getEmployeeAssignment(employee.name) && !start12Names.includes(employee.name))
+    );
+  };
 
   const getEmployeeAssignmentStats = (employeeName) => {
     const counts = {};
@@ -2697,6 +2725,7 @@ const tourColumns = Object.entries(
   
   const allPlanningZones = () => [
     ...currentSections().map((section) => section.name),
+    "start12",
     "urlaub",
     "za",
     "krank",
@@ -2707,8 +2736,12 @@ const tourColumns = Object.entries(
   const applyPersonnelSuggestions = () => {
     const currentKey = getPersonalKey();
     const currentPlan = personalPlan[currentKey] || {};
+    const start12Names = personalDepartment === "waescherei"
+      ? personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []
+      : [];
 
     const nextPlan = {
+      ...(personalDepartment === "waescherei" && personalShift === "07-12" ? { start12: [...start12Names] } : {}),
       urlaub: [...(currentPlan.urlaub || [])],
       za: [...(currentPlan.za || [])],
       krank: [...(currentPlan.krank || [])],
@@ -2726,6 +2759,7 @@ const tourColumns = Object.entries(
       ...nextPlan.krank,
       ...nextPlan.waescherei,
       ...nextPlan.putzerei,
+      ...(personalDepartment === "waescherei" && personalShift === "07-12" ? start12Names : []),
     ]);
 
     const historyPlans = Object.entries(personalPlan)
@@ -2899,7 +2933,8 @@ const tourColumns = Object.entries(
       return;
     }
 
-    setPersonalPlan((prev) => ({ ...prev, [getPersonalKey()]: source }));
+    const { start12: _start12, ...sourceWithoutStart12 } = source;
+    setPersonalPlan((prev) => ({ ...prev, [getPersonalKey()]: sourceWithoutStart12 }));
   };
 
   const printPersonalPlanSafe = () => {
@@ -2973,6 +3008,11 @@ const tourColumns = Object.entries(
 
     const specialZones = [
       { key: "pool", title: "Nicht eingeteilt", names: getUnassignedEmployees().map((employee) => employee.name) },
+      ...(personalDepartment === "waescherei" ? [{
+        key: "start12",
+        title: "Start 12 Uhr",
+        names: personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [],
+      }] : []),
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
       { key: "krank", title: "Krank", names: plan.krank || [] },
@@ -3298,6 +3338,35 @@ const tourColumns = Object.entries(
 
   function CombinedPersonnelFloorPlan({ editable = false } = {}) {
     const visibleZones = editable ? floorPlanDraft : personnelFloorPlanZones;
+    const waeschereiPlan = planForDepartment("waescherei");
+    const putzereiPlan = planForDepartment("putzerei");
+    const start12Names = personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [];
+    const uniqueSortedNames = (names) => [...new Set(names.filter(Boolean))]
+      .sort((a, b) => String(a).localeCompare(String(b), "de", { numeric: true }));
+    const unassignedNamesForDepartment = (department) => {
+      const departmentPlan = planForDepartment(department);
+      const assignedNames = new Set(
+        Object.values(departmentPlan).flatMap((names) => Array.isArray(names) ? names : [])
+      );
+      if (department === "waescherei") start12Names.forEach((name) => assignedNames.add(name));
+      const employees = personnelEmployeesByDept[department] || PERSONNEL_DEPARTMENTS[department]?.employees || [];
+      return employees
+        .filter((employee) => (employeeStatus[`${department}_${employee.name}`] || "anwesend") === "anwesend")
+        .filter((employee) => !assignedNames.has(employee.name))
+        .map((employee) => employee.name);
+    };
+    const statusZones = [
+      { key: "start12", title: "Start 12 Uhr", names: uniqueSortedNames(start12Names), color: "border-emerald-600 bg-emerald-50/95 text-emerald-950" },
+      { key: "urlaub", title: "Urlaub", names: uniqueSortedNames([...(waeschereiPlan.urlaub || []), ...(putzereiPlan.urlaub || [])]), color: "border-blue-500 bg-blue-50/95 text-blue-950" },
+      { key: "za", title: "ZA", names: uniqueSortedNames([...(waeschereiPlan.za || []), ...(putzereiPlan.za || [])]), color: "border-amber-500 bg-amber-50/95 text-amber-950" },
+      { key: "krank", title: "Krank", names: uniqueSortedNames([...(waeschereiPlan.krank || []), ...(putzereiPlan.krank || [])]), color: "border-red-500 bg-red-50/95 text-red-950" },
+      { key: "waescherei", title: "In Wäscherei", names: uniqueSortedNames(putzereiPlan.waescherei || []), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
+      { key: "putzerei", title: "In Putzerei", names: uniqueSortedNames(waeschereiPlan.putzerei || []), color: "border-violet-600 bg-violet-50/95 text-violet-950" },
+      { key: "pool", title: "Nicht eingeteilt", names: uniqueSortedNames([
+        ...unassignedNamesForDepartment("waescherei"),
+        ...unassignedNamesForDepartment("putzerei"),
+      ]), color: "border-slate-500 bg-slate-50/95 text-slate-950" },
+    ];
     return (
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "4638 / 2274" }}>
@@ -3314,6 +3383,26 @@ const tourColumns = Object.entries(
             Putzerei
           </div>
 
+          <div className="pointer-events-none absolute left-[55%] top-[5%] z-10 w-[42%] rounded-md border border-slate-300 bg-white/95 p-1.5 shadow-sm">
+            <div className="mb-1 flex items-center justify-between border-b border-slate-200 pb-1 text-[9px] font-black leading-none text-slate-900">
+              <span>Abwesenheiten &amp; Status</span>
+              <span>{PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label}</span>
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {statusZones.map((zone) => (
+                <div key={zone.key} className={`min-w-0 border-l-4 px-1 py-0.5 ${zone.color}`}>
+                  <div className="flex items-center justify-between gap-1 text-[8px] font-black leading-none">
+                    <span className="truncate">{zone.title}</span>
+                    <span className="shrink-0">{zone.names.length}</span>
+                  </div>
+                  <div className="mt-0.5 text-[8px] font-bold leading-tight">
+                    {zone.names.length ? zone.names.join(", ") : "-"}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {visibleZones.map((zone) => {
             const section = sectionsForDepartment(zone.department).find((entry) => entry.name === zone.section);
             if (!section) return null;
@@ -3327,6 +3416,9 @@ const tourColumns = Object.entries(
                   ? "border-red-500"
                   : "border-green-600";
             const departmentClass = zone.department === "waescherei" ? "text-blue-950" : "text-violet-950";
+            const employeeClass = zone.department === "waescherei"
+              ? "border-blue-300 bg-blue-100 text-blue-950"
+              : "border-violet-300 bg-violet-100 text-violet-950";
             const displayName = section.name
               .replace("Waschmaschinen", "Wasch\u00admaschinen")
               .replace("Reinigungsmaschinen", "Reinigungs\u00admaschinen");
@@ -3357,7 +3449,7 @@ const tourColumns = Object.entries(
                 </div>
                 <div className="mt-0.5 flex flex-col items-start gap-px">
                   {assigned.map((name) => (
-                    <span key={name} className={`block max-w-full bg-white/95 px-1 py-0.5 text-[9px] font-black leading-none shadow-sm ${departmentClass}`}>
+                    <span key={name} className={`block max-w-full rounded-sm border px-1.5 py-0.5 text-[10px] font-black leading-tight shadow-sm ${employeeClass}`}>
                       {name}
                     </span>
                   ))}
@@ -3689,6 +3781,7 @@ const tourColumns = Object.entries(
 
   function PersonnelSidePanel() {
     const absenceZones = [
+      ...(personalDepartment === "waescherei" ? [{ key: "start12", title: "Start 12 Uhr" }] : []),
       { key: "urlaub", title: "Urlaub" },
       { key: "za", title: "ZA" },
       { key: "krank", title: "Krank" },
@@ -3747,9 +3840,12 @@ const tourColumns = Object.entries(
 
         <div className="grid gap-2">
           {absenceZones.map((zone) => {
-            const zoneEmployees = getSortedEmployees(
-              currentEmployees().filter((emp) => getEmployeeAssignment(emp.name) === zone.key)
-            );
+            const zoneNames = zone.key === "start12"
+              ? personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []
+              : null;
+            const zoneEmployees = getSortedEmployees(zoneNames
+              ? currentEmployees().filter((employee) => zoneNames.includes(employee.name))
+              : currentEmployees().filter((employee) => getEmployeeAssignment(employee.name) === zone.key));
 
             return (
               <div
@@ -3760,7 +3856,7 @@ const tourColumns = Object.entries(
                   if (dragEmployee) setEmployeeToSection(dragEmployee, zone.key);
                   setDragEmployee(null);
                 }}
-                className={`rounded-xl border bg-white p-2 ${selectedPersonnelEmployee ? "cursor-pointer hover:border-blue-400" : ""}`}
+                className={`rounded-xl border p-2 ${zone.key === "start12" ? "border-emerald-300 bg-emerald-50" : "bg-white"} ${selectedPersonnelEmployee ? "cursor-pointer hover:border-blue-400" : ""}`}
               >
                 <div className="mb-1 flex items-center justify-between">
                   <div className="text-xs font-black">{zone.title}</div>
@@ -3930,6 +4026,7 @@ const tourColumns = Object.entries(
                 );
               })}
               {[
+                ...(personalDepartment === "waescherei" ? [{ key: "start12", label: "Start 12 Uhr" }] : []),
                 { key: "urlaub", label: "Urlaub" },
                 { key: "za", label: "ZA" },
                 { key: "krank", label: "Krankenstand" },
