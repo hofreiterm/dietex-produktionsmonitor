@@ -3475,7 +3475,7 @@ const tourColumns = Object.entries(
                     <span className="truncate">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
                   </div>
-                  <div className="mt-0.5 text-[8px] font-bold leading-tight">
+                  <div className="mt-0.5 text-[10px] font-bold leading-tight">
                     {zone.names.length ? zone.names.join(", ") : "-"}
                   </div>
                 </div>
@@ -3529,7 +3529,7 @@ const tourColumns = Object.entries(
                 </div>
                 <div className="mt-0.5 flex flex-col items-start gap-px">
                   {assigned.map((name) => (
-                    <span key={name} className={`block max-w-full rounded-sm border px-1.5 py-0.5 text-[10px] font-black leading-tight shadow-sm ${employeeClass}`}>
+                    <span key={name} className={`block max-w-full rounded-sm border px-1.5 py-0.5 text-[12px] font-black leading-tight shadow-sm ${employeeClass}`}>
                       {name}
                     </span>
                   ))}
