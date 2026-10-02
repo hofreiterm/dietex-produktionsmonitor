@@ -922,6 +922,16 @@ function App() {
   }, [personnelDisplayMode, tick]);
 
   useEffect(() => {
+    if (!personnelDisplayMode) return undefined;
+    const refreshMeta = document.createElement("meta");
+    refreshMeta.httpEquiv = "refresh";
+    refreshMeta.content = "15";
+    refreshMeta.dataset.dietexPersonalDisplayRefresh = "true";
+    document.head.appendChild(refreshMeta);
+    return () => refreshMeta.remove();
+  }, [personnelDisplayMode]);
+
+  useEffect(() => {
     return () => {
       Object.values(washTimers.current).forEach((timer) => clearTimeout(timer));
     };
@@ -3468,7 +3478,7 @@ const tourColumns = Object.entries(
                     <span className="truncate">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
                   </div>
-                  <div className="mt-0.5 break-words text-[24px] font-black leading-tight">
+                  <div className="mt-0.5 break-words text-[18px] font-black leading-tight">
                     {zone.names.length ? zone.names.join(", ") : "-"}
                   </div>
                 </div>
@@ -3524,7 +3534,7 @@ const tourColumns = Object.entries(
                 </div>
                 <div className="mt-0.5 flex flex-col items-start gap-px">
                   {assigned.map((name) => (
-                    <span key={name} className={`block max-w-full break-words rounded-sm border px-1.5 py-0.5 text-[24px] font-black leading-tight shadow-sm ${employeeClass}`}>
+                    <span key={name} className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[18px] font-black leading-tight shadow-sm ${employeeClass}`}>
                       {name}
                     </span>
                   ))}
