@@ -572,7 +572,10 @@ function App() {
   const [copyPersonalDate, setCopyPersonalDate] = useState(() => new Date(Date.now() - 86400000).toISOString().slice(0, 10));
   const [personalStatsFrom, setPersonalStatsFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [personalStatsTo, setPersonalStatsTo] = useState(() => new Date().toISOString().slice(0, 10));
-  const [personalShift, setPersonalShift] = useState("07-12");
+  const [personalShift, setPersonalShift] = useState(() => {
+    if (!personnelDisplayMode) return "07-12";
+    return PERSONNEL_SHIFTS[Math.floor(Date.now() / 15000) % PERSONNEL_SHIFTS.length].key;
+  });
   const [personnelDayStrengthByDate, setPersonnelDayStrengthByDate] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("dietexPersonnelDayStrengthByDate") || "{}");
@@ -924,8 +927,10 @@ function App() {
   useEffect(() => {
     if (!personnelDisplayMode) return undefined;
     const refreshMeta = document.createElement("meta");
+    const refreshUrl = new URL(window.location.href);
+    refreshUrl.searchParams.set("dietex_reload", Date.now().toString());
     refreshMeta.httpEquiv = "refresh";
-    refreshMeta.content = "15";
+    refreshMeta.content = `15;url=${refreshUrl.toString()}`;
     refreshMeta.dataset.dietexPersonalDisplayRefresh = "true";
     document.head.appendChild(refreshMeta);
     return () => refreshMeta.remove();
@@ -5153,14 +5158,14 @@ const tourColumns = Object.entries(
         {view === "personalplanung" && (
           <section className="space-y-2">
             <div className="rounded-2xl border bg-white p-3 shadow-sm">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <h2 className="text-xl font-black">Personalplanung</h2>
                   <div className={`mt-1 text-xs font-bold ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-amber-700"}`}>
                     {personnelSyncStatus === "connected" ? "Zentral gespeichert" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : personnelSyncStatus === "loading" ? "Zentrale Planung wird geladen" : "Derzeit nur lokal gespeichert"}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap justify-end gap-1.5">
                   {Object.entries(PERSONNEL_DEPARTMENTS).map(([deptKey, dept]) => (
                     <Button
                       key={deptKey}
@@ -5200,16 +5205,19 @@ const tourColumns = Object.entries(
                   >
                     KI-Vorschlag erstellen
                   </button>
+                </div>
+              </div>
+
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2">
+                <div className="grid min-w-[420px] flex-1 grid-cols-3 gap-1.5">
                   {PERSONNEL_SHIFTS.map((shift) => (
                     <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
                       {shift.label}
                     </Button>
                   ))}
-                  <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
-                  <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
-                  <Button className="bg-emerald-700 text-white" onClick={exportPersonalPlanImage}>Als Bild teilen</Button>
-                  <Button className="bg-blue-700 text-white" onClick={printPersonalPlanSafe}>Drucken</Button>
                 </div>
+                <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
+                <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
               </div>
 
               <div className="grid gap-3 xl:grid-cols-[310px_1fr]">
