@@ -515,7 +515,8 @@ function displaySubcategory(subcategory) {
 function App() {
   const params = new URLSearchParams(window.location.search);
   const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
-  const personnelDisplayPath = pathname === "/personaldisplay";
+  const personnelDisplayPathMatch = pathname.match(/^\/personaldisplay(?:\/(07-12|12-15|15-schluss))?$/);
+  const personnelDisplayPath = Boolean(personnelDisplayPathMatch);
   const externalPersonnelPortal = params.get("portal") === "personalplanung";
   const initialView = personnelDisplayPath
     ? "personaldisplay"
@@ -523,6 +524,10 @@ function App() {
       ? (params.get("view") === "personalmonitor" ? "personalmonitor" : "personalplanung")
       : (params.get("view") || "annahme");
   const personnelDisplayMode = initialView === "personaldisplay" || params.get("display") === "waescherei-gang";
+  const requestedDisplayShiftValue = personnelDisplayPathMatch?.[1] || params.get("shift");
+  const requestedDisplayShift = PERSONNEL_SHIFTS.some((shift) => shift.key === requestedDisplayShiftValue)
+    ? requestedDisplayShiftValue
+    : null;
   const initialStationKey = params.get("station");
   const initialStation = STATIONS.find((s) => s.key === initialStationKey) || STATIONS[0];
   const fixedView = params.get("fixed") === "1" || personnelDisplayMode;
@@ -591,6 +596,7 @@ function App() {
   const [personalStatsTo, setPersonalStatsTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [personalShift, setPersonalShift] = useState(() => {
     if (!personnelDisplayMode) return "07-12";
+    if (requestedDisplayShift) return requestedDisplayShift;
     return PERSONNEL_SHIFTS[Math.floor(Date.now() / 15000) % PERSONNEL_SHIFTS.length].key;
   });
   const [personnelDayStrengthByDate, setPersonnelDayStrengthByDate] = useState(() => {
@@ -935,11 +941,11 @@ function App() {
     if (!personnelDisplayMode) return;
     const now = new Date(tick);
     const shiftIndex = Math.floor(now.getTime() / 15000) % PERSONNEL_SHIFTS.length;
-    const shift = PERSONNEL_SHIFTS[shiftIndex].key;
+    const shift = requestedDisplayShift || PERSONNEL_SHIFTS[shiftIndex].key;
     setPersonalDepartment("waescherei");
     setPersonalDate(localDateKey(now));
     setPersonalShift(shift);
-  }, [personnelDisplayMode, tick]);
+  }, [personnelDisplayMode, requestedDisplayShift, tick]);
 
   useEffect(() => {
     if (!personnelDisplayMode) return undefined;

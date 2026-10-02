@@ -5,15 +5,24 @@ PERSONALPLANUNG AUF SIMPLEDS - EINRICHTUNG
 3. Das neue Vercel-Paket deployen.
 4. Die Personalplanung einmal im normalen Programm öffnen.
    Sobald unter der Überschrift "Zentral gespeichert" steht, ist die Verbindung aktiv.
-5. In simpleDS beim Bildschirm "Wäscherei Gang" einen Webseiten-Inhalt hinzufügen.
-6. Folgende URL verwenden:
+5. In simpleDS beim Bildschirm "Wäscherei Gang" drei Webseiten-Inhalte in dieser
+   Reihenfolge hinzufügen und jeden Inhalt auf 15 Sekunden stellen:
 
-https://dietex-produktionsmonitor.vercel.app/personaldisplay?display=waescherei-gang&fixed=1
+1. Schicht:
+https://dietex-produktionsmonitor.vercel.app/personaldisplay/07-12
 
-Die Monitorseite zeigt die Wäscherei und Putzerei direkt auf dem Gebäudeplan und ist
-nur lesbar. Datum und aktuelle Schicht wechseln automatisch.
-Die Seite lädt alle 15 Sekunden mit einem neuen Cache-Schlüssel. Dadurch wechseln die
-drei Schichten auch in simpleDS zuverlässig und Änderungen werden automatisch übernommen.
+2. Schicht:
+https://dietex-produktionsmonitor.vercel.app/personaldisplay/12-15
+
+3. Schicht:
+https://dietex-produktionsmonitor.vercel.app/personaldisplay/15-schluss
+
+6. Den bisherigen einzelnen Webseiten-Inhalt aus der Wiedergabeliste entfernen oder
+   deaktivieren. Die drei neuen Inhalte gemeinsam veröffentlichen.
+
+Jeder Link zeigt eine feste Schicht. Dadurch übernimmt simpleDS selbst den Wechsel und
+ist nicht mehr von Browser-Timern abhängig. Beim nächsten Durchlauf werden aktuelle
+Planungsdaten geladen. Datum und Daten bleiben automatisch aktuell.
 
 Im Produktionsmonitor ist dieselbe Ansicht über "Personalübersicht" erreichbar.
 

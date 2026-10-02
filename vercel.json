@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/personaldisplay/:shift",
+      "destination": "/index.html"
+    },
+    {
       "source": "/personaldisplay",
       "destination": "/index.html"
     }
