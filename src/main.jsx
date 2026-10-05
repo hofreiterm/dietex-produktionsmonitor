@@ -645,6 +645,7 @@ function App() {
     }
   });
   const [dragEmployee, setDragEmployee] = useState(null);
+  const [overviewDragEmployee, setOverviewDragEmployee] = useState(null);
   const [selectedPersonnelEmployee, setSelectedPersonnelEmployee] = useState(null);
   const [personnelEmployeesByDept, setPersonnelEmployeesByDept] = useState(() => {
     try {
@@ -2261,9 +2262,16 @@ const tourColumns = Object.entries(
     return null;
   };
 
-  const setEmployeeToSection = (employeeName, sectionName, targetShift = personalShift) => {
-    const employee = currentEmployees().find((entry) => entry.name === employeeName);
-    const isWorkplace = currentSections().some((section) => section.name === sectionName);
+  const setEmployeeToSection = (employeeName, sectionName, targetShift = personalShift, department = personalDepartment) => {
+    const departmentEmployees = personnelEmployeesByDept[department] || PERSONNEL_DEPARTMENTS[department]?.employees || [];
+    const counterpartDepartment = department === "putzerei" ? "waescherei" : "putzerei";
+    const counterpartEmployees = personnelEmployeesByDept[counterpartDepartment] || PERSONNEL_DEPARTMENTS[counterpartDepartment]?.employees || [];
+    const employee = departmentEmployees.find((entry) => entry.name === employeeName)
+      || counterpartEmployees.find((entry) => entry.name === employeeName);
+    const employeeBorrowedFrom = departmentEmployees.some((entry) => entry.name === employeeName)
+      ? null
+      : counterpartDepartment;
+    const isWorkplace = sectionsForDepartment(department).some((section) => section.name === sectionName);
     const noGoWorkplaces = [employee?.noGoWorkplace1, employee?.noGoWorkplace2].filter(Boolean);
 
     if (isWorkplace && noGoWorkplaces.includes(sectionName)) {
@@ -2272,7 +2280,7 @@ const tourColumns = Object.entries(
     }
 
     if (sectionName === "start12") {
-      if (personalDepartment !== "waescherei") return false;
+      if (department !== "waescherei") return false;
       setPersonalPlan((prev) => {
         const updatedPlans = { ...prev };
         PERSONNEL_SHIFTS.forEach((shift) => {
@@ -2297,7 +2305,7 @@ const tourColumns = Object.entries(
       const allZones = allPlanningZones();
       const globalZones = new Set(["urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"]);
       const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
-        const shiftPlan = prev[getPersonalKey(personalDate, shift.key, personalDepartment)] || {};
+        const shiftPlan = prev[getPersonalKey(personalDate, shift.key, department)] || {};
         return [...globalZones].some((zone) => (shiftPlan[zone] || []).includes(employeeName));
       });
       const applyToAllShifts = globalZones.has(sectionName) || (sectionName === "pool" && hasGlobalAssignment);
@@ -2305,7 +2313,7 @@ const tourColumns = Object.entries(
       const updatedPlans = { ...prev };
 
       shiftsToUpdate.forEach((shiftKey) => {
-        const key = getPersonalKey(personalDate, shiftKey, personalDepartment);
+        const key = getPersonalKey(personalDate, shiftKey, department);
         const current = prev[key] || {};
         const next = {};
 
@@ -2320,8 +2328,7 @@ const tourColumns = Object.entries(
         updatedPlans[key] = next;
       });
 
-      if (!employee?.borrowedFrom) {
-        const counterpartDepartment = personalDepartment === "putzerei" ? "waescherei" : "putzerei";
+      if (!employeeBorrowedFrom) {
         shiftsToUpdate.forEach((shiftKey) => {
           const counterpartKey = getPersonalKey(personalDate, shiftKey, counterpartDepartment);
           const counterpartPlan = prev[counterpartKey] || {};
@@ -2349,6 +2356,34 @@ const tourColumns = Object.entries(
     if (setEmployeeToSection(selectedPersonnelEmployee, sectionName)) {
       setSelectedPersonnelEmployee(null);
     }
+  };
+
+  const moveOverviewEmployee = (draggedEmployee, targetDepartment, sectionName) => {
+    if (!draggedEmployee?.name || !draggedEmployee?.department) return false;
+    const sourceDepartment = draggedEmployee.department;
+    const destinationDepartment = targetDepartment || sourceDepartment;
+    const destinationSection = sectionsForDepartment(destinationDepartment).find((section) => section.name === sectionName);
+    const employee = [
+      ...(personnelEmployeesByDept.waescherei || []),
+      ...(personnelEmployeesByDept.putzerei || []),
+    ].find((entry) => entry.name === draggedEmployee.name);
+    const noGoWorkplaces = [employee?.noGoWorkplace1, employee?.noGoWorkplace2].filter(Boolean);
+
+    if (destinationSection && noGoWorkplaces.includes(sectionName)) {
+      window.alert(`${draggedEmployee.name} darf laut Mitarbeiterstamm nicht bei ${sectionName} eingeteilt werden.`);
+      return false;
+    }
+
+    if (sourceDepartment !== destinationDepartment) {
+      if (!setEmployeeToSection(draggedEmployee.name, destinationDepartment, personalShift, sourceDepartment)) return false;
+    }
+
+    const moved = setEmployeeToSection(draggedEmployee.name, sectionName, personalShift, destinationDepartment);
+    if (moved) {
+      setPersonalDepartment(destinationDepartment);
+      setSelectedPersonnelEmployee(null);
+    }
+    return moved;
   };
 
   const getSectionTarget = (section) => {
@@ -3713,14 +3748,25 @@ const tourColumns = Object.entries(
             className="absolute inset-0 h-full w-full object-fill"
           />
 
-          <div className="pointer-events-none absolute left-[55%] top-[5%] z-10 w-[42%] rounded-md border border-slate-300 bg-white/95 p-1.5 shadow-sm">
+          <div className={`${assignmentsEditable ? "pointer-events-auto" : "pointer-events-none"} absolute left-[55%] top-[5%] z-10 w-[42%] rounded-md border border-slate-300 bg-white/95 p-1.5 shadow-sm`}>
             <div className="mb-1 flex items-center justify-between border-b border-slate-200 pb-1 text-[9px] font-black leading-none text-slate-900">
               <span>Abwesenheiten &amp; Status</span>
               <span>{PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label}</span>
             </div>
             <div className="grid grid-cols-4 gap-1">
               {statusZones.map((zone) => (
-                <div key={zone.key} className={`min-w-0 border-l-4 px-1 py-0.5 ${zone.color}`}>
+                <div
+                  key={zone.key}
+                  onDragOver={assignmentsEditable ? (event) => event.preventDefault() : undefined}
+                  onDrop={assignmentsEditable ? (event) => {
+                    event.preventDefault();
+                    if (!overviewDragEmployee) return;
+                    const targetDepartment = zone.key === "start12" ? "waescherei" : overviewDragEmployee.department;
+                    moveOverviewEmployee(overviewDragEmployee, targetDepartment, zone.key);
+                    setOverviewDragEmployee(null);
+                  } : undefined}
+                  className={`min-w-0 border-l-4 px-1 py-0.5 ${assignmentsEditable ? "transition hover:ring-2 hover:ring-blue-500" : ""} ${zone.color}`}
+                >
                   <div className="flex items-center justify-between gap-1 text-[8px] font-black leading-none">
                     <span className="truncate">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
@@ -3732,8 +3778,11 @@ const tourColumns = Object.entries(
                       <button
                         type="button"
                         key={`${zone.key}-${name}`}
+                        draggable
+                        onDragStart={() => setOverviewDragEmployee({ name, department: departmentForName(name, zone.key) })}
+                        onDragEnd={() => setOverviewDragEmployee(null)}
                         onClick={() => selectPersonnelEmployee(name, departmentForName(name, zone.key))}
-                        className="rounded-sm border border-current/20 bg-white/90 px-1.5 py-0.5 text-left shadow-sm hover:ring-2 hover:ring-blue-500"
+                        className="cursor-grab rounded-sm border border-current/20 bg-white/90 px-1.5 py-0.5 text-left shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing"
                       >
                         {name}
                       </button>
@@ -3786,6 +3835,13 @@ const tourColumns = Object.entries(
                   if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 } : undefined}
                 onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
+                onDragOver={assignmentsEditable ? (event) => event.preventDefault() : undefined}
+                onDrop={assignmentsEditable ? (event) => {
+                  event.preventDefault();
+                  if (!overviewDragEmployee) return;
+                  moveOverviewEmployee(overviewDragEmployee, zone.department, section.name);
+                  setOverviewDragEmployee(null);
+                } : undefined}
               >
                 <div className={`border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
                   <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
@@ -3795,8 +3851,11 @@ const tourColumns = Object.entries(
                     <button
                       type="button"
                       key={name}
+                      draggable
+                      onDragStart={() => setOverviewDragEmployee({ name, department: zone.department })}
+                      onDragEnd={() => setOverviewDragEmployee(null)}
                       onClick={() => selectPersonnelEmployee(name, zone.department)}
-                      className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-left text-[18px] font-black leading-tight shadow-sm hover:ring-2 hover:ring-blue-500 ${employeeClass}`}
+                      className={`block w-max cursor-grab whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-left text-[18px] font-black leading-tight shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing ${employeeClass}`}
                     >
                       {name}
                     </button>
@@ -4355,6 +4414,12 @@ const tourColumns = Object.entries(
               <Button onClick={() => setSelectedPersonnelEmployee(null)}>Abbrechen</Button>
             </div>
 
+            <div className="mb-3 flex flex-wrap gap-2 text-xs font-bold">
+              <span className="rounded-md border-2 border-yellow-400 bg-yellow-50 px-2 py-1">Unterbesetzt</span>
+              <span className="rounded-md border-2 border-green-300 bg-green-50 px-2 py-1">Optimal besetzt</span>
+              <span className="rounded-md border-2 border-red-400 bg-red-50 px-2 py-1">Überbesetzt</span>
+            </div>
+
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               <button
                 type="button"
@@ -4371,7 +4436,7 @@ const tourColumns = Object.entries(
                     type="button"
                     key={section.name}
                     onClick={() => assignSelectedPersonnelEmployee(section.name)}
-                    className="min-h-16 rounded-xl border-2 border-blue-200 bg-blue-50 px-3 py-2 text-left hover:border-blue-600"
+                    className={`min-h-16 rounded-xl border-2 px-3 py-2 text-left hover:ring-2 hover:ring-blue-500 ${getSectionColor(section)}`}
                   >
                     <div className="font-black">{section.name}</div>
                     <div className="text-xs font-bold text-slate-500">{actual}/{target === null ? "bei Bedarf" : target} Personen</div>
