@@ -6022,7 +6022,7 @@ function ExternalPersonnelPortal() {
               />
             </label>
             {loginError && <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{loginError}</div>}
-            <Button active className="w-full" disabled={loginBusy || !newPassword || !confirmPassword}>
+            <Button type="submit" active className="w-full" disabled={loginBusy || !newPassword || !confirmPassword}>
               {loginBusy ? "Passwort wird gespeichert" : "Passwort speichern"}
             </Button>
           </form>
@@ -6062,7 +6062,7 @@ function ExternalPersonnelPortal() {
           </label>
           {loginError && <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{loginError}</div>}
           {loginMessage && <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">{loginMessage}</div>}
-          <Button active className="w-full" disabled={loginBusy || !email.trim() || !password}>
+          <Button type="submit" active className="w-full" disabled={loginBusy || !email.trim() || !password}>
             {loginBusy ? "Anmeldung läuft" : "Anmelden"}
           </Button>
           <button
