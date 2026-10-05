@@ -2288,7 +2288,7 @@ const tourColumns = Object.entries(
           const current = prev[key] || {};
           const next = { ...current };
           const zonesToClear = shift.key === "07-12"
-            ? allPlanningZones()
+            ? allPlanningZones("waescherei")
             : ["start12", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"];
           zonesToClear.forEach((zone) => {
             next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
@@ -2302,7 +2302,7 @@ const tourColumns = Object.entries(
     }
 
     setPersonalPlan((prev) => {
-      const allZones = allPlanningZones();
+      const allZones = allPlanningZones(department);
       const globalZones = new Set(["urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"]);
       const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
         const shiftPlan = prev[getPersonalKey(personalDate, shift.key, department)] || {};
@@ -2872,8 +2872,8 @@ const tourColumns = Object.entries(
   };
 
   
-  const allPlanningZones = () => [
-    ...currentSections().map((section) => section.name),
+  const allPlanningZones = (department = personalDepartment) => [
+    ...sectionsForDepartment(department).map((section) => section.name),
     "start12",
     "urlaub",
     "za",
