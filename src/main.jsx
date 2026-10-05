@@ -953,7 +953,7 @@ function App() {
   useEffect(() => {
     setSelectedPersonnelEmployee(null);
     setDragEmployee(null);
-  }, [personalDepartment, personalDate, personalShift]);
+  }, [personalDate, personalShift]);
 
   useEffect(() => {
     if (!personnelDisplayMode) return;
@@ -2339,7 +2339,8 @@ const tourColumns = Object.entries(
     return true;
   };
 
-  const selectPersonnelEmployee = (employeeName) => {
+  const selectPersonnelEmployee = (employeeName, department = personalDepartment) => {
+    if (department !== personalDepartment) setPersonalDepartment(department);
     setSelectedPersonnelEmployee((current) => current === employeeName ? null : employeeName);
   };
 
@@ -3667,7 +3668,7 @@ const tourColumns = Object.entries(
     )));
   };
 
-  function CombinedPersonnelFloorPlan({ editable = false } = {}) {
+  function CombinedPersonnelFloorPlan({ editable = false, assignmentsEditable = false } = {}) {
     const visibleZones = editable ? floorPlanDraft : personnelFloorPlanZones;
     const waeschereiPlan = planForDepartment("waescherei");
     const putzereiPlan = planForDepartment("putzerei");
@@ -3697,6 +3698,12 @@ const tourColumns = Object.entries(
         ...unassignedNamesForDepartment("putzerei"),
       ]), color: "border-slate-500 bg-slate-50/95 text-slate-950" },
     ];
+    const departmentForName = (name, zoneKey) => {
+      if ((waeschereiPlan[zoneKey] || []).includes(name) || (zoneKey === "start12" && start12Names.includes(name))) return "waescherei";
+      if ((putzereiPlan[zoneKey] || []).includes(name)) return "putzerei";
+      if ((personnelEmployeesByDept.waescherei || []).some((employee) => employee.name === name)) return "waescherei";
+      return "putzerei";
+    };
     return (
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "4638 / 2274" }}>
@@ -3718,8 +3725,19 @@ const tourColumns = Object.entries(
                     <span className="truncate">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
                   </div>
-                  <div className="mt-0.5 break-words text-[18px] font-black leading-tight">
-                    {zone.names.length ? zone.names.join(", ") : "-"}
+                  <div className={`mt-0.5 text-[18px] font-black leading-tight ${assignmentsEditable ? "flex flex-wrap gap-1" : "break-words"}`}>
+                    {!zone.names.length && "-"}
+                    {zone.names.length > 0 && !assignmentsEditable && zone.names.join(", ")}
+                    {assignmentsEditable && zone.names.map((name) => (
+                      <button
+                        type="button"
+                        key={`${zone.key}-${name}`}
+                        onClick={() => selectPersonnelEmployee(name, departmentForName(name, zone.key))}
+                        className="rounded-sm border border-current/20 bg-white/90 px-1.5 py-0.5 text-left shadow-sm hover:ring-2 hover:ring-blue-500"
+                      >
+                        {name}
+                      </button>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -3773,7 +3791,16 @@ const tourColumns = Object.entries(
                   <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
                 </div>
                 <div className="mt-0.5 flex flex-col items-start gap-px">
-                  {assigned.map((name) => (
+                  {assigned.map((name) => assignmentsEditable ? (
+                    <button
+                      type="button"
+                      key={name}
+                      onClick={() => selectPersonnelEmployee(name, zone.department)}
+                      className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-left text-[18px] font-black leading-tight shadow-sm hover:ring-2 hover:ring-blue-500 ${employeeClass}`}
+                    >
+                      {name}
+                    </button>
+                  ) : (
                     <span key={name} className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[18px] font-black leading-tight shadow-sm ${employeeClass}`}>
                       {name}
                     </span>
@@ -4314,7 +4341,7 @@ const tourColumns = Object.entries(
         </div>
       </header>
 
-      {selectedPersonnelEmployee && view === "personalplanung" && !personnelEmployeeModal && !personnelDepartmentModal && (
+      {selectedPersonnelEmployee && (view === "personalplanung" || view === "personalmonitor") && !personnelEmployeeModal && !personnelDepartmentModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -5570,7 +5597,7 @@ const tourColumns = Object.entries(
                 </div>
               )}
             </div>
-            {CombinedPersonnelFloorPlan({ editable: floorPlanEditMode })}
+            {CombinedPersonnelFloorPlan({ editable: floorPlanEditMode, assignmentsEditable: !floorPlanEditMode })}
           </section>
         )}
 
