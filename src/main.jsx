@@ -488,6 +488,17 @@ function localDateKey(value = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+function dateKeyInTimeZone(value = new Date(), timeZone = "Europe/Vienna") {
+  const parts = new Intl.DateTimeFormat("de-AT", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function getHtmlBuildSignature(html) {
   const match = String(html || "").match(/\/assets\/index-[^"']+\.js/);
   return match ? match[0] : "";
@@ -589,7 +600,7 @@ function App() {
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
 
-  const [personalDate, setPersonalDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [personalDate, setPersonalDate] = useState(() => personnelDisplayMode ? dateKeyInTimeZone() : localDateKey());
   const [personalDepartment, setPersonalDepartment] = useState("waescherei");
   const [copyPersonalDate, setCopyPersonalDate] = useState(() => new Date(Date.now() - 86400000).toISOString().slice(0, 10));
   const [personalStatsFrom, setPersonalStatsFrom] = useState(() => new Date().toISOString().slice(0, 10));
@@ -689,6 +700,7 @@ function App() {
   const personnelSyncAvailable = useRef(false);
   const personnelSaveTimer = useRef(null);
   const lastPersonnelStateJson = useRef("");
+  const personnelDisplayClockOffset = useRef(0);
   const floorPlanRef = useRef(null);
   const floorPlanDrag = useRef(null);
 
@@ -891,6 +903,13 @@ function App() {
           },
         });
         if (!response.ok) return;
+        if (personnelDisplayMode) {
+          const serverTime = Date.parse(response.headers.get("date") || "");
+          if (Number.isFinite(serverTime)) {
+            personnelDisplayClockOffset.current = serverTime - Date.now();
+            setPersonalDate(dateKeyInTimeZone(new Date(serverTime)));
+          }
+        }
         const nextSignature = getHtmlBuildSignature(await response.text());
         if (nextSignature && nextSignature !== currentSignature) {
           const lastReloadAt = Number(sessionStorage.getItem("dietexLastAutoReloadAt") || "0");
@@ -958,11 +977,11 @@ function App() {
 
   useEffect(() => {
     if (!personnelDisplayMode) return;
-    const now = new Date(tick);
+    const now = new Date(tick + personnelDisplayClockOffset.current);
     const shiftIndex = Math.floor(now.getTime() / 15000) % PERSONNEL_SHIFTS.length;
     const shift = requestedDisplayShift || PERSONNEL_SHIFTS[shiftIndex].key;
     setPersonalDepartment("waescherei");
-    setPersonalDate(localDateKey(now));
+    setPersonalDate(dateKeyInTimeZone(now));
     setPersonalShift(shift);
   }, [personnelDisplayMode, requestedDisplayShift, tick]);
 
