@@ -2401,6 +2401,15 @@ const tourColumns = Object.entries(
         });
       }
 
+      if (targetShift !== "07-12" && sectionName !== "pool") {
+        const start12Key = getPersonalKey(personalDate, "07-12", "waescherei");
+        const start12Plan = updatedPlans[start12Key] || prev[start12Key] || {};
+        updatedPlans[start12Key] = {
+          ...start12Plan,
+          start12: (start12Plan.start12 || []).filter((name) => name !== employeeName),
+        };
+      }
+
       return updatedPlans;
     });
     return true;
@@ -3065,10 +3074,25 @@ const tourColumns = Object.entries(
       });
     });
 
-    setPersonalPlan((prev) => ({
-      ...prev,
-      [currentKey]: nextPlan,
-    }));
+    const assignedStart12Names = personalDepartment === "waescherei" && personalShift !== "07-12"
+      ? new Set(currentSections().flatMap((section) => nextPlan[section.name] || []).filter((name) => start12Names.includes(name)))
+      : new Set();
+
+    setPersonalPlan((prev) => {
+      const updatedPlans = {
+        ...prev,
+        [currentKey]: nextPlan,
+      };
+      if (assignedStart12Names.size) {
+        const start12Key = getPersonalKey(personalDate, "07-12", "waescherei");
+        const start12Plan = updatedPlans[start12Key] || prev[start12Key] || {};
+        updatedPlans[start12Key] = {
+          ...start12Plan,
+          start12: (start12Plan.start12 || []).filter((name) => !assignedStart12Names.has(name)),
+        };
+      }
+      return updatedPlans;
+    });
   };
 
   const absenceStatsRows = () => {
