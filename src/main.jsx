@@ -90,6 +90,10 @@ const PERSONNEL_SHIFTS = [
   { key: "15-schluss", label: "15:00–Schluss" },
 ];
 
+const DEFAULT_PERSONNEL_SHIFT_LABELS = Object.fromEntries(
+  PERSONNEL_SHIFTS.map((shift) => [shift.key, shift.label])
+);
+
 const PERSONNEL_DAY_STRENGTHS = [
   { key: "schwach", label: "Schwach" },
   { key: "mittel", label: "Mittel" },
@@ -610,6 +614,15 @@ function App() {
     if (requestedDisplayShift) return requestedDisplayShift;
     return PERSONNEL_SHIFTS[Math.floor(Date.now() / 15000) % PERSONNEL_SHIFTS.length].key;
   });
+  const [personnelShiftLabels, setPersonnelShiftLabels] = useState(() => {
+    try {
+      return { ...DEFAULT_PERSONNEL_SHIFT_LABELS, ...JSON.parse(localStorage.getItem("dietexPersonnelShiftLabels") || "{}") };
+    } catch {
+      return DEFAULT_PERSONNEL_SHIFT_LABELS;
+    }
+  });
+  const [personnelShiftModal, setPersonnelShiftModal] = useState(false);
+  const [personnelShiftDraft, setPersonnelShiftDraft] = useState(DEFAULT_PERSONNEL_SHIFT_LABELS);
   const [personnelDayStrengthByDate, setPersonnelDayStrengthByDate] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("dietexPersonnelDayStrengthByDate") || "{}");
@@ -711,6 +724,7 @@ function App() {
     sectionsByDept: personnelSectionsByDept,
     dayStrengthByDate: personnelDayStrengthByDate,
     floorPlanZones: personnelFloorPlanZones,
+    shiftLabels: personnelShiftLabels,
   });
 
   const applyRemotePersonnelState = (remoteState) => {
@@ -729,6 +743,7 @@ function App() {
       },
       dayStrengthByDate: remoteState.dayStrengthByDate && typeof remoteState.dayStrengthByDate === "object" ? remoteState.dayStrengthByDate : {},
       floorPlanZones: normalizePersonnelFloorPlanZones(remoteState.floorPlanZones),
+      shiftLabels: { ...DEFAULT_PERSONNEL_SHIFT_LABELS, ...(remoteState.shiftLabels || {}) },
     };
 
     lastPersonnelStateJson.current = JSON.stringify(nextState);
@@ -738,6 +753,7 @@ function App() {
     setPersonnelSectionsByDept(nextState.sectionsByDept);
     setPersonnelDayStrengthByDate(nextState.dayStrengthByDate);
     setPersonnelFloorPlanZones(nextState.floorPlanZones);
+    setPersonnelShiftLabels(nextState.shiftLabels);
     setPersonnelSyncStatus("connected");
   };
 
@@ -866,7 +882,7 @@ function App() {
     return () => {
       if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
     };
-  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones]);
+  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones, personnelShiftLabels]);
 
   useEffect(() => {
     if (personnelDisplayMode) return undefined;
@@ -969,6 +985,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelFloorPlanZones", JSON.stringify(personnelFloorPlanZones));
   }, [personnelFloorPlanZones]);
+
+  useEffect(() => {
+    localStorage.setItem("dietexPersonnelShiftLabels", JSON.stringify(personnelShiftLabels));
+  }, [personnelShiftLabels]);
 
   useEffect(() => {
     setSelectedPersonnelEmployee(null);
@@ -1385,20 +1405,18 @@ function App() {
   }
 
   function findFreeSlots(count) {
+    if (count <= 0) return [];
+    const occupied = new Set(
+      containers
+        .filter((container) => !container.removed_at)
+        .map((container) => `${Number(container.row_number)}-${Number(container.place_number)}`)
+    );
+    const freeSlots = [];
+
     for (const row of ROWS) {
-      const used = containers
-        .filter((c) => c.row_number === row)
-        .map((c) => c.place_number)
-        .sort((a, b) => a - b);
-
-      let start = 1;
-      for (const place of used) {
-        if (place === start) start += 1;
-        else break;
-      }
-
-      if (start + count - 1 <= PLACES) {
-        return Array.from({ length: count }, (_, i) => ({ row, place: start + i }));
+      for (let place = 1; place <= PLACES; place += 1) {
+        if (!occupied.has(`${row}-${place}`)) freeSlots.push({ row, place });
+        if (freeSlots.length === count) return freeSlots;
       }
     }
     return null;
@@ -1412,6 +1430,7 @@ function App() {
     const number = customerNumber.trim();
     const name = customerName.trim();
     const orderRows = selectedOrderRows();
+    let containerCapacityWarning = false;
 
     if (!number || !name) return alert("Kundennummer und Kundenname eingeben.");
     if (!selectedCategories.length) return alert("Mindestens eine Kategorie auswählen.");
@@ -1471,18 +1490,20 @@ function App() {
 
       if (newContainerPlan.length) {
         const slots = findFreeSlots(newContainerPlan.length);
-        if (!slots) return alert("Kein freier Containerplatz verfügbar.");
-
-        const { error: containerError } = await supabase.from("containers").insert(
-          newContainerPlan.map((p, idx) => ({
-            order_id: existingOrder.id,
-            container_type: p.type,
-            row_number: slots[idx].row,
-            place_number: slots[idx].place,
-            status: "bearbeitung",
-          }))
-        );
-        if (containerError) return alert("Container konnten nicht angelegt werden: " + containerError.message);
+        if (!slots) {
+          containerCapacityWarning = true;
+        } else {
+          const { error: containerError } = await supabase.from("containers").insert(
+            newContainerPlan.map((p, idx) => ({
+              order_id: existingOrder.id,
+              container_type: p.type,
+              row_number: slots[idx].row,
+              place_number: slots[idx].place,
+              status: "bearbeitung",
+            }))
+          );
+          if (containerError) return alert("Container konnten nicht angelegt werden: " + containerError.message);
+        }
       }
 
       if (info.trim()) {
@@ -1504,13 +1525,16 @@ function App() {
       setInfo("");
       setSelectedCategories([]);
       setExcludedOrderArticles({});
+      setTakeoverMessage(containerCapacityWarning
+        ? "Kunde wurde übernommen. Aktuell konnte kein Containerplatz zugeordnet werden."
+        : "Kunde wurde übernommen.");
       loadAll();
       return;
     }
 
     const plan = getContainerPlan(selectedCategories);
     const slots = findFreeSlots(plan.length);
-    if (!slots) return alert("Kein freier Containerplatz verfügbar.");
+    if (!slots) containerCapacityWarning = true;
 
     const maxSort = Math.max(0, ...orders.map((o) => Number(o.sort_order || 0)));
 
@@ -1536,7 +1560,7 @@ function App() {
       if (itemError) return alert("Artikel konnten nicht erstellt werden: " + itemError.message);
     }
 
-    if (plan.length) {
+    if (plan.length && slots) {
       const { error: containerError } = await supabase.from("containers").insert(
         plan.map((p, idx) => ({
           order_id: order.id,
@@ -1555,7 +1579,9 @@ function App() {
     setInfo("");
     setSelectedCategories([]);
     setExcludedOrderArticles({});
-    setTakeoverMessage("Kunde wurde uebernommen.");
+    setTakeoverMessage(containerCapacityWarning
+      ? "Kunde wurde übernommen. Aktuell konnte kein Containerplatz zugeordnet werden."
+      : "Kunde wurde übernommen.");
     loadAll();
     } catch (error) {
       const message = error?.message || String(error);
@@ -2229,6 +2255,21 @@ const tourColumns = Object.entries(
 
 
   const currentDepartmentConfig = () => PERSONNEL_DEPARTMENTS[personalDepartment] || PERSONNEL_DEPARTMENTS.waescherei;
+  const getPersonnelShiftLabel = (shiftKey) => personnelShiftLabels[shiftKey]
+    || PERSONNEL_SHIFTS.find((shift) => shift.key === shiftKey)?.label
+    || shiftKey;
+  const openPersonnelShiftEditor = () => {
+    setPersonnelShiftDraft({ ...DEFAULT_PERSONNEL_SHIFT_LABELS, ...personnelShiftLabels });
+    setPersonnelShiftModal(true);
+  };
+  const savePersonnelShiftLabels = () => {
+    const nextLabels = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
+      shift.key,
+      String(personnelShiftDraft[shift.key] || "").trim() || shift.label,
+    ]));
+    setPersonnelShiftLabels(nextLabels);
+    setPersonnelShiftModal(false);
+  };
 
   const currentSections = () => personnelSectionsByDept[personalDepartment] || currentDepartmentConfig().sections;
   const currentGroups = () => currentDepartmentConfig().groups;
@@ -2308,7 +2349,7 @@ const tourColumns = Object.entries(
           const next = { ...current };
           const zonesToClear = shift.key === "07-12"
             ? allPlanningZones("waescherei")
-            : ["start12", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"];
+            : ["start12", "end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"];
           zonesToClear.forEach((zone) => {
             next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
           });
@@ -2322,7 +2363,7 @@ const tourColumns = Object.entries(
 
     setPersonalPlan((prev) => {
       const allZones = allPlanningZones(department);
-      const globalZones = new Set(["urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"]);
+      const globalZones = new Set(["end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"]);
       const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
         const shiftPlan = prev[getPersonalKey(personalDate, shift.key, department)] || {};
         return [...globalZones].some((zone) => (shiftPlan[zone] || []).includes(employeeName));
@@ -2404,6 +2445,29 @@ const tourColumns = Object.entries(
     }
     return moved;
   };
+
+  const reorderEmployeeInSection = (draggedEmployee, targetName, department, sectionName) => {
+    if (!draggedEmployee?.name || draggedEmployee.department !== department || draggedEmployee.name === targetName) return false;
+    const key = getPersonalKey(personalDate, personalShift, department);
+    const names = personalPlan[key]?.[sectionName] || [];
+    if (!names.includes(draggedEmployee.name) || !names.includes(targetName)) return false;
+
+    setPersonalPlan((prev) => {
+      const current = prev[key] || {};
+      const reordered = [...(current[sectionName] || [])].filter((name) => name !== draggedEmployee.name);
+      const targetIndex = reordered.indexOf(targetName);
+      reordered.splice(targetIndex < 0 ? reordered.length : targetIndex, 0, draggedEmployee.name);
+      return { ...prev, [key]: { ...current, [sectionName]: reordered } };
+    });
+    return true;
+  };
+
+  const reorderPlanningEmployee = (draggedName, targetName, sectionName) => reorderEmployeeInSection(
+    { name: draggedName, department: personalDepartment },
+    targetName,
+    personalDepartment,
+    sectionName
+  );
 
   const getSectionTarget = (section) => {
     if (section.target.flexible) return null;
@@ -2894,6 +2958,9 @@ const tourColumns = Object.entries(
   const allPlanningZones = (department = personalDepartment) => [
     ...sectionsForDepartment(department).map((section) => section.name),
     "start12",
+    "end12",
+    "end15",
+    "end18",
     "urlaub",
     "za",
     "krank",
@@ -2911,6 +2978,9 @@ const tourColumns = Object.entries(
 
     const nextPlan = {
       ...(personalDepartment === "waescherei" && personalShift === "07-12" ? { start12: [...start12Names] } : {}),
+      end12: [...(currentPlan.end12 || [])],
+      end15: [...(currentPlan.end15 || [])],
+      end18: [...(currentPlan.end18 || [])],
       urlaub: [...(currentPlan.urlaub || [])],
       za: [...(currentPlan.za || [])],
       krank: [...(currentPlan.krank || [])],
@@ -2924,6 +2994,9 @@ const tourColumns = Object.entries(
     });
 
     const unavailable = new Set([
+      ...nextPlan.end12,
+      ...nextPlan.end15,
+      ...nextPlan.end18,
       ...nextPlan.urlaub,
       ...nextPlan.za,
       ...nextPlan.krank,
@@ -3110,7 +3183,7 @@ const tourColumns = Object.entries(
 
   const printPersonalPlanSafe = () => {
     const plan = getCurrentPersonalPlan();
-    const shiftLabel = PERSONNEL_SHIFTS.find((s) => s.key === personalShift)?.label || personalShift;
+    const shiftLabel = getPersonnelShiftLabel(personalShift);
 
     const rows = currentSections().map((section) => {
       const names = plan[section.name] || [];
@@ -3157,7 +3230,7 @@ const tourColumns = Object.entries(
   const exportPersonalPlanImage = async () => {
     const plan = getCurrentPersonalPlan();
     const departmentLabel = currentDepartmentConfig().label;
-    const shiftLabel = PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label || personalShift;
+    const shiftLabel = getPersonnelShiftLabel(personalShift);
     const canvasWidth = 1600;
     const horizontalPadding = 70;
     const contentWidth = canvasWidth - horizontalPadding * 2;
@@ -3184,6 +3257,9 @@ const tourColumns = Object.entries(
         title: "Start 12 Uhr",
         names: personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [],
       }] : []),
+      { key: "end12", title: "Ende 12 Uhr", names: plan.end12 || [] },
+      { key: "end15", title: "Ende 15 Uhr", names: plan.end15 || [] },
+      { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
       { key: "krank", title: "Krank", names: plan.krank || [] },
@@ -3335,7 +3411,7 @@ const tourColumns = Object.entries(
     canvas.width = canvasWidth;
     canvas.height = headerHeight + floorHeight;
     const context = canvas.getContext("2d");
-    const shiftLabel = PERSONNEL_SHIFTS.find((shift) => shift.key === shiftKey)?.label || shiftKey;
+    const shiftLabel = getPersonnelShiftLabel(shiftKey);
     const displayDate = new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", {
       weekday: "long",
       day: "2-digit",
@@ -3425,6 +3501,9 @@ const tourColumns = Object.entries(
     const uniqueNames = (names) => [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
     const statusRows = [
       { title: "Start 12 Uhr", names: uniqueNames(start12Names), color: "#ecfdf5", border: "#059669" },
+      { title: "Ende 12 Uhr", names: uniqueNames([...(plans.waescherei.end12 || []), ...(plans.putzerei.end12 || [])]), color: "#ecfeff", border: "#0891b2" },
+      { title: "Ende 15 Uhr", names: uniqueNames([...(plans.waescherei.end15 || []), ...(plans.putzerei.end15 || [])]), color: "#f0f9ff", border: "#0284c7" },
+      { title: "Ende 18 Uhr", names: uniqueNames([...(plans.waescherei.end18 || []), ...(plans.putzerei.end18 || [])]), color: "#eef2ff", border: "#4f46e5" },
       { title: "Urlaub", names: uniqueNames([...(plans.waescherei.urlaub || []), ...(plans.putzerei.urlaub || [])]), color: "#eff6ff", border: "#3b82f6" },
       { title: "ZA", names: uniqueNames([...(plans.waescherei.za || []), ...(plans.putzerei.za || [])]), color: "#fffbeb", border: "#f59e0b" },
       { title: "Krank", names: uniqueNames([...(plans.waescherei.krank || []), ...(plans.putzerei.krank || [])]), color: "#fef2f2", border: "#ef4444" },
@@ -3436,11 +3515,12 @@ const tourColumns = Object.entries(
     const panelWidth = 1020;
     const cellWidth = panelWidth / 3;
     const cellHeight = 125;
+    const statusRowCount = Math.ceil(statusRows.length / 3);
     context.fillStyle = "rgba(255,255,255,0.96)";
-    context.fillRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * 2 + 58);
+    context.fillRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * statusRowCount + 58);
     context.strokeStyle = "#94a3b8";
     context.lineWidth = 3;
-    context.strokeRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * 2 + 58);
+    context.strokeRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * statusRowCount + 58);
     context.fillStyle = "#0f172a";
     context.font = "900 24px Arial";
     context.fillText("Abwesenheiten & Status", panelX, panelY - 10);
@@ -3743,6 +3823,9 @@ const tourColumns = Object.entries(
     };
     const statusZones = [
       { key: "start12", title: "Start 12 Uhr", names: uniqueSortedNames(start12Names), color: "border-emerald-600 bg-emerald-50/95 text-emerald-950" },
+      { key: "end12", title: "Ende 12 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end12 || []), ...(putzereiPlan.end12 || [])]), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
+      { key: "end15", title: "Ende 15 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end15 || []), ...(putzereiPlan.end15 || [])]), color: "border-sky-600 bg-sky-50/95 text-sky-950" },
+      { key: "end18", title: "Ende 18 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end18 || []), ...(putzereiPlan.end18 || [])]), color: "border-indigo-600 bg-indigo-50/95 text-indigo-950" },
       { key: "urlaub", title: "Urlaub", names: uniqueSortedNames([...(waeschereiPlan.urlaub || []), ...(putzereiPlan.urlaub || [])]), color: "border-blue-500 bg-blue-50/95 text-blue-950" },
       { key: "za", title: "ZA", names: uniqueSortedNames([...(waeschereiPlan.za || []), ...(putzereiPlan.za || [])]), color: "border-amber-500 bg-amber-50/95 text-amber-950" },
       { key: "krank", title: "Krank", names: uniqueSortedNames([...(waeschereiPlan.krank || []), ...(putzereiPlan.krank || [])]), color: "border-red-500 bg-red-50/95 text-red-950" },
@@ -3770,9 +3853,9 @@ const tourColumns = Object.entries(
           <div className={`${assignmentsEditable ? "pointer-events-auto" : "pointer-events-none"} absolute left-[55%] top-[5%] z-10 w-[42%] rounded-md border border-slate-300 bg-white/95 p-1.5 shadow-sm`}>
             <div className="mb-1 flex items-center justify-between border-b border-slate-200 pb-1 text-[9px] font-black leading-none text-slate-900">
               <span>Abwesenheiten &amp; Status</span>
-              <span>{PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label}</span>
+              <span>{getPersonnelShiftLabel(personalShift)}</span>
             </div>
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-5 gap-1">
               {statusZones.map((zone) => (
                 <div
                   key={zone.key}
@@ -3873,6 +3956,16 @@ const tourColumns = Object.entries(
                       draggable
                       onDragStart={() => setOverviewDragEmployee({ name, department: zone.department })}
                       onDragEnd={() => setOverviewDragEmployee(null)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!overviewDragEmployee) return;
+                        if (!reorderEmployeeInSection(overviewDragEmployee, name, zone.department, section.name)) {
+                          moveOverviewEmployee(overviewDragEmployee, zone.department, section.name);
+                        }
+                        setOverviewDragEmployee(null);
+                      }}
                       onClick={() => selectPersonnelEmployee(name, zone.department)}
                       className={`block w-max cursor-grab whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-left text-[18px] font-black leading-tight shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing ${employeeClass}`}
                     >
@@ -3940,6 +4033,13 @@ const tourColumns = Object.entries(
                     key={name}
                     draggable
                     onDragStart={() => setDragEmployee(name)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (dragEmployee) reorderPlanningEmployee(dragEmployee, name, section.name);
+                      setDragEmployee(null);
+                    }}
                     onClick={(event) => {
                       event.stopPropagation();
                       selectPersonnelEmployee(name);
@@ -3972,7 +4072,7 @@ const tourColumns = Object.entries(
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-lg font-black">Stationsfolge Wäscherei</h3>
             <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-              {personalDate} | {PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label || personalShift}
+              {personalDate} | {getPersonnelShiftLabel(personalShift)}
             </div>
           </div>
 
@@ -4013,7 +4113,7 @@ const tourColumns = Object.entries(
               {!compact && <p className="text-sm text-slate-500">Mitarbeiter werden per Ziehen einer Station zugeteilt.</p>}
             </div>
             <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-              {personalDate} | {PERSONNEL_SHIFTS.find((s) => s.key === personalShift)?.label || personalShift}
+              {personalDate} | {getPersonnelShiftLabel(personalShift)}
             </div>
           </div>
 
@@ -4064,6 +4164,13 @@ const tourColumns = Object.entries(
                           key={name}
                           draggable
                           onDragStart={() => setDragEmployee(name)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            if (dragEmployee) reorderPlanningEmployee(dragEmployee, name, section.name);
+                            setDragEmployee(null);
+                          }}
                           onClick={(event) => {
                             event.stopPropagation();
                             selectPersonnelEmployee(name);
@@ -4108,7 +4215,7 @@ const tourColumns = Object.entries(
             </p>}
           </div>
           <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-            {personalDate} | {PERSONNEL_SHIFTS.find((s) => s.key === personalShift)?.label || personalShift}
+            {personalDate} | {getPersonnelShiftLabel(personalShift)}
           </div>
         </div>
 
@@ -4211,6 +4318,9 @@ const tourColumns = Object.entries(
   function PersonnelSidePanel() {
     const absenceZones = [
       ...(personalDepartment === "waescherei" ? [{ key: "start12", title: "Start 12 Uhr" }] : []),
+      { key: "end12", title: "Ende 12 Uhr" },
+      { key: "end15", title: "Ende 15 Uhr" },
+      { key: "end18", title: "Ende 18 Uhr" },
       { key: "urlaub", title: "Urlaub" },
       { key: "za", title: "ZA" },
       { key: "krank", title: "Krank" },
@@ -4244,7 +4354,7 @@ const tourColumns = Object.entries(
             </div>
           </div>
           <div
-            className="grid h-[46vh] min-h-56 grid-cols-2 content-start gap-1 overflow-y-auto overscroll-contain pr-1 touch-pan-y"
+            className="grid h-[28vh] min-h-40 max-h-72 grid-cols-2 content-start gap-1 overflow-y-auto overscroll-contain pr-1 touch-pan-y"
             style={{ WebkitOverflowScrolling: "touch" }}
           >
             {getUnassignedEmployees().map((emp) => (
@@ -4323,6 +4433,9 @@ const tourColumns = Object.entries(
     const plan = getCurrentPersonalPlan();
     const zones = [
       { key: "pool", title: "Nicht eingeteilt", names: getUnassignedEmployees().map((employee) => employee.name) },
+      { key: "end12", title: "Ende 12 Uhr", names: plan.end12 || [] },
+      { key: "end15", title: "Ende 15 Uhr", names: plan.end15 || [] },
+      { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
       { key: "krank", title: "Krank", names: plan.krank || [] },
@@ -4419,7 +4532,7 @@ const tourColumns = Object.entries(
         </div>
       </header>
 
-      {selectedPersonnelEmployee && (view === "personalplanung" || view === "personalmonitor") && !personnelEmployeeModal && !personnelDepartmentModal && (
+      {selectedPersonnelEmployee && (view === "personalplanung" || view === "personalmonitor") && !personnelEmployeeModal && !personnelDepartmentModal && !personnelShiftModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -4464,6 +4577,9 @@ const tourColumns = Object.entries(
               })}
               {[
                 ...(personalDepartment === "waescherei" ? [{ key: "start12", label: "Start 12 Uhr" }] : []),
+                { key: "end12", label: "Ende 12 Uhr" },
+                { key: "end15", label: "Ende 15 Uhr" },
+                { key: "end18", label: "Ende 18 Uhr" },
                 { key: "urlaub", label: "Urlaub" },
                 { key: "za", label: "ZA" },
                 { key: "krank", label: "Krankenstand" },
@@ -4480,6 +4596,37 @@ const tourColumns = Object.entries(
                   {destination.label}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {personnelShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black">Schichtzeiten bearbeiten</h2>
+                <p className="text-sm text-slate-500">Die Bezeichnungen gelten in Planung, Übersicht und PDF.</p>
+              </div>
+              <Button onClick={() => setPersonnelShiftModal(false)}>Schließen</Button>
+            </div>
+            <div className="grid gap-3">
+              {PERSONNEL_SHIFTS.map((shift, index) => (
+                <label key={shift.key} className="text-sm font-black text-slate-700">
+                  {index + 1}. Schicht
+                  <Input
+                    className="mt-1 w-full"
+                    value={personnelShiftDraft[shift.key] || ""}
+                    onChange={(event) => setPersonnelShiftDraft((prev) => ({ ...prev, [shift.key]: event.target.value }))}
+                    placeholder={shift.label}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex justify-end gap-2 border-t pt-4">
+              <Button onClick={() => setPersonnelShiftDraft(DEFAULT_PERSONNEL_SHIFT_LABELS)}>Standard</Button>
+              <Button className="bg-blue-700 text-white" onClick={savePersonnelShiftLabels}>Speichern</Button>
             </div>
           </div>
         </div>
@@ -5357,6 +5504,7 @@ const tourColumns = Object.entries(
                   <Button onClick={copyWholePersonalDay}>Tag kopieren</Button>
                   <Button onClick={() => openPersonnelEmployeeEditor()}>Mitarbeiter bearbeiten</Button>
                   <Button onClick={openPersonnelDepartmentEditor}>Abteilungen bearbeiten</Button>
+                  <Button onClick={openPersonnelShiftEditor}>Schichtzeiten bearbeiten</Button>
                   <div className="flex items-center rounded-xl border bg-slate-50 p-1">
                     <span className="px-2 text-xs font-black text-slate-600">Umsatz:</span>
                     {PERSONNEL_DAY_STRENGTHS.map((strength) => (
@@ -5384,7 +5532,7 @@ const tourColumns = Object.entries(
                 <div className="grid min-w-[420px] flex-1 grid-cols-3 gap-1.5">
                   {PERSONNEL_SHIFTS.map((shift) => (
                     <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
-                      {shift.label}
+                      {getPersonnelShiftLabel(shift.key)}
                     </Button>
                   ))}
                 </div>
@@ -5630,7 +5778,7 @@ const tourColumns = Object.entries(
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-lg font-black">{PERSONNEL_SHIFTS.find((shift) => shift.key === personalShift)?.label}</div>
+                <div className="text-lg font-black">{getPersonnelShiftLabel(personalShift)}</div>
                 <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-red-700"}`}>
                   {personnelSyncStatus === "connected" ? "Automatisch aktuell" : personnelSyncStatus === "waiting" ? "Warte auf die erste Planung" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
                 </div>
@@ -5643,18 +5791,56 @@ const tourColumns = Object.entries(
         {view === "personalmonitor" && (
           <section className="space-y-2">
             <div className="rounded-xl border bg-white px-4 py-3 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-black">Personalübersicht Wäscherei + Putzerei</h2>
                   <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-amber-700"}`}>
                     {personnelSyncStatus === "connected" ? "Zentral gespeichert und automatisch aktuell" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap justify-end gap-1.5">
                   {!floorPlanEditMode && (
                     <>
+                      {Object.entries(PERSONNEL_DEPARTMENTS).map(([deptKey, dept]) => (
+                        <Button
+                          key={deptKey}
+                          active={personalDepartment === deptKey}
+                          onClick={() => {
+                            setPersonalDepartment(deptKey);
+                            setExchangeTargetDept(deptKey === "waescherei" ? "putzerei" : "waescherei");
+                            setExchangeEmployeeName("");
+                          }}
+                        >
+                          {dept.label}
+                        </Button>
+                      ))}
                       <Input type="date" value={personalDate} onChange={(event) => setPersonalDate(event.target.value)} />
-                      <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
+                      <span className="self-center text-xs font-bold text-slate-500">Kopieren von:</span>
+                      <Input type="date" value={copyPersonalDate} onChange={(event) => setCopyPersonalDate(event.target.value)} />
+                      <Button onClick={copyWholePersonalDay}>Tag kopieren</Button>
+                      <Button onClick={() => openPersonnelEmployeeEditor()}>Mitarbeiter bearbeiten</Button>
+                      <Button onClick={openPersonnelDepartmentEditor}>Abteilungen bearbeiten</Button>
+                      <Button onClick={openPersonnelShiftEditor}>Schichtzeiten bearbeiten</Button>
+                      <div className="flex items-center rounded-xl border bg-slate-50 p-1">
+                        <span className="px-2 text-xs font-black text-slate-600">Umsatz:</span>
+                        {PERSONNEL_DAY_STRENGTHS.map((strength) => (
+                          <button
+                            type="button"
+                            key={strength.key}
+                            onClick={() => setPersonnelDayStrength(strength.key)}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-black ${getPersonnelDayStrength() === strength.key ? "bg-blue-700 text-white" : "text-slate-600 hover:bg-white"}`}
+                          >
+                            {strength.label}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={applyPersonnelSuggestions}
+                        className="rounded-xl border border-green-900 bg-green-700 px-4 py-2 text-sm font-black text-white hover:bg-green-800 active:scale-[0.98]"
+                      >
+                        KI-Vorschlag erstellen
+                      </button>
                       <Button active onClick={beginFloorPlanEdit}>
                         Positionen bearbeiten
                       </Button>
@@ -5672,12 +5858,17 @@ const tourColumns = Object.entries(
                 </div>
               </div>
               {!floorPlanEditMode && (
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  {PERSONNEL_SHIFTS.map((shift) => (
-                    <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
-                      {shift.label}
-                    </Button>
-                  ))}
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2">
+                  <div className="grid min-w-[420px] flex-1 grid-cols-3 gap-1.5">
+                    {PERSONNEL_SHIFTS.map((shift) => (
+                      <Button key={shift.key} active={personalShift === shift.key} onClick={() => setPersonalShift(shift.key)}>
+                        {getPersonnelShiftLabel(shift.key)}
+                      </Button>
+                    ))}
+                  </div>
+                  <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
+                  <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
+                  <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
                 </div>
               )}
             </div>
