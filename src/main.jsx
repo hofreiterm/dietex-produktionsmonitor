@@ -5900,8 +5900,15 @@ function ExternalPersonnelPortal() {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [recoveryMode, setRecoveryMode] = useState(() =>
+    window.location.hash.includes("type=recovery") || new URLSearchParams(window.location.search).get("type") === "recovery"
+  );
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loginBusy, setLoginBusy] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [loginMessage, setLoginMessage] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -5910,8 +5917,9 @@ function ExternalPersonnelPortal() {
       setSession(data.session || null);
       setLoading(false);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
       setSession(nextSession);
       setLoading(false);
     });
@@ -5936,8 +5944,91 @@ function ExternalPersonnelPortal() {
     }
   };
 
+  const requestPasswordReset = async () => {
+    if (!email.trim()) {
+      setLoginError("Bitte zuerst die E-Mail-Adresse eingeben.");
+      return;
+    }
+    setResetBusy(true);
+    setLoginError("");
+    setLoginMessage("");
+    const redirectTo = `${window.location.origin}/?portal=personalplanung`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) {
+      setLoginError("Der Link konnte nicht versendet werden. Bitte die E-Mail-Adresse prüfen.");
+    } else {
+      setLoginMessage("Ein neuer Link zum Ändern des Passworts wurde per E-Mail versendet.");
+    }
+    setResetBusy(false);
+  };
+
+  const changePassword = async (event) => {
+    event.preventDefault();
+    setLoginError("");
+    if (newPassword.length < 8) {
+      setLoginError("Das neue Passwort muss mindestens 8 Zeichen lang sein.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setLoginError("Die beiden Passwörter stimmen nicht überein.");
+      return;
+    }
+    setLoginBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setLoginError("Das Passwort konnte nicht geändert werden. Bitte einen neuen Link anfordern.");
+      setLoginBusy(false);
+      return;
+    }
+    await supabase.auth.signOut();
+    window.history.replaceState({}, "", "/?portal=personalplanung");
+    setRecoveryMode(false);
+    setNewPassword("");
+    setConfirmPassword("");
+    setLoginMessage("Das Passwort wurde geändert. Du kannst dich jetzt anmelden.");
+    setLoginBusy(false);
+  };
+
   if (loading) {
     return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-lg font-black text-slate-600">Anmeldung wird geprüft</div>;
+  }
+
+  if (recoveryMode) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4 text-slate-900">
+        <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-lg">
+          <div className="mb-6 flex justify-center"><Logo /></div>
+          <h1 className="text-center text-2xl font-black">Neues Passwort festlegen</h1>
+          <p className="mt-1 text-center text-sm font-semibold text-slate-500">Personalplanung Produktionsleitung</p>
+          <form className="mt-6 space-y-3" onSubmit={changePassword}>
+            <label className="block text-sm font-black text-slate-700">
+              Neues Passwort
+              <Input
+                className="mt-1 w-full"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </label>
+            <label className="block text-sm font-black text-slate-700">
+              Passwort wiederholen
+              <Input
+                className="mt-1 w-full"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </label>
+            {loginError && <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{loginError}</div>}
+            <Button active className="w-full" disabled={loginBusy || !newPassword || !confirmPassword}>
+              {loginBusy ? "Passwort wird gespeichert" : "Passwort speichern"}
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   if (session) return <App />;
@@ -5970,9 +6061,18 @@ function ExternalPersonnelPortal() {
             />
           </label>
           {loginError && <div className="rounded-md bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{loginError}</div>}
+          {loginMessage && <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">{loginMessage}</div>}
           <Button active className="w-full" disabled={loginBusy || !email.trim() || !password}>
             {loginBusy ? "Anmeldung läuft" : "Anmelden"}
           </Button>
+          <button
+            type="button"
+            className="w-full text-sm font-black text-blue-700 hover:underline disabled:text-slate-400"
+            disabled={resetBusy}
+            onClick={requestPasswordReset}
+          >
+            {resetBusy ? "E-Mail wird versendet" : "Passwort vergessen?"}
+          </button>
         </form>
       </div>
     </div>
