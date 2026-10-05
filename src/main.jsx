@@ -110,12 +110,13 @@ const PERSONNEL_SECTIONS = [
   { name: "Frottee 1", target: { default: 1 } },
   { name: "Frottee 2", target: { default: 1 } },
   { name: "BM + SPLT", target: { default: 1 } },
-  { name: "Jenway Großteile", target: { default: 1 } },
-  { name: "Jenway Kleinteile", target: { default: 1 } },
   { name: "Jenway Frottee", target: { default: 1 } },
-  { name: "Poolwäsche", target: { default: 2 } },
+  { name: "Jenway Kleinteile", target: { default: 1 } },
+  { name: "Jenway Großteile", target: { default: 1 } },
   { name: "Expedit", target: { default: 1 } },
+  { name: "Poolwäsche", target: { default: 2 } },
   { name: "Wäsche auspacken", target: { flexible: true } },
+  { name: "Leitung Wäscherei", target: { default: 1 } },
 ];
 
 
@@ -130,7 +131,7 @@ const PERSONNEL_GROUPS = [
   },
   {
     name: "Verpackung",
-    sections: ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"],
+    sections: ["Jenway Frottee", "Jenway Kleinteile", "Jenway Großteile", "Expedit", "Poolwäsche"],
   },
 ];
 
@@ -360,6 +361,7 @@ const COMBINED_PERSONNEL_ZONES = [
   { department: "waescherei", section: "Poolwäsche", x: 29, y: 82, w: 5.2 },
   { department: "waescherei", section: "Expedit", x: 46, y: 84, w: 4.5 },
   { department: "waescherei", section: "Wäsche auspacken", x: 39, y: 75, w: 6.2 },
+  { department: "waescherei", section: "Leitung Wäscherei", x: 46, y: 92, w: 6.2 },
   { department: "putzerei", section: "Übernahme", x: 55, y: 88, w: 5.2 },
   { department: "putzerei", section: "Expedit", x: 55, y: 56, w: 4.5 },
   { department: "putzerei", section: "Kleinteile", x: 64, y: 79, w: 5.2 },
@@ -3267,9 +3269,9 @@ const tourColumns = Object.entries(
       ? [
           { title: "Schmutzwäscheabteilung", names: ["Übernahme", "Waschstraßen", "Waschmaschinen"] },
           { title: "Finishabteilung", names: ["Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT"] },
-          { title: "Fertigstellung", names: ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"] },
+          { title: "Fertigstellung", names: ["Jenway Frottee", "Jenway Kleinteile", "Jenway Großteile", "Expedit", "Poolwäsche"] },
           { title: "Weitere Abteilungen", names: currentSections()
-            .filter((section) => !["Übernahme", "Waschstraßen", "Waschmaschinen", "Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT", "Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"].includes(section.name))
+            .filter((section) => !["Übernahme", "Waschstraßen", "Waschmaschinen", "Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT", "Jenway Frottee", "Jenway Kleinteile", "Jenway Großteile", "Expedit", "Poolwäsche"].includes(section.name))
             .map((section) => section.name) },
         ]
       : [{ title: "Putzerei", names: currentSections().map((section) => section.name) }];
@@ -3893,8 +3895,8 @@ const tourColumns = Object.entries(
                   } : undefined}
                   className={`min-w-0 border-l-4 px-1 py-0.5 ${assignmentsEditable ? "transition hover:ring-2 hover:ring-blue-500" : ""} ${zone.color}`}
                 >
-                  <div className="flex items-center justify-between gap-1 text-[8px] font-black leading-none">
-                    <span className="truncate">{zone.title}</span>
+                  <div className="flex items-start justify-between gap-1 text-[10px] font-black leading-tight">
+                    <span className="min-w-0 break-words">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
                   </div>
                   <div className={`mt-0.5 text-[18px] font-black leading-tight ${assignmentsEditable ? "flex flex-wrap gap-1" : "break-words"}`}>
@@ -4014,7 +4016,7 @@ const tourColumns = Object.entries(
       const rowDefinitions = [
         { title: "Schmutzwäscheabteilung", sections: ["Übernahme", "Waschstraßen", "Waschmaschinen"] },
         { title: "Finishabteilung", sections: ["Absortierung", "Mangel 1", "Mangel 2", "Frottee 1", "BM + SPLT"] },
-        { title: "Fertigstellung", sections: ["Jenway Großteile", "Jenway Kleinteile", "Jenway Frottee", "Poolwäsche", "Expedit"] },
+        { title: "Fertigstellung", sections: ["Jenway Frottee", "Jenway Kleinteile", "Jenway Großteile", "Expedit", "Poolwäsche"] },
       ];
       const listedNames = new Set(rowDefinitions.flatMap((row) => row.sections));
       const additionalSections = currentSections().filter((section) => !listedNames.has(section.name));
