@@ -2382,6 +2382,54 @@ const tourColumns = Object.entries(
       return false;
     }
 
+    const endsAt15 = ["waescherei", "putzerei"].some((planDepartment) => (
+      PERSONNEL_SHIFTS.some((shift) => (
+        (personalPlan[getPersonalKey(personalDate, shift.key, planDepartment)]?.end15 || []).includes(employeeName)
+      ))
+    ));
+    if (isWorkplace && targetShift === "15-schluss" && endsAt15) {
+      window.alert(`${employeeName} ist mit Ende 15 Uhr eingetragen und kann nicht in der dritten Schicht eingesetzt werden.`);
+      return false;
+    }
+
+    if (sectionName === "end15" || sectionName === "end18") {
+      setPersonalPlan((prev) => {
+        const updatedPlans = { ...prev };
+        const timingZones = ["end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges"];
+
+        PERSONNEL_SHIFTS.forEach((shift) => {
+          ["waescherei", "putzerei"].forEach((planDepartment) => {
+            const key = getPersonalKey(personalDate, shift.key, planDepartment);
+            const current = prev[key] || {};
+            const next = { ...current };
+
+            timingZones.forEach((zone) => {
+              if (Array.isArray(current[zone])) {
+                next[zone] = current[zone].filter((name) => name !== employeeName);
+              }
+            });
+
+            if (planDepartment === department) {
+              next[sectionName] = [...new Set([...(next[sectionName] || []), employeeName])];
+            }
+
+            if (sectionName === "end15" && shift.key === "15-schluss") {
+              sectionsForDepartment(planDepartment).forEach((section) => {
+                next[section.name] = (current[section.name] || []).filter((name) => name !== employeeName);
+              });
+              next.waescherei = (current.waescherei || []).filter((name) => name !== employeeName);
+              next.putzerei = (current.putzerei || []).filter((name) => name !== employeeName);
+            }
+
+            updatedPlans[key] = next;
+          });
+        });
+
+        return updatedPlans;
+      });
+      return true;
+    }
+
     if (sectionName === "start12") {
       if (department !== "waescherei") return false;
       setPersonalPlan((prev) => {
@@ -2394,6 +2442,7 @@ const tourColumns = Object.entries(
             ? allPlanningZones("waescherei")
             : ["start12", "end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"];
           zonesToClear.forEach((zone) => {
+            if (zone === "end15" || zone === "end18") return;
             next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
           });
           if (shift.key === "07-12") next.start12 = [...(next.start12 || []), employeeName];
@@ -2407,6 +2456,8 @@ const tourColumns = Object.entries(
     setPersonalPlan((prev) => {
       const allZones = allPlanningZones(department);
       const globalZones = new Set(["end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"]);
+      const independentTimingZones = new Set(["end15", "end18"]);
+      const isPlacementDestination = isWorkplace || sectionName === "pool" || sectionName === "waescherei" || sectionName === "putzerei";
       const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
         const shiftPlan = prev[getPersonalKey(personalDate, shift.key, department)] || {};
         return [...globalZones].some((zone) => (shiftPlan[zone] || []).includes(employeeName));
@@ -2421,7 +2472,9 @@ const tourColumns = Object.entries(
         const next = {};
 
         allZones.forEach((zone) => {
-          next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
+          next[zone] = isPlacementDestination && independentTimingZones.has(zone)
+            ? [...(current[zone] || [])]
+            : (current[zone] || []).filter((name) => name !== employeeName);
         });
 
         if (sectionName !== "pool") {
@@ -3058,8 +3111,7 @@ const tourColumns = Object.entries(
 
     const unavailable = new Set([
       ...nextPlan.end12,
-      ...nextPlan.end15,
-      ...nextPlan.end18,
+      ...(personalShift === "15-schluss" ? nextPlan.end15 : []),
       ...nextPlan.urlaub,
       ...nextPlan.za,
       ...nextPlan.krank,
