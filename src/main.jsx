@@ -374,19 +374,32 @@ const COMBINED_PERSONNEL_ZONES = [
 ];
 
 function normalizePersonnelFloorPlanZones(value) {
-  const savedByKey = new Map(
-    (Array.isArray(value) ? value : []).map((zone) => [`${zone.department}-${zone.section}`, zone]),
-  );
-  return COMBINED_PERSONNEL_ZONES.map((fallback) => {
-    const saved = savedByKey.get(`${fallback.department}-${fallback.section}`) || {};
+  const savedZones = Array.isArray(value) ? value : [];
+  const savedByKey = new Map(savedZones.map((zone) => [`${zone.department}-${zone.section}`, zone]));
+  const defaultKeys = new Set(COMBINED_PERSONNEL_ZONES.map((zone) => `${zone.department}-${zone.section}`));
+  const normalizeZone = (fallback, suppliedSaved = null) => {
+    const saved = suppliedSaved || savedByKey.get(`${fallback.department}-${fallback.section}`) || {};
     const x = Number(saved.x);
     const y = Number(saved.y);
+    const w = Number(saved.w);
     return {
       ...fallback,
       x: Number.isFinite(x) ? Math.min(98, Math.max(2, x)) : fallback.x,
       y: Number.isFinite(y) ? Math.min(98, Math.max(2, y)) : fallback.y,
+      w: Number.isFinite(w) ? Math.min(20, Math.max(3.5, w)) : fallback.w,
     };
-  });
+  };
+  const defaults = COMBINED_PERSONNEL_ZONES.map((fallback) => normalizeZone(fallback));
+  const custom = savedZones
+    .filter((zone) => zone?.department && zone?.section && !defaultKeys.has(`${zone.department}-${zone.section}`))
+    .map((zone) => normalizeZone({
+      department: zone.department,
+      section: zone.section,
+      x: Number(zone.x) || 50,
+      y: Number(zone.y) || 50,
+      w: Number(zone.w) || 5.2,
+    }, zone));
+  return [...defaults, ...custom];
 }
 
 function Button({ children, active, className = "", ...props }) {
@@ -2277,6 +2290,34 @@ const tourColumns = Object.entries(
   const currentGroups = () => currentDepartmentConfig().groups;
   const currentBaseEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
   const sectionsForDepartment = (department) => personnelSectionsByDept[department] || PERSONNEL_DEPARTMENTS[department]?.sections || [];
+  const resolvePersonnelFloorPlanZones = (sourceZones = personnelFloorPlanZones) => {
+    const zones = normalizePersonnelFloorPlanZones(sourceZones);
+    const resolved = [];
+
+    ["waescherei", "putzerei"].forEach((department) => {
+      const sections = sectionsForDepartment(department);
+      const sectionNames = new Set(sections.map((section) => section.name));
+      const departmentZones = zones.filter((zone) => zone.department === department);
+      const validZones = departmentZones.filter((zone) => sectionNames.has(zone.section));
+      const orphanZones = departmentZones.filter((zone) => !sectionNames.has(zone.section));
+      const positionedNames = new Set(validZones.map((zone) => zone.section));
+      const missingSections = sections.filter((section) => !positionedNames.has(section.name));
+
+      resolved.push(...validZones);
+      missingSections.forEach((section, index) => {
+        const inherited = orphanZones[index];
+        resolved.push({
+          department,
+          section: section.name,
+          x: inherited?.x ?? (department === "waescherei" ? 8 + (index % 5) * 9 : 56 + (index % 4) * 10),
+          y: inherited?.y ?? (88 - Math.floor(index / (department === "waescherei" ? 5 : 4)) * 9),
+          w: inherited?.w ?? 5.2,
+        });
+      });
+    });
+
+    return resolved;
+  };
   const planForDepartment = (department, shift = personalShift) => personalPlan[getPersonalKey(personalDate, shift, department)] || {};
   const sectionTargetForDepartment = (section, department, shift = personalShift) => {
     if (!section || section.target?.flexible) return null;
@@ -2778,6 +2819,17 @@ const tourColumns = Object.entries(
           };
         }),
       }));
+
+      setPersonnelFloorPlanZones((prev) => {
+        const renamedZones = prev
+          .filter((zone) => !(zone.department === personalDepartment && deletedNames.includes(zone.section)))
+          .map((zone) => {
+            if (zone.department !== personalDepartment) return zone;
+            const renamed = renames.find((entry) => entry.oldName === zone.section);
+            return renamed ? { ...zone, section: renamed.newName } : zone;
+          });
+        return normalizePersonnelFloorPlanZones(renamedZones);
+      });
     }
 
     setPersonnelDepartmentModal(false);
@@ -3195,16 +3247,28 @@ const tourColumns = Object.entries(
 
   const copyPreviousShiftSafe = () => {
     const idx = PERSONNEL_SHIFTS.findIndex((s) => s.key === personalShift);
-    const previousShift = idx > 0 ? PERSONNEL_SHIFTS[idx - 1].key : "07-12";
-    const source = personalPlan[getPersonalKey(personalDate, previousShift)];
+    if (idx <= 0) {
+      window.alert("Die erste Schicht wird direkt geplant und kann keine vorherige Schicht übernehmen.");
+      return;
+    }
+
+    const previousShift = PERSONNEL_SHIFTS[idx - 1].key;
+    const sourceKey = getPersonalKey(personalDate, previousShift, personalDepartment);
+    const targetKey = getPersonalKey(personalDate, personalShift, personalDepartment);
+    const source = personalPlan[sourceKey];
 
     if (!source) {
       window.alert("Für die vorherige Schicht ist kein Plan vorhanden.");
       return;
     }
 
-    const { start12: _start12, ...sourceWithoutStart12 } = source;
-    setPersonalPlan((prev) => ({ ...prev, [getPersonalKey()]: sourceWithoutStart12 }));
+    const copiedPlan = Object.fromEntries(
+      Object.entries(source)
+        .filter(([zone]) => zone !== "start12")
+        .map(([zone, names]) => [zone, Array.isArray(names) ? [...names] : names])
+    );
+
+    setPersonalPlan((prev) => ({ ...prev, [targetKey]: copiedPlan }));
   };
 
   const printPersonalPlanSafe = () => {
@@ -3480,7 +3544,7 @@ const tourColumns = Object.entries(
       return { width, height, left };
     };
 
-    personnelFloorPlanZones.forEach((zone) => {
+    resolvePersonnelFloorPlanZones().forEach((zone) => {
       const section = sectionsForDepartment(zone.department).find((entry) => entry.name === zone.section);
       if (!section) return;
       const assigned = planForDepartment(zone.department, shiftKey)[section.name] || [];
@@ -3493,10 +3557,17 @@ const tourColumns = Object.entries(
             ? "#dc2626"
             : "#16a34a";
       const centerX = zone.x / 100 * canvasWidth;
-      const top = headerHeight + zone.y / 100 * floorHeight;
+      const centerY = headerHeight + zone.y / 100 * floorHeight;
       const title = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
+      context.font = "900 20px Arial";
       const titleWidth = context.measureText(title).width + 20;
-      const left = centerX - Math.max(120, titleWidth) / 2;
+      const zoneWidth = Math.max(120, Number(zone.w || 5.2) / 100 * canvasWidth, titleWidth);
+      const totalHeight = assigned.length ? 82 + (assigned.length - 1) * 48 : 34;
+      const left = centerX - zoneWidth / 2;
+      const top = Math.max(
+        headerHeight + 4,
+        Math.min(canvas.height - totalHeight - 4, centerY - totalHeight / 2),
+      );
       const titleBox = drawTextBox(title, left, top, { font: "900 20px Arial", height: 34, paddingY: 7, border, lineWidth: 5 });
       assigned.forEach((name, index) => {
         drawTextBox(name, titleBox.left, top + 38 + index * 48, {
@@ -3798,7 +3869,7 @@ const tourColumns = Object.entries(
   }
 
   const beginFloorPlanEdit = () => {
-    setFloorPlanDraft(personnelFloorPlanZones.map((zone) => ({ ...zone })));
+    setFloorPlanDraft(resolvePersonnelFloorPlanZones().map((zone) => ({ ...zone })));
     setFloorPlanEditMode(true);
   };
 
@@ -3809,13 +3880,13 @@ const tourColumns = Object.entries(
   };
 
   const cancelFloorPlanEdit = () => {
-    setFloorPlanDraft(personnelFloorPlanZones.map((zone) => ({ ...zone })));
+    setFloorPlanDraft(resolvePersonnelFloorPlanZones().map((zone) => ({ ...zone })));
     setFloorPlanEditMode(false);
     floorPlanDrag.current = null;
   };
 
   const resetFloorPlanDraft = () => {
-    setFloorPlanDraft(normalizePersonnelFloorPlanZones(null));
+    setFloorPlanDraft(resolvePersonnelFloorPlanZones(normalizePersonnelFloorPlanZones(null)));
   };
 
   const moveFloorPlanZone = (event, zoneKey) => {
@@ -3829,7 +3900,7 @@ const tourColumns = Object.entries(
   };
 
   function CombinedPersonnelFloorPlan({ editable = false, assignmentsEditable = false } = {}) {
-    const visibleZones = editable ? floorPlanDraft : personnelFloorPlanZones;
+    const visibleZones = editable ? floorPlanDraft : resolvePersonnelFloorPlanZones();
     const waeschereiPlan = planForDepartment("waescherei");
     const putzereiPlan = planForDepartment("putzerei");
     const start12Names = personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [];
@@ -5562,7 +5633,13 @@ const tourColumns = Object.entries(
                     </Button>
                   ))}
                 </div>
-                <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
+                <Button
+                  disabled={personalShift === "07-12"}
+                  className={personalShift === "07-12" ? "cursor-not-allowed opacity-45" : ""}
+                  onClick={copyPreviousShiftSafe}
+                >
+                  Vorherige Schicht übernehmen
+                </Button>
                 <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
                 <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
               </div>
@@ -5892,7 +5969,13 @@ const tourColumns = Object.entries(
                       </Button>
                     ))}
                   </div>
-                  <Button onClick={copyPreviousShiftSafe}>Vorherige Schicht übernehmen</Button>
+                  <Button
+                    disabled={personalShift === "07-12"}
+                    className={personalShift === "07-12" ? "cursor-not-allowed opacity-45" : ""}
+                    onClick={copyPreviousShiftSafe}
+                  >
+                    Vorherige Schicht übernehmen
+                  </Button>
                   <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
                   <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
                 </div>
