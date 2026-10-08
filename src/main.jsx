@@ -181,6 +181,7 @@ function normalizePersonnelSections(sections, fallback) {
     return {
       ...section,
       id: section.id || `section-${index}-${String(section.name || "abteilung").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      startTime: String(section.startTime || "").trim(),
       target: baseTarget,
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
@@ -382,11 +383,19 @@ function normalizePersonnelFloorPlanZones(value) {
     const x = Number(saved.x);
     const y = Number(saved.y);
     const w = Number(saved.w);
+    const normalizedX = Number.isFinite(x) ? Math.min(98, Math.max(2, x)) : fallback.x;
+    const normalizedY = Number.isFinite(y) ? Math.min(98, Math.max(2, y)) : fallback.y;
+    const normalizedW = Number.isFinite(w) ? Math.min(20, Math.max(3.5, w)) : fallback.w;
+    const defaultStartX = Math.min(98, Math.max(2, normalizedX + (normalizedX > 88 ? -normalizedW : normalizedW)));
+    const startX = Number(saved.startX);
+    const startY = Number(saved.startY);
     return {
       ...fallback,
-      x: Number.isFinite(x) ? Math.min(98, Math.max(2, x)) : fallback.x,
-      y: Number.isFinite(y) ? Math.min(98, Math.max(2, y)) : fallback.y,
-      w: Number.isFinite(w) ? Math.min(20, Math.max(3.5, w)) : fallback.w,
+      x: normalizedX,
+      y: normalizedY,
+      w: normalizedW,
+      startX: Number.isFinite(startX) ? Math.min(98, Math.max(2, startX)) : defaultStartX,
+      startY: Number.isFinite(startY) ? Math.min(98, Math.max(2, startY)) : normalizedY,
     };
   };
   const defaults = COMBINED_PERSONNEL_ZONES.map((fallback) => normalizeZone(fallback));
@@ -400,6 +409,26 @@ function normalizePersonnelFloorPlanZones(value) {
       w: Number(zone.w) || 5.2,
     }, zone));
   return [...defaults, ...custom];
+}
+
+function normalizePersonnelFloorPlanNotes(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((note) => note && String(note.text || "").trim())
+    .map((note, index) => {
+      const department = note.department === "putzerei" ? "putzerei" : "waescherei";
+      const x = Number(note.x);
+      const y = Number(note.y);
+      const w = Number(note.w);
+      return {
+        id: String(note.id || `note-${department}-${index}`),
+        department,
+        text: String(note.text || "").trim(),
+        x: Number.isFinite(x) ? Math.min(98, Math.max(2, x)) : department === "waescherei" ? 35 : 72,
+        y: Number.isFinite(y) ? Math.min(98, Math.max(2, y)) : 10 + index * 7,
+        w: Number.isFinite(w) ? Math.min(35, Math.max(8, w)) : 16,
+      };
+    });
 }
 
 function Button({ children, active, className = "", ...props }) {
@@ -652,8 +681,16 @@ function App() {
       return normalizePersonnelFloorPlanZones(null);
     }
   });
+  const [personnelFloorPlanNotes, setPersonnelFloorPlanNotes] = useState(() => {
+    try {
+      return normalizePersonnelFloorPlanNotes(JSON.parse(localStorage.getItem("dietexPersonnelFloorPlanNotes") || "[]"));
+    } catch {
+      return [];
+    }
+  });
   const [floorPlanEditMode, setFloorPlanEditMode] = useState(false);
   const [floorPlanDraft, setFloorPlanDraft] = useState(() => normalizePersonnelFloorPlanZones(null));
+  const [floorPlanNoteDraft, setFloorPlanNoteDraft] = useState([]);
   const [personnelSectionsByDept, setPersonnelSectionsByDept] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("dietexPersonnelSectionsByDept") || "null");
@@ -710,6 +747,7 @@ function App() {
   const [employeeForm, setEmployeeForm] = useState(EMPTY_EMPLOYEE_FORM);
   const [personnelDepartmentModal, setPersonnelDepartmentModal] = useState(false);
   const [departmentDraft, setDepartmentDraft] = useState([]);
+  const [personnelNoteDraft, setPersonnelNoteDraft] = useState([]);
   const [personnelSyncStatus, setPersonnelSyncStatus] = useState("loading");
 
   const [tourModal, setTourModal] = useState(null);
@@ -739,6 +777,7 @@ function App() {
     sectionsByDept: personnelSectionsByDept,
     dayStrengthByDate: personnelDayStrengthByDate,
     floorPlanZones: personnelFloorPlanZones,
+    floorPlanNotes: personnelFloorPlanNotes,
     shiftLabels: personnelShiftLabels,
   });
 
@@ -758,6 +797,7 @@ function App() {
       },
       dayStrengthByDate: remoteState.dayStrengthByDate && typeof remoteState.dayStrengthByDate === "object" ? remoteState.dayStrengthByDate : {},
       floorPlanZones: normalizePersonnelFloorPlanZones(remoteState.floorPlanZones),
+      floorPlanNotes: normalizePersonnelFloorPlanNotes(remoteState.floorPlanNotes),
       shiftLabels: { ...DEFAULT_PERSONNEL_SHIFT_LABELS, ...(remoteState.shiftLabels || {}) },
     };
 
@@ -768,6 +808,7 @@ function App() {
     setPersonnelSectionsByDept(nextState.sectionsByDept);
     setPersonnelDayStrengthByDate(nextState.dayStrengthByDate);
     setPersonnelFloorPlanZones(nextState.floorPlanZones);
+    setPersonnelFloorPlanNotes(nextState.floorPlanNotes);
     setPersonnelShiftLabels(nextState.shiftLabels);
     setPersonnelSyncStatus("connected");
   };
@@ -897,7 +938,7 @@ function App() {
     return () => {
       if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
     };
-  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones, personnelShiftLabels]);
+  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones, personnelFloorPlanNotes, personnelShiftLabels]);
 
   useEffect(() => {
     if (personnelDisplayMode) return undefined;
@@ -1000,6 +1041,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelFloorPlanZones", JSON.stringify(personnelFloorPlanZones));
   }, [personnelFloorPlanZones]);
+
+  useEffect(() => {
+    localStorage.setItem("dietexPersonnelFloorPlanNotes", JSON.stringify(personnelFloorPlanNotes));
+  }, [personnelFloorPlanNotes]);
 
   useEffect(() => {
     localStorage.setItem("dietexPersonnelShiftLabels", JSON.stringify(personnelShiftLabels));
@@ -2306,12 +2351,17 @@ const tourColumns = Object.entries(
       resolved.push(...validZones);
       missingSections.forEach((section, index) => {
         const inherited = orphanZones[index];
+        const x = inherited?.x ?? (department === "waescherei" ? 8 + (index % 5) * 9 : 56 + (index % 4) * 10);
+        const y = inherited?.y ?? (88 - Math.floor(index / (department === "waescherei" ? 5 : 4)) * 9);
+        const w = inherited?.w ?? 5.2;
         resolved.push({
           department,
           section: section.name,
-          x: inherited?.x ?? (department === "waescherei" ? 8 + (index % 5) * 9 : 56 + (index % 4) * 10),
-          y: inherited?.y ?? (88 - Math.floor(index / (department === "waescherei" ? 5 : 4)) * 9),
-          w: inherited?.w ?? 5.2,
+          x,
+          y,
+          w,
+          startX: inherited?.startX ?? Math.min(98, Math.max(2, x + (x > 88 ? -w : w))),
+          startY: inherited?.startY ?? y,
         });
       });
     });
@@ -2772,6 +2822,7 @@ const tourColumns = Object.entries(
     setDepartmentDraft(currentSections().map((section) => ({
       id: section.id,
       name: section.name,
+      startTime: section.startTime || "",
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
         Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
@@ -2780,6 +2831,11 @@ const tourColumns = Object.entries(
         ])),
       ])),
     })));
+    setPersonnelNoteDraft(
+      personnelFloorPlanNotes
+        .filter((note) => note.department === personalDepartment)
+        .map((note) => ({ ...note }))
+    );
     setPersonnelDepartmentModal(true);
   };
 
@@ -2796,6 +2852,7 @@ const tourColumns = Object.entries(
       return {
         id: section.id,
         name: section.name.trim(),
+        startTime: String(section.startTime || "").trim(),
         target: { ...targetsByStrength.mittel },
         targetsByStrength,
       };
@@ -2834,6 +2891,10 @@ const tourColumns = Object.entries(
       .map((section) => section.name);
 
     setPersonnelSectionsByDept((prev) => ({ ...prev, [personalDepartment]: cleaned }));
+    setPersonnelFloorPlanNotes((prev) => normalizePersonnelFloorPlanNotes([
+      ...prev.filter((note) => note.department !== personalDepartment),
+      ...personnelNoteDraft.map((note) => ({ ...note, department: personalDepartment })),
+    ]));
 
     if (renames.length || deletedNames.length) {
       setPersonalPlan((prev) => {
@@ -3547,7 +3608,7 @@ const tourColumns = Object.entries(
 
   const createPersonnelOverviewCanvas = async (shiftKey) => {
     const canvasWidth = 2400;
-    const headerHeight = 150;
+    const headerHeight = 270;
     const floorHeight = Math.round(canvasWidth * 2274 / 4638);
     const canvas = document.createElement("canvas");
     canvas.width = canvasWidth;
@@ -3630,6 +3691,55 @@ const tourColumns = Object.entries(
           border: zone.department === "waescherei" ? "#93c5fd" : "#c4b5fd",
         });
       });
+
+      const startLabel = `Start ${section.startTime || "--:--"}`;
+      context.font = "900 18px Arial";
+      const startWidth = context.measureText(startLabel).width + 18;
+      drawTextBox(
+        startLabel,
+        zone.startX / 100 * canvasWidth - startWidth / 2,
+        headerHeight + zone.startY / 100 * floorHeight - 15,
+        {
+          font: "900 18px Arial",
+          height: 30,
+          paddingX: 9,
+          paddingY: 6,
+          background: "rgba(236,253,245,0.96)",
+          border: "#047857",
+        }
+      );
+    });
+
+    personnelFloorPlanNotes.forEach((note) => {
+      const boxWidth = Math.max(220, Number(note.w || 16) / 100 * canvasWidth);
+      const centerX = note.x / 100 * canvasWidth;
+      const centerY = headerHeight + note.y / 100 * floorHeight;
+      const padding = 14;
+      const lineHeight = 29;
+      context.font = "900 24px Arial";
+      const lines = [];
+      String(note.text || "").split(/\s+/).filter(Boolean).forEach((word) => {
+        const current = lines[lines.length - 1] || "";
+        const candidate = current ? `${current} ${word}` : word;
+        if (current && context.measureText(candidate).width > boxWidth - padding * 2) {
+          lines.push(word);
+        } else if (lines.length) {
+          lines[lines.length - 1] = candidate;
+        } else {
+          lines.push(candidate);
+        }
+      });
+      const visibleLines = lines.slice(0, 5);
+      const boxHeight = Math.max(48, padding * 2 + visibleLines.length * lineHeight);
+      const left = Math.max(4, Math.min(canvasWidth - boxWidth - 4, centerX - boxWidth / 2));
+      const top = Math.max(headerHeight + 4, Math.min(canvas.height - boxHeight - 4, centerY - boxHeight / 2));
+      context.fillStyle = "rgba(255,251,235,0.96)";
+      context.fillRect(left, top, boxWidth, boxHeight);
+      context.strokeStyle = "#f59e0b";
+      context.lineWidth = 4;
+      context.strokeRect(left, top, boxWidth, boxHeight);
+      context.fillStyle = "#451a03";
+      visibleLines.forEach((line, index) => context.fillText(line, left + padding, top + padding + 22 + index * lineHeight));
     });
 
     const plans = {
@@ -3659,12 +3769,12 @@ const tourColumns = Object.entries(
       { title: "Büro/Tour/Sonstiges", names: uniqueNames([...(plans.waescherei.sonstiges || []), ...(plans.putzerei.sonstiges || [])]), color: "#f8fafc", border: "#475569" },
       { title: "Nicht eingeteilt", names: uniqueNames(unassignedNames), color: "#f8fafc", border: "#64748b" },
     ];
-    const panelX = 1320;
-    const panelY = headerHeight + 55;
-    const panelWidth = 1020;
-    const cellWidth = panelWidth / 3;
-    const cellHeight = 125;
-    const statusRowCount = Math.ceil(statusRows.length / 3);
+    const panelX = 900;
+    const panelY = 44;
+    const panelWidth = 1450;
+    const cellWidth = panelWidth / 5;
+    const cellHeight = 105;
+    const statusRowCount = Math.ceil(statusRows.length / 5);
     context.fillStyle = "rgba(255,255,255,0.96)";
     context.fillRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * statusRowCount + 58);
     context.strokeStyle = "#94a3b8";
@@ -3672,10 +3782,10 @@ const tourColumns = Object.entries(
     context.strokeRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * statusRowCount + 58);
     context.fillStyle = "#0f172a";
     context.font = "900 24px Arial";
-    context.fillText("Abwesenheiten & Status", panelX, panelY - 10);
+    context.fillText("Abwesenheiten & Status", panelX, panelY - 12);
     statusRows.forEach((status, index) => {
-      const column = index % 3;
-      const row = Math.floor(index / 3);
+      const column = index % 5;
+      const row = Math.floor(index / 5);
       const x = panelX + column * cellWidth;
       const y = panelY + row * cellHeight;
       context.fillStyle = status.color;
@@ -3683,23 +3793,23 @@ const tourColumns = Object.entries(
       context.fillStyle = status.border;
       context.fillRect(x, y, 7, cellHeight - 8);
       context.fillStyle = "#0f172a";
-      context.font = "900 20px Arial";
-      context.fillText(`${status.title} (${status.names.length})`, x + 16, y + 28);
-      context.font = "900 22px Arial";
+      context.font = "900 18px Arial";
+      context.fillText(`${status.title} (${status.names.length})`, x + 16, y + 26);
+      context.font = "900 18px Arial";
       const words = (status.names.length ? status.names.join(", ") : "-").split(" ");
       let line = "";
       let lineIndex = 0;
       words.forEach((word) => {
         const candidate = line ? `${line} ${word}` : word;
         if (line && context.measureText(candidate).width > cellWidth - 32 && lineIndex < 2) {
-          context.fillText(line, x + 16, y + 58 + lineIndex * 27);
+          context.fillText(line, x + 16, y + 52 + lineIndex * 23);
           line = word;
           lineIndex += 1;
         } else {
           line = candidate;
         }
       });
-      if (lineIndex < 3) context.fillText(line, x + 16, y + 58 + lineIndex * 27);
+      if (lineIndex < 3) context.fillText(line, x + 16, y + 52 + lineIndex * 23);
     });
 
     return canvas;
@@ -3922,33 +4032,51 @@ const tourColumns = Object.entries(
 
   const beginFloorPlanEdit = () => {
     setFloorPlanDraft(resolvePersonnelFloorPlanZones().map((zone) => ({ ...zone })));
+    setFloorPlanNoteDraft(personnelFloorPlanNotes.map((note) => ({ ...note })));
     setFloorPlanEditMode(true);
   };
 
   const saveFloorPlanPositions = () => {
     setPersonnelFloorPlanZones(normalizePersonnelFloorPlanZones(floorPlanDraft));
+    setPersonnelFloorPlanNotes(normalizePersonnelFloorPlanNotes(floorPlanNoteDraft));
     setFloorPlanEditMode(false);
     floorPlanDrag.current = null;
   };
 
   const cancelFloorPlanEdit = () => {
     setFloorPlanDraft(resolvePersonnelFloorPlanZones().map((zone) => ({ ...zone })));
+    setFloorPlanNoteDraft(personnelFloorPlanNotes.map((note) => ({ ...note })));
     setFloorPlanEditMode(false);
     floorPlanDrag.current = null;
   };
 
   const resetFloorPlanDraft = () => {
     setFloorPlanDraft(resolvePersonnelFloorPlanZones(normalizePersonnelFloorPlanZones(null)));
+    setFloorPlanNoteDraft((current) => current.map((note, index) => ({
+      ...note,
+      x: note.department === "waescherei" ? 35 : 72,
+      y: 10 + index * 7,
+    })));
   };
 
-  const moveFloorPlanZone = (event, zoneKey) => {
-    if (!floorPlanEditMode || floorPlanDrag.current !== zoneKey || !floorPlanRef.current) return;
+  const moveFloorPlanZone = (event, zoneKey, positionType = "section") => {
+    if (!floorPlanEditMode || floorPlanDrag.current !== `${positionType}:${zoneKey}` || !floorPlanRef.current) return;
     const bounds = floorPlanRef.current.getBoundingClientRect();
     const x = Math.min(98, Math.max(2, ((event.clientX - bounds.left) / bounds.width) * 100));
     const y = Math.min(98, Math.max(2, ((event.clientY - bounds.top) / bounds.height) * 100));
     setFloorPlanDraft((current) => current.map((zone) => (
-      `${zone.department}-${zone.section}` === zoneKey ? { ...zone, x, y } : zone
+      `${zone.department}-${zone.section}` === zoneKey
+        ? positionType === "start" ? { ...zone, startX: x, startY: y } : { ...zone, x, y }
+        : zone
     )));
+  };
+
+  const moveFloorPlanNote = (event, noteId) => {
+    if (!floorPlanEditMode || floorPlanDrag.current !== `note:${noteId}` || !floorPlanRef.current) return;
+    const bounds = floorPlanRef.current.getBoundingClientRect();
+    const x = Math.min(98, Math.max(2, ((event.clientX - bounds.left) / bounds.width) * 100));
+    const y = Math.min(98, Math.max(2, ((event.clientY - bounds.top) / bounds.height) * 100));
+    setFloorPlanNoteDraft((current) => current.map((note) => note.id === noteId ? { ...note, x, y } : note));
   };
 
   function CombinedPersonnelFloorPlan({ editable = false, assignmentsEditable = false } = {}) {
@@ -3990,16 +4118,11 @@ const tourColumns = Object.entries(
       if ((personnelEmployeesByDept.waescherei || []).some((employee) => employee.name === name)) return "waescherei";
       return "putzerei";
     };
+    const visibleNotes = editable ? floorPlanNoteDraft : personnelFloorPlanNotes;
     return (
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "4638 / 2274" }}>
-          <img
-            src={personnelFloorPlanUrl}
-            alt="Gebäudeplan Wäscherei und Putzerei"
-            className="absolute inset-0 h-full w-full object-fill"
-          />
-
-          <div className={`${assignmentsEditable ? "pointer-events-auto" : "pointer-events-none"} absolute left-[55%] top-[5%] z-10 w-[42%] rounded-md border border-slate-300 bg-white/95 p-1.5 shadow-sm`}>
+        <div className="flex justify-end border-b border-slate-200 bg-slate-50 p-2">
+          <div className={`${assignmentsEditable ? "pointer-events-auto" : "pointer-events-none"} max-h-52 w-full overflow-y-auto rounded-md border border-slate-300 bg-white p-1.5 shadow-sm lg:w-[72%] xl:w-[58%]`}>
             <div className="mb-1 flex items-center justify-between border-b border-slate-200 pb-1 text-[9px] font-black leading-none text-slate-900">
               <span>Abwesenheiten &amp; Status</span>
               <span>{getPersonnelShiftLabel(personalShift)}</span>
@@ -4022,7 +4145,7 @@ const tourColumns = Object.entries(
                     <span className="min-w-0 break-words">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
                   </div>
-                  <div className={`mt-0.5 text-[18px] font-black leading-tight ${assignmentsEditable ? "flex flex-wrap gap-1" : "break-words"}`}>
+                  <div className={`mt-0.5 text-[15px] font-black leading-tight ${assignmentsEditable ? "flex flex-wrap gap-1" : "break-words"}`}>
                     {!zone.names.length && "-"}
                     {zone.names.length > 0 && !assignmentsEditable && zone.names.join(", ")}
                     {assignmentsEditable && zone.names.map((name) => (
@@ -4043,6 +4166,35 @@ const tourColumns = Object.entries(
               ))}
             </div>
           </div>
+        </div>
+
+        <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "4638 / 2274" }}>
+          <img
+            src={personnelFloorPlanUrl}
+            alt="Gebäudeplan Wäscherei und Putzerei"
+            className="absolute inset-0 h-full w-full object-fill"
+          />
+
+          {visibleNotes.map((note) => (
+            <div
+              key={note.id}
+              className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-pre-wrap rounded border-2 border-amber-500 bg-amber-50/95 px-2 py-1 text-[13px] font-black leading-tight text-amber-950 shadow-sm ${editable ? "cursor-grab touch-none select-none ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : "pointer-events-none"}`}
+              style={{ left: `${note.x}%`, top: `${note.y}%`, width: `${note.w}%`, minWidth: "130px" }}
+              onPointerDown={editable ? (event) => {
+                event.preventDefault();
+                floorPlanDrag.current = `note:${note.id}`;
+                event.currentTarget.setPointerCapture(event.pointerId);
+              } : undefined}
+              onPointerMove={editable ? (event) => moveFloorPlanNote(event, note.id) : undefined}
+              onPointerUp={editable ? (event) => {
+                floorPlanDrag.current = null;
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+              } : undefined}
+              onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
+            >
+              {note.text}
+            </div>
+          ))}
 
           {visibleZones.map((zone) => {
             const section = sectionsForDepartment(zone.department).find((entry) => entry.name === zone.section);
@@ -4066,67 +4218,86 @@ const tourColumns = Object.entries(
             const zoneKey = `${zone.department}-${zone.section}`;
 
             return (
-              <div
-                key={zoneKey}
-                className={`absolute -translate-x-1/2 -translate-y-1/2 ${editable ? "cursor-grab touch-none select-none rounded bg-white/55 p-1 ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : ""}`}
-                style={{
-                  left: `${zone.x}%`,
-                  top: `${zone.y}%`,
-                  width: `${zone.w}%`,
-                  minWidth: section.name.length > 15 ? "100px" : section.name.length > 11 ? "86px" : "68px",
-                }}
-                onPointerDown={editable ? (event) => {
-                  event.preventDefault();
-                  floorPlanDrag.current = zoneKey;
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                } : undefined}
-                onPointerMove={editable ? (event) => moveFloorPlanZone(event, zoneKey) : undefined}
-                onPointerUp={editable ? (event) => {
-                  floorPlanDrag.current = null;
-                  if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                } : undefined}
-                onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
-                onDragOver={assignmentsEditable ? (event) => event.preventDefault() : undefined}
-                onDrop={assignmentsEditable ? (event) => {
-                  event.preventDefault();
-                  if (!overviewDragEmployee) return;
-                  moveOverviewEmployee(overviewDragEmployee, zone.department, section.name);
-                  setOverviewDragEmployee(null);
-                } : undefined}
-              >
-                <div className={`border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
-                  <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
+              <React.Fragment key={zoneKey}>
+                <div
+                  className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border border-emerald-700 bg-emerald-50/95 px-1.5 py-0.5 text-[11px] font-black leading-none text-emerald-950 shadow-sm ${editable ? "cursor-grab touch-none select-none ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : "pointer-events-none"}`}
+                  style={{ left: `${zone.startX}%`, top: `${zone.startY}%` }}
+                  onPointerDown={editable ? (event) => {
+                    event.preventDefault();
+                    floorPlanDrag.current = `start:${zoneKey}`;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  } : undefined}
+                  onPointerMove={editable ? (event) => moveFloorPlanZone(event, zoneKey, "start") : undefined}
+                  onPointerUp={editable ? (event) => {
+                    floorPlanDrag.current = null;
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                  } : undefined}
+                  onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
+                >
+                  Start {section.startTime || "--:--"}
                 </div>
-                <div className="mt-0.5 flex flex-col items-start gap-px">
-                  {assigned.map((name) => assignmentsEditable ? (
-                    <button
-                      type="button"
-                      key={name}
-                      draggable
-                      onDragStart={() => setOverviewDragEmployee({ name, department: zone.department })}
-                      onDragEnd={() => setOverviewDragEmployee(null)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (!overviewDragEmployee) return;
-                        if (!reorderEmployeeInSection(overviewDragEmployee, name, zone.department, section.name)) {
-                          moveOverviewEmployee(overviewDragEmployee, zone.department, section.name);
-                        }
-                        setOverviewDragEmployee(null);
-                      }}
-                      onClick={() => selectPersonnelEmployee(name, zone.department)}
-                      className={`block w-max cursor-grab whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-left text-[18px] font-black leading-tight shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing ${employeeClass}`}
-                    >
-                      {name}
-                    </button>
-                  ) : (
-                    <span key={name} className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[18px] font-black leading-tight shadow-sm ${employeeClass}`}>
-                      {name}
-                    </span>
-                  ))}
+
+                <div
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 ${editable ? "cursor-grab touch-none select-none rounded bg-white/55 p-1 ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : ""}`}
+                  style={{
+                    left: `${zone.x}%`,
+                    top: `${zone.y}%`,
+                    width: `${zone.w}%`,
+                    minWidth: section.name.length > 15 ? "100px" : section.name.length > 11 ? "86px" : "68px",
+                  }}
+                  onPointerDown={editable ? (event) => {
+                    event.preventDefault();
+                    floorPlanDrag.current = `section:${zoneKey}`;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  } : undefined}
+                  onPointerMove={editable ? (event) => moveFloorPlanZone(event, zoneKey, "section") : undefined}
+                  onPointerUp={editable ? (event) => {
+                    floorPlanDrag.current = null;
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+                  } : undefined}
+                  onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
+                  onDragOver={assignmentsEditable ? (event) => event.preventDefault() : undefined}
+                  onDrop={assignmentsEditable ? (event) => {
+                    event.preventDefault();
+                    if (!overviewDragEmployee) return;
+                    moveOverviewEmployee(overviewDragEmployee, zone.department, section.name);
+                    setOverviewDragEmployee(null);
+                  } : undefined}
+                >
+                  <div className={`border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
+                    <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
+                  </div>
+                  <div className="mt-0.5 flex flex-col items-start gap-px">
+                    {assigned.map((name) => assignmentsEditable ? (
+                      <button
+                        type="button"
+                        key={name}
+                        draggable
+                        onDragStart={() => setOverviewDragEmployee({ name, department: zone.department })}
+                        onDragEnd={() => setOverviewDragEmployee(null)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (!overviewDragEmployee) return;
+                          if (!reorderEmployeeInSection(overviewDragEmployee, name, zone.department, section.name)) {
+                            moveOverviewEmployee(overviewDragEmployee, zone.department, section.name);
+                          }
+                          setOverviewDragEmployee(null);
+                        }}
+                        onClick={() => selectPersonnelEmployee(name, zone.department)}
+                        className={`block w-max cursor-grab whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-left text-[18px] font-black leading-tight shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing ${employeeClass}`}
+                      >
+                        {name}
+                      </button>
+                    ) : (
+                      <span key={name} className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[18px] font-black leading-tight shadow-sm ${employeeClass}`}>
+                        {name}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </React.Fragment>
             );
           })}
         </div>
@@ -5024,13 +5195,22 @@ const tourColumns = Object.entries(
               <div className="grid gap-3">
                 {departmentDraft.map((section, sectionIndex) => (
                   <div key={section.id} className="rounded-xl border bg-slate-50 p-3">
-                    <div className="mb-3 flex items-end gap-2">
+                    <div className="mb-3 flex flex-wrap items-end gap-2">
                       <label className="block min-w-0 flex-1 text-xs font-black text-slate-600">
                         Abteilungsname
                         <Input
                           className="mt-1 w-full bg-white"
                           value={section.name}
                           onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, name: event.target.value } : entry))}
+                        />
+                      </label>
+                      <label className="block w-40 text-xs font-black text-slate-600">
+                        Startzeit
+                        <Input
+                          type="time"
+                          className="mt-1 w-full bg-white"
+                          value={section.startTime || ""}
+                          onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, startTime: event.target.value } : entry))}
                         />
                       </label>
                       <button
@@ -5083,6 +5263,7 @@ const tourColumns = Object.entries(
                 onClick={() => setDepartmentDraft((prev) => [...prev, {
                   id: `custom-${Date.now()}`,
                   name: "Neue Abteilung",
+                  startTime: "",
                   targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
                     strength.key,
                     Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [shift.key, 0])),
@@ -5092,9 +5273,48 @@ const tourColumns = Object.entries(
                 Neue Abteilung hinzufügen
               </Button>
 
+              <div className="mt-6 border-t pt-5">
+                <div className="mb-3">
+                  <h3 className="text-base font-black">Hinweisfelder Personalübersicht</h3>
+                  <p className="text-xs font-semibold text-slate-500">Für Besonderheiten und wichtige Informationen. Die Position wird anschließend über „Positionen bearbeiten“ festgelegt.</p>
+                </div>
+                <div className="grid gap-2">
+                  {personnelNoteDraft.map((note, noteIndex) => (
+                    <div key={note.id} className="flex items-start gap-2 rounded-lg border bg-amber-50 p-2">
+                      <textarea
+                        className="min-h-20 min-w-0 flex-1 resize-y rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                        value={note.text}
+                        placeholder="Besonderheit eingeben"
+                        onChange={(event) => setPersonnelNoteDraft((prev) => prev.map((entry, index) => index === noteIndex ? { ...entry, text: event.target.value } : entry))}
+                      />
+                      <button
+                        type="button"
+                        className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-black text-red-700 hover:bg-red-50"
+                        onClick={() => setPersonnelNoteDraft((prev) => prev.filter((entry) => entry.id !== note.id))}
+                      >
+                        Löschen
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  className="mt-3 border-amber-400 bg-amber-50 text-amber-950"
+                  onClick={() => setPersonnelNoteDraft((prev) => [...prev, {
+                    id: `note-${Date.now()}`,
+                    department: personalDepartment,
+                    text: "",
+                    x: personalDepartment === "waescherei" ? 35 : 72,
+                    y: 10 + prev.length * 7,
+                    w: 16,
+                  }])}
+                >
+                  Textfeld hinzufügen
+                </Button>
+              </div>
+
               <div className="mt-5 flex justify-end gap-2 border-t pt-4">
                 <Button onClick={() => setPersonnelDepartmentModal(false)}>Abbrechen</Button>
-                <Button className="bg-blue-700 text-white" onClick={savePersonnelDepartments}>Abteilungen speichern</Button>
+                <Button active onClick={savePersonnelDepartments}>Abteilungen speichern</Button>
               </div>
             </div>
           </div>
