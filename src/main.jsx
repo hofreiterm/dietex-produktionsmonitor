@@ -3671,7 +3671,9 @@ const tourColumns = Object.entries(
             : "#16a34a";
       const centerX = zone.x / 100 * canvasWidth;
       const centerY = headerHeight + zone.y / 100 * floorHeight;
-      const title = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
+      const baseTitle = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
+      const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
+      const title = `${baseTitle}${visibleStartTime ? ` · ${visibleStartTime}` : ""}`;
       context.font = "900 20px Arial";
       const titleWidth = context.measureText(title).width + 20;
       const zoneWidth = Math.max(120, Number(zone.w || 5.2) / 100 * canvasWidth, titleWidth);
@@ -3692,22 +3694,6 @@ const tourColumns = Object.entries(
         });
       });
 
-      const startLabel = `Start ${section.startTime || "--:--"}`;
-      context.font = "900 18px Arial";
-      const startWidth = context.measureText(startLabel).width + 18;
-      drawTextBox(
-        startLabel,
-        zone.startX / 100 * canvasWidth - startWidth / 2,
-        headerHeight + zone.startY / 100 * floorHeight - 15,
-        {
-          font: "900 18px Arial",
-          height: 30,
-          paddingX: 9,
-          paddingY: 6,
-          background: "rgba(236,253,245,0.96)",
-          border: "#047857",
-        }
-      );
     });
 
     personnelFloorPlanNotes.forEach((note) => {
@@ -4215,28 +4201,11 @@ const tourColumns = Object.entries(
             const displayName = section.name
               .replace("Waschmaschinen", "Wasch\u00admaschinen")
               .replace("Reinigungsmaschinen", "Reinigungs\u00admaschinen");
+            const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
             const zoneKey = `${zone.department}-${zone.section}`;
 
             return (
               <React.Fragment key={zoneKey}>
-                <div
-                  className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded border border-emerald-700 bg-emerald-50/95 px-1.5 py-0.5 text-[11px] font-black leading-none text-emerald-950 shadow-sm ${editable ? "cursor-grab touch-none select-none ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : "pointer-events-none"}`}
-                  style={{ left: `${zone.startX}%`, top: `${zone.startY}%` }}
-                  onPointerDown={editable ? (event) => {
-                    event.preventDefault();
-                    floorPlanDrag.current = `start:${zoneKey}`;
-                    event.currentTarget.setPointerCapture(event.pointerId);
-                  } : undefined}
-                  onPointerMove={editable ? (event) => moveFloorPlanZone(event, zoneKey, "start") : undefined}
-                  onPointerUp={editable ? (event) => {
-                    floorPlanDrag.current = null;
-                    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-                  } : undefined}
-                  onPointerCancel={editable ? () => { floorPlanDrag.current = null; } : undefined}
-                >
-                  Start {section.startTime || "--:--"}
-                </div>
-
                 <div
                   className={`absolute -translate-x-1/2 -translate-y-1/2 ${editable ? "cursor-grab touch-none select-none rounded bg-white/55 p-1 ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : ""}`}
                   style={{
@@ -4264,8 +4233,9 @@ const tourColumns = Object.entries(
                     setOverviewDragEmployee(null);
                   } : undefined}
                 >
-                  <div className={`border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
+                  <div className={`flex items-center gap-1 border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
                     <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
+                    {visibleStartTime && <span className="shrink-0 text-emerald-700">{visibleStartTime}</span>}
                   </div>
                   <div className="mt-0.5 flex flex-col items-start gap-px">
                     {assigned.map((name) => assignmentsEditable ? (
