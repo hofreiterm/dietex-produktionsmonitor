@@ -3733,12 +3733,12 @@ const tourColumns = Object.entries(
       const boxHeight = Math.max(48, padding * 2 + visibleLines.length * lineHeight);
       const left = Math.max(4, Math.min(canvasWidth - boxWidth - 4, centerX - boxWidth / 2));
       const top = Math.max(headerHeight + 4, Math.min(canvas.height - boxHeight - 4, centerY - boxHeight / 2));
-      context.fillStyle = "rgba(255,251,235,0.96)";
+      context.fillStyle = "rgba(253,224,71,0.96)";
       context.fillRect(left, top, boxWidth, boxHeight);
-      context.strokeStyle = "#f59e0b";
+      context.strokeStyle = "#dc2626";
       context.lineWidth = 4;
       context.strokeRect(left, top, boxWidth, boxHeight);
-      context.fillStyle = "#451a03";
+      context.fillStyle = "#b91c1c";
       visibleLines.forEach((line, index) => context.fillText(line, left + padding, top + padding + 22 + index * lineHeight));
     });
 
@@ -4120,9 +4120,9 @@ const tourColumns = Object.entries(
     };
     const visibleNotes = editable ? floorPlanNoteDraft : personnelFloorPlanNotes;
     return (
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <div className="flex justify-end border-b border-slate-200 bg-slate-50 p-2">
-          <div className={`${assignmentsEditable ? "pointer-events-auto" : "pointer-events-none"} max-h-52 w-full overflow-y-auto rounded-md border border-slate-300 bg-white p-1.5 shadow-sm lg:w-[72%] xl:w-[58%]`}>
+      <div className="relative overflow-hidden rounded-xl border bg-white shadow-sm">
+        <div className="pointer-events-none absolute right-[1.5%] top-[3%] z-30 w-[46%]">
+          <div className={`${assignmentsEditable ? "pointer-events-auto" : "pointer-events-none"} max-h-52 w-full overflow-y-auto rounded-md border border-slate-300 bg-white p-1.5 shadow-sm`}>
             <div className="mb-1 flex items-center justify-between border-b border-slate-200 pb-1 text-[9px] font-black leading-none text-slate-900">
               <span>Abwesenheiten &amp; Status</span>
               <span>{getPersonnelShiftLabel(personalShift)}</span>
@@ -4178,7 +4178,7 @@ const tourColumns = Object.entries(
           {visibleNotes.map((note) => (
             <div
               key={note.id}
-              className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-pre-wrap rounded border-2 border-amber-500 bg-amber-50/95 px-2 py-1 text-[13px] font-black leading-tight text-amber-950 shadow-sm ${editable ? "cursor-grab touch-none select-none ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : "pointer-events-none"}`}
+              className={`absolute z-20 -translate-x-1/2 -translate-y-1/2 whitespace-pre-wrap rounded border-2 border-red-600 bg-yellow-300/95 px-2 py-1 text-[13px] font-black leading-tight text-red-700 shadow-sm ${editable ? "cursor-grab touch-none select-none ring-2 ring-blue-600 ring-offset-1 active:cursor-grabbing" : "pointer-events-none"}`}
               style={{ left: `${note.x}%`, top: `${note.y}%`, width: `${note.w}%`, minWidth: "130px" }}
               onPointerDown={editable ? (event) => {
                 event.preventDefault();
@@ -5280,9 +5280,9 @@ const tourColumns = Object.entries(
                 </div>
                 <div className="grid gap-2">
                   {personnelNoteDraft.map((note, noteIndex) => (
-                    <div key={note.id} className="flex items-start gap-2 rounded-lg border bg-amber-50 p-2">
+                    <div key={note.id} className="flex items-start gap-2 rounded-lg border border-red-300 bg-yellow-300 p-2">
                       <textarea
-                        className="min-h-20 min-w-0 flex-1 resize-y rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                        className="min-h-20 min-w-0 flex-1 resize-y rounded-lg border border-red-400 bg-yellow-200 px-3 py-2 text-sm font-bold text-red-700 outline-none placeholder:text-red-400 focus:border-red-600 focus:ring-2 focus:ring-red-200"
                         value={note.text}
                         placeholder="Besonderheit eingeben"
                         onChange={(event) => setPersonnelNoteDraft((prev) => prev.map((entry, index) => index === noteIndex ? { ...entry, text: event.target.value } : entry))}
