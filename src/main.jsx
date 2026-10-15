@@ -3368,20 +3368,50 @@ const tourColumns = Object.entries(
     const previousShift = PERSONNEL_SHIFTS[idx - 1].key;
     const sourceKey = getPersonalKey(personalDate, previousShift, personalDepartment);
     const targetKey = getPersonalKey(personalDate, personalShift, personalDepartment);
-    const source = personalPlan[sourceKey];
-
-    if (!source) {
+    if (!personalPlan[sourceKey]) {
       window.alert("Für die vorherige Schicht ist kein Plan vorhanden.");
       return;
     }
 
-    const copiedPlan = Object.fromEntries(
-      Object.entries(source)
-        .filter(([zone]) => zone !== "start12")
-        .map(([zone, names]) => [zone, Array.isArray(names) ? [...names] : names])
-    );
+    setPersonalPlan((prev) => {
+      const source = prev[sourceKey];
+      if (!source) return prev;
 
-    setPersonalPlan((prev) => ({ ...prev, [targetKey]: copiedPlan }));
+      const copiedPlan = Object.fromEntries(
+        Object.entries(source)
+          .filter(([zone]) => zone !== "start12")
+          .map(([zone, names]) => [zone, Array.isArray(names) ? [...new Set(names.filter(Boolean))] : names])
+      );
+      const workplaceSections = sectionsForDepartment(personalDepartment).map((section) => section.name);
+      const workplaceAssignments = new Map();
+
+      workplaceSections.forEach((sectionName) => {
+        (copiedPlan[sectionName] || []).forEach((name) => {
+          const assignedSections = workplaceAssignments.get(name) || [];
+          assignedSections.push(sectionName);
+          workplaceAssignments.set(name, assignedSections);
+        });
+      });
+
+      workplaceAssignments.forEach((assignedSections, employeeName) => {
+        if (assignedSections.length < 2) return;
+
+        const employee = [
+          ...(personnelEmployeesByDept[personalDepartment] || []),
+          ...(personnelEmployeesByDept[personalDepartment === "waescherei" ? "putzerei" : "waescherei"] || []),
+        ].find((entry) => entry.name === employeeName);
+        const preferredSection = [employee?.preferredWorkplace1, employee?.preferredWorkplace2]
+          .find((sectionName) => assignedSections.includes(sectionName));
+        const sectionToKeep = preferredSection || assignedSections[assignedSections.length - 1];
+
+        assignedSections.forEach((sectionName) => {
+          if (sectionName === sectionToKeep) return;
+          copiedPlan[sectionName] = (copiedPlan[sectionName] || []).filter((name) => name !== employeeName);
+        });
+      });
+
+      return { ...prev, [targetKey]: copiedPlan };
+    });
   };
 
   const printPersonalPlanSafe = () => {
