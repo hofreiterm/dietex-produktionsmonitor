@@ -4412,10 +4412,9 @@ const tourColumns = Object.entries(
                     <span className="min-w-0 break-words">{zone.title}</span>
                     <span className="shrink-0">{zone.names.length}</span>
                   </div>
-                  <div className={`mt-0.5 text-[15px] font-black leading-tight ${assignmentsEditable ? "flex flex-wrap gap-1" : "break-words"}`}>
+                  <div className="mt-0.5 flex flex-wrap gap-1 text-[15px] font-black leading-tight">
                     {!zone.names.length && "-"}
-                    {zone.names.length > 0 && !assignmentsEditable && zone.names.join(", ")}
-                    {assignmentsEditable && zone.names.map((name) => (
+                    {zone.names.map((name) => assignmentsEditable ? (
                       <button
                         type="button"
                         key={`${zone.key}-${name}`}
@@ -4423,10 +4422,17 @@ const tourColumns = Object.entries(
                         onDragStart={() => setOverviewDragEmployee({ name, department: departmentForName(name, zone.key) })}
                         onDragEnd={() => setOverviewDragEmployee(null)}
                         onClick={() => selectPersonnelEmployee(name, departmentForName(name, zone.key))}
-                        className="cursor-grab rounded-sm border border-current/20 bg-white/90 px-1.5 py-0.5 text-left shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing"
+                        className="cursor-grab rounded-sm border border-black/30 bg-[#FFFF00] px-1.5 py-0.5 text-left text-black shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing"
                       >
                         {name}
                       </button>
+                    ) : (
+                      <span
+                        key={`${zone.key}-${name}`}
+                        className="rounded-sm border border-black/30 bg-[#FFFF00] px-1.5 py-0.5 text-black shadow-sm"
+                      >
+                        {name}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -4478,9 +4484,7 @@ const tourColumns = Object.entries(
                   ? "border-red-500"
                   : "border-green-600";
             const departmentClass = "text-emerald-950";
-            const employeeClass = zone.department === "waescherei"
-              ? "border-blue-300 bg-blue-100 text-blue-950"
-              : "border-violet-300 bg-violet-100 text-violet-950";
+            const employeeClass = "border-black/30 bg-[#FFFF00] text-black";
             const displayName = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
             const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
             const zoneKey = `${zone.department}-${zone.section}`;
