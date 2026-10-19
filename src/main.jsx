@@ -3317,16 +3317,18 @@ const tourColumns = Object.entries(
       })
       .map(({ section }) => section);
 
+    const eligibleEmployeesForSection = (section) => currentEmployees()
+      .filter((emp) => getEmployeeStatus(emp.name) === "anwesend")
+      .filter((emp) => isEmployeeRegularDay(emp))
+      .filter((emp) => isEmployeeRegularShift(emp))
+      .filter((emp) => !assigned.has(emp.name))
+      .filter((emp) => emp.noGoWorkplace1 !== section.name && emp.noGoWorkplace2 !== section.name)
+      .filter((emp) => isEmployeeAllowedInSection(emp.name, section));
+
     const fillSectionTo = (section, desiredCount) => {
       const missingCount = Math.max(0, desiredCount - (nextPlan[section.name] || []).length);
       if (missingCount <= 0) return;
-      const candidates = currentEmployees()
-        .filter((emp) => getEmployeeStatus(emp.name) === "anwesend")
-        .filter((emp) => isEmployeeRegularDay(emp))
-        .filter((emp) => isEmployeeRegularShift(emp))
-        .filter((emp) => !assigned.has(emp.name))
-        .filter((emp) => emp.noGoWorkplace1 !== section.name && emp.noGoWorkplace2 !== section.name)
-        .filter((emp) => isEmployeeAllowedInSection(emp.name, section))
+      const candidates = eligibleEmployeesForSection(section)
         .map((emp) => {
           let score = 0;
           const history = historyByEmployee[emp.name];
@@ -3353,9 +3355,21 @@ const tourColumns = Object.entries(
       });
     };
 
-    prioritizedSections
-      .filter((section) => section.priority === "must")
-      .forEach((section) => fillSectionTo(section, 1));
+    const uncoveredSections = prioritizedSections.filter((section) => {
+      const target = getSectionTarget(section);
+      return target !== null && target > 0;
+    });
+
+    while (uncoveredSections.length) {
+      uncoveredSections.sort((a, b) => {
+        const candidateDifference = eligibleEmployeesForSection(a).length - eligibleEmployeesForSection(b).length;
+        if (candidateDifference) return candidateDifference;
+        const restrictionDifference = Number(Boolean(b.restrictedEmployees)) - Number(Boolean(a.restrictedEmployees));
+        if (restrictionDifference) return restrictionDifference;
+        return prioritizedSections.indexOf(a) - prioritizedSections.indexOf(b);
+      });
+      fillSectionTo(uncoveredSections.shift(), 1);
+    }
 
     prioritizedSections.forEach((section) => {
       const target = getSectionTarget(section);
