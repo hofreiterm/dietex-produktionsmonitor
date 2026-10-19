@@ -16,6 +16,66 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
+  <script>
+    (function () {
+      if (typeof window.globalThis === "undefined") window.globalThis = window;
+
+      if (!Object.fromEntries) {
+        Object.fromEntries = function (entries) {
+          var result = {};
+          var iterator = entries[Symbol.iterator]();
+          var step;
+          while (!(step = iterator.next()).done) {
+            result[step.value[0]] = step.value[1];
+          }
+          return result;
+        };
+      }
+
+      if (!Array.prototype.flatMap) {
+        Object.defineProperty(Array.prototype, "flatMap", {
+          configurable: true,
+          writable: true,
+          value: function (callback, thisArg) {
+            var result = [];
+            for (var index = 0; index < this.length; index += 1) {
+              if (!(index in this)) continue;
+              var value = callback.call(thisArg, this[index], index, this);
+              if (Array.isArray(value)) result.push.apply(result, value);
+              else result.push(value);
+            }
+            return result;
+          },
+        });
+      }
+
+      if (!Array.prototype.at) {
+        Object.defineProperty(Array.prototype, "at", {
+          configurable: true,
+          writable: true,
+          value: function (index) {
+            var position = Number(index) || 0;
+            if (position < 0) position += this.length;
+            return this[position];
+          },
+        });
+      }
+
+      if (window.Promise && !Promise.prototype.finally) {
+        Promise.prototype.finally = function (callback) {
+          var PromiseConstructor = this.constructor;
+          return this.then(
+            function (value) {
+              return PromiseConstructor.resolve(callback()).then(function () { return value; });
+            },
+            function (reason) {
+              return PromiseConstructor.resolve(callback()).then(function () { throw reason; });
+            }
+          );
+        };
+      }
+    })();
+  </script>
   <script type="module" src="/src/main.jsx"></script>
 </head>
 

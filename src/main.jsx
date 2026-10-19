@@ -4423,6 +4423,7 @@ const tourColumns = Object.entries(
                         onDragEnd={() => setOverviewDragEmployee(null)}
                         onClick={() => selectPersonnelEmployee(name, departmentForName(name, zone.key))}
                         className="cursor-grab rounded-sm border border-black/30 bg-[#FFFF00] px-1.5 py-0.5 text-left text-black shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing"
+                        style={{ backgroundColor: "#FFFF00", color: "#000000" }}
                       >
                         {name}
                       </button>
@@ -4430,6 +4431,7 @@ const tourColumns = Object.entries(
                       <span
                         key={`${zone.key}-${name}`}
                         className="rounded-sm border border-black/30 bg-[#FFFF00] px-1.5 py-0.5 text-black shadow-sm"
+                        style={{ backgroundColor: "#FFFF00", color: "#000000" }}
                       >
                         {name}
                       </span>
@@ -4441,7 +4443,7 @@ const tourColumns = Object.entries(
           </div>
         </div>
 
-        <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "4638 / 2274" }}>
+        <div ref={floorPlanRef} className="relative w-full overflow-hidden bg-white" style={{ paddingTop: "49.03%" }}>
           <img
             src={personnelFloorPlanUrl}
             alt="Gebäudeplan Wäscherei und Putzerei"
@@ -4485,6 +4487,7 @@ const tourColumns = Object.entries(
                   : "border-green-600";
             const departmentClass = "text-emerald-950";
             const employeeClass = "border-black/30 bg-[#FFFF00] text-black";
+            const employeeStyle = { backgroundColor: "#FFFF00", color: "#000000" };
             const displayName = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
             const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
             const zoneKey = `${zone.department}-${zone.section}`;
@@ -4543,11 +4546,16 @@ const tourColumns = Object.entries(
                         }}
                         onClick={() => selectPersonnelEmployee(name, zone.department)}
                         className={`block w-max cursor-grab whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-left text-[18px] font-black leading-tight shadow-sm hover:ring-2 hover:ring-blue-500 active:cursor-grabbing ${employeeClass}`}
+                        style={employeeStyle}
                       >
                         {name}
                       </button>
                     ) : (
-                      <span key={name} className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[18px] font-black leading-tight shadow-sm ${employeeClass}`}>
+                      <span
+                        key={name}
+                        className={`block w-max whitespace-nowrap rounded-sm border px-1.5 py-0.5 text-[18px] font-black leading-tight shadow-sm ${employeeClass}`}
+                        style={employeeStyle}
+                      >
                         {name}
                       </span>
                     ))}
