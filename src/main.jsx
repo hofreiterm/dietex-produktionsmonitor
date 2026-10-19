@@ -2451,10 +2451,15 @@ const tourColumns = Object.entries(
   };
 
   const getPersonalKey = (date = personalDate, shift = personalShift, dept = personalDepartment) => `${dept}_${date}_${shift}`;
+  const isPersonnelOverviewStatusVisible = (zoneKey, shift = personalShift) => {
+    if (zoneKey === "end15") return shift !== "07-12";
+    if (zoneKey === "end18") return shift === "15-schluss";
+    return true;
+  };
   const getVisibleStatusNames = (zoneKey, names, shift = personalShift) => {
     if (zoneKey === "start12" && shift !== "07-12") return [];
     if (zoneKey === "end12" && shift === "07-12") return [];
-    if (zoneKey === "end15" && shift !== "15-schluss") return [];
+    if (!isPersonnelOverviewStatusVisible(zoneKey, shift)) return [];
     return names || [];
   };
 
@@ -3666,14 +3671,14 @@ const tourColumns = Object.entries(
       }] : []),
       { key: "end12", title: "Ende 12 Uhr", names: getVisibleStatusNames("end12", plan.end12) },
       { key: "end15", title: "Ende 15 Uhr", names: getVisibleStatusNames("end15", plan.end15) },
-      { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
+      { key: "end18", title: "Ende 18 Uhr", names: getVisibleStatusNames("end18", plan.end18) },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
       { key: "krank", title: "Krank", names: plan.krank || [] },
       { key: "sonstiges", title: "Büro/Tour/Sonstiges", names: plan.sonstiges || [] },
       ...(personalDepartment === "waescherei" ? [{ key: "putzerei", title: "Putzerei", names: plan.putzerei || [] }] : []),
       ...(personalDepartment === "putzerei" ? [{ key: "waescherei", title: "Wäscherei", names: plan.waescherei || [] }] : []),
-    ];
+    ].filter(({ key }) => isPersonnelOverviewStatusVisible(key));
 
     const measureCanvas = document.createElement("canvas");
     const measureContext = measureCanvas.getContext("2d");
@@ -3880,18 +3885,26 @@ const tourColumns = Object.entries(
       const baseTitle = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
       const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
       const title = `${baseTitle}${visibleStartTime ? ` · ${visibleStartTime}` : ""}`;
-      context.font = "900 20px Arial";
+      context.font = "900 27px Arial";
       const titleWidth = context.measureText(title).width + 20;
       const zoneWidth = Math.max(120, Number(zone.w || 5.2) / 100 * canvasWidth, titleWidth);
-      const totalHeight = assigned.length ? 82 + (assigned.length - 1) * 48 : 34;
+      const totalHeight = assigned.length ? 90 + (assigned.length - 1) * 48 : 42;
       const left = centerX - zoneWidth / 2;
       const top = Math.max(
         headerHeight + 4,
         Math.min(canvas.height - totalHeight - 4, centerY - totalHeight / 2),
       );
-      const titleBox = drawTextBox(title, left, top, { font: "900 20px Arial", height: 34, paddingY: 7, border, lineWidth: 5 });
+      const titleBox = drawTextBox(title, left, top, {
+        font: "900 27px Arial",
+        height: 42,
+        paddingY: 7,
+        color: "#065f46",
+        background: "rgba(236,253,245,0.96)",
+        border,
+        lineWidth: 5,
+      });
       assigned.forEach((name, index) => {
-        drawTextBox(name, titleBox.left, top + 38 + index * 48, {
+        drawTextBox(name, titleBox.left, top + 46 + index * 48, {
           font: "900 30px Arial",
           height: 44,
           paddingY: 7,
@@ -3961,16 +3974,16 @@ const tourColumns = Object.entries(
       .sort((a, b) => a.localeCompare(b, "de"));
     const uniqueNames = (names) => [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
     const statusRows = [
-      { title: "Start 12 Uhr", names: uniqueNames(getVisibleStatusNames("start12", start12Names, shiftKey)), color: "#ecfdf5", border: "#059669" },
-      { title: "Ende 12 Uhr", names: uniqueNames(getVisibleStatusNames("end12", [...(plans.waescherei.end12 || []), ...(plans.putzerei.end12 || [])], shiftKey)), color: "#ecfeff", border: "#0891b2" },
-      { title: "Ende 15 Uhr", names: uniqueNames(getVisibleStatusNames("end15", [...(plans.waescherei.end15 || []), ...(plans.putzerei.end15 || [])], shiftKey)), color: "#f0f9ff", border: "#0284c7" },
-      { title: "Ende 18 Uhr", names: uniqueNames([...(plans.waescherei.end18 || []), ...(plans.putzerei.end18 || [])]), color: "#eef2ff", border: "#4f46e5" },
+      { key: "start12", title: "Start 12 Uhr", names: uniqueNames(getVisibleStatusNames("start12", start12Names, shiftKey)), color: "#ecfdf5", border: "#059669" },
+      { key: "end12", title: "Ende 12 Uhr", names: uniqueNames(getVisibleStatusNames("end12", [...(plans.waescherei.end12 || []), ...(plans.putzerei.end12 || [])], shiftKey)), color: "#ecfeff", border: "#0891b2" },
+      { key: "end15", title: "Ende 15 Uhr", names: uniqueNames(getVisibleStatusNames("end15", [...(plans.waescherei.end15 || []), ...(plans.putzerei.end15 || [])], shiftKey)), color: "#f0f9ff", border: "#0284c7" },
+      { key: "end18", title: "Ende 18 Uhr", names: uniqueNames(getVisibleStatusNames("end18", [...(plans.waescherei.end18 || []), ...(plans.putzerei.end18 || [])], shiftKey)), color: "#eef2ff", border: "#4f46e5" },
       { title: "Urlaub", names: uniqueNames([...(plans.waescherei.urlaub || []), ...(plans.putzerei.urlaub || [])]), color: "#eff6ff", border: "#3b82f6" },
       { title: "ZA", names: uniqueNames([...(plans.waescherei.za || []), ...(plans.putzerei.za || [])]), color: "#fffbeb", border: "#f59e0b" },
       { title: "Krank", names: uniqueNames([...(plans.waescherei.krank || []), ...(plans.putzerei.krank || [])]), color: "#fef2f2", border: "#ef4444" },
       { title: "Büro/Tour/Sonstiges", names: uniqueNames([...(plans.waescherei.sonstiges || []), ...(plans.putzerei.sonstiges || [])]), color: "#f8fafc", border: "#475569" },
       { title: "Nicht eingeteilt", names: uniqueNames(unassignedNames), color: "#f8fafc", border: "#64748b" },
-    ];
+    ].filter(({ key }) => isPersonnelOverviewStatusVisible(key, shiftKey));
     const panelX = 900;
     const panelY = 44;
     const panelWidth = 1450;
@@ -4314,7 +4327,7 @@ const tourColumns = Object.entries(
       { key: "start12", title: "Start 12 Uhr", names: uniqueSortedNames(getVisibleStatusNames("start12", start12Names)), color: "border-emerald-600 bg-emerald-50/95 text-emerald-950" },
       { key: "end12", title: "Ende 12 Uhr", names: uniqueSortedNames(getVisibleStatusNames("end12", [...(waeschereiPlan.end12 || []), ...(putzereiPlan.end12 || [])])), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
       { key: "end15", title: "Ende 15 Uhr", names: uniqueSortedNames(getVisibleStatusNames("end15", [...(waeschereiPlan.end15 || []), ...(putzereiPlan.end15 || [])])), color: "border-sky-600 bg-sky-50/95 text-sky-950" },
-      { key: "end18", title: "Ende 18 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end18 || []), ...(putzereiPlan.end18 || [])]), color: "border-indigo-600 bg-indigo-50/95 text-indigo-950" },
+      { key: "end18", title: "Ende 18 Uhr", names: uniqueSortedNames(getVisibleStatusNames("end18", [...(waeschereiPlan.end18 || []), ...(putzereiPlan.end18 || [])])), color: "border-indigo-600 bg-indigo-50/95 text-indigo-950" },
       { key: "urlaub", title: "Urlaub", names: uniqueSortedNames([...(waeschereiPlan.urlaub || []), ...(putzereiPlan.urlaub || [])]), color: "border-blue-500 bg-blue-50/95 text-blue-950" },
       { key: "za", title: "ZA", names: uniqueSortedNames([...(waeschereiPlan.za || []), ...(putzereiPlan.za || [])]), color: "border-amber-500 bg-amber-50/95 text-amber-950" },
       { key: "krank", title: "Krank", names: uniqueSortedNames([...(waeschereiPlan.krank || []), ...(putzereiPlan.krank || [])]), color: "border-red-500 bg-red-50/95 text-red-950" },
@@ -4323,7 +4336,7 @@ const tourColumns = Object.entries(
         ...unassignedNamesForDepartment("waescherei"),
         ...unassignedNamesForDepartment("putzerei"),
       ]), color: "border-slate-500 bg-slate-50/95 text-slate-950" },
-    ];
+    ].filter(({ key }) => isPersonnelOverviewStatusVisible(key));
     const departmentForName = (name, zoneKey) => {
       if ((waeschereiPlan[zoneKey] || []).includes(name) || (zoneKey === "start12" && start12Names.includes(name))) return "waescherei";
       if ((putzereiPlan[zoneKey] || []).includes(name)) return "putzerei";
@@ -4422,7 +4435,7 @@ const tourColumns = Object.entries(
                 : assigned.length > target
                   ? "border-red-500"
                   : "border-green-600";
-            const departmentClass = zone.department === "waescherei" ? "text-blue-950" : "text-violet-950";
+            const departmentClass = "text-emerald-950";
             const employeeClass = zone.department === "waescherei"
               ? "border-blue-300 bg-blue-100 text-blue-950"
               : "border-violet-300 bg-violet-100 text-violet-950";
@@ -4461,9 +4474,9 @@ const tourColumns = Object.entries(
                     setOverviewDragEmployee(null);
                   } : undefined}
                 >
-                  <div className={`flex items-center gap-1 border-l-4 bg-white/95 px-1 py-0.5 text-[9px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
+                  <div className={`flex items-center gap-1 border-l-4 bg-emerald-50/95 px-1.5 py-0.5 text-[16px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
                     <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
-                    {visibleStartTime && <span className="shrink-0 text-emerald-700">{visibleStartTime}</span>}
+                    {visibleStartTime && <span className="shrink-0 text-emerald-800">{visibleStartTime}</span>}
                   </div>
                   <div className="mt-0.5 flex flex-col items-start gap-px">
                     {assigned.map((name) => assignmentsEditable ? (
@@ -4954,13 +4967,13 @@ const tourColumns = Object.entries(
       { key: "pool", title: "Nicht eingeteilt", names: getUnassignedEmployees().map((employee) => employee.name) },
       { key: "end12", title: "Ende 12 Uhr", names: getVisibleStatusNames("end12", plan.end12) },
       { key: "end15", title: "Ende 15 Uhr", names: getVisibleStatusNames("end15", plan.end15) },
-      { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
+      { key: "end18", title: "Ende 18 Uhr", names: getVisibleStatusNames("end18", plan.end18) },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
       { key: "krank", title: "Krank", names: plan.krank || [] },
       { key: "sonstiges", title: "Büro/Tour/Sonstiges", names: plan.sonstiges || [] },
       { key: "putzerei", title: "Putzerei", names: plan.putzerei || [] },
-    ];
+    ].filter(({ key }) => isPersonnelOverviewStatusVisible(key));
 
     return (
       <aside className="rounded-xl border bg-white p-3 shadow-sm">
