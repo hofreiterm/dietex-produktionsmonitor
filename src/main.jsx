@@ -3061,39 +3061,52 @@ const tourColumns = Object.entries(
       return;
     }
 
-    const sourcePlans = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
-      shift.key,
-      personalPlan[getPersonalKey(copyPersonalDate, shift.key, personalDepartment)],
-    ]));
-    const existingSourceShifts = PERSONNEL_SHIFTS.filter((shift) => sourcePlans[shift.key]);
-    if (!existingSourceShifts.length) {
-      window.alert(`Für ${copyPersonalDate} wurde bei ${currentDepartmentConfig().label} keine Einteilung gefunden.`);
+    const sourceDepartments = Object.entries(PERSONNEL_DEPARTMENTS)
+      .map(([department, config]) => {
+        const plans = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
+          shift.key,
+          personalPlan[getPersonalKey(copyPersonalDate, shift.key, department)],
+        ]));
+        return { department, label: config.label, plans };
+      })
+      .filter(({ plans }) => PERSONNEL_SHIFTS.some((shift) => plans[shift.key]));
+
+    if (!sourceDepartments.length) {
+      window.alert(`Für ${copyPersonalDate} wurde keine Einteilung gefunden.`);
       return;
     }
 
-    if (!window.confirm(`Kompletten Tag ${currentDepartmentConfig().label} vom ${copyPersonalDate} auf ${personalDate} kopieren? Die drei Zielschichten werden ersetzt.`)) return;
+    const copiedLabels = sourceDepartments.map(({ label }) => label).join(" und ");
+    if (!window.confirm(`Kompletten Tag vom ${copyPersonalDate} auf ${personalDate} kopieren? Für ${copiedLabels} werden alle drei Zielschichten ersetzt.`)) return;
 
     setPersonalPlan((prev) => {
       const next = { ...prev };
 
-      PERSONNEL_SHIFTS.forEach((shift) => {
-        const targetKey = getPersonalKey(personalDate, shift.key);
-        next[targetKey] = sourcePlans[shift.key]
-          ? JSON.parse(JSON.stringify(sourcePlans[shift.key]))
-          : {};
+      sourceDepartments.forEach(({ department, plans }) => {
+        PERSONNEL_SHIFTS.forEach((shift) => {
+          const targetKey = getPersonalKey(personalDate, shift.key, department);
+          next[targetKey] = plans[shift.key]
+            ? JSON.parse(JSON.stringify(plans[shift.key]))
+            : {};
+        });
       });
 
       return next;
     });
 
-    const sourceStrengthKey = `${personalDepartment}_${copyPersonalDate}`;
-    const targetStrengthKey = `${personalDepartment}_${personalDate}`;
-    setPersonnelDayStrengthByDate((prev) => ({
-      ...prev,
-      [targetStrengthKey]: prev[sourceStrengthKey] || "mittel",
-    }));
+    setPersonnelDayStrengthByDate((prev) => {
+      const next = { ...prev };
+      sourceDepartments.forEach(({ department }) => {
+        const sourceStrengthKey = `${department}_${copyPersonalDate}`;
+        const targetStrengthKey = `${department}_${personalDate}`;
+        next[targetStrengthKey] = prev[sourceStrengthKey] || "mittel";
+      });
+      return next;
+    });
 
-    window.alert(`Der Tag wurde für ${currentDepartmentConfig().label} mit allen drei Schichten kopiert.`);
+    window.setTimeout(() => {
+      window.alert(`Der Tag wurde für ${copiedLabels} mit allen drei Schichten kopiert.`);
+    }, 0);
   };
 
   const addPersonnelEmployee = () => {
