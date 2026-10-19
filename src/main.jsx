@@ -90,12 +90,6 @@ const PERSONNEL_SHIFTS = [
   { key: "15-schluss", label: "15:00–Schluss" },
 ];
 
-const PERSONNEL_TV_SHIFT_LABELS = {
-  "07-12": "1. Schicht – 11:00 Uhr",
-  "12-15": "2. Schicht 11:00–14:30 Uhr",
-  "15-schluss": "3. Schicht 14:30–21:00 Uhr",
-};
-
 const DEFAULT_PERSONNEL_SHIFT_LABELS = Object.fromEntries(
   PERSONNEL_SHIFTS.map((shift) => [shift.key, shift.label])
 );
@@ -2396,8 +2390,6 @@ const tourColumns = Object.entries(
   const getPersonnelShiftLabel = (shiftKey) => personnelShiftLabels[shiftKey]
     || PERSONNEL_SHIFTS.find((shift) => shift.key === shiftKey)?.label
     || shiftKey;
-  const getPersonnelTvShiftLabel = (shiftKey) => PERSONNEL_TV_SHIFT_LABELS[shiftKey]
-    || getPersonnelShiftLabel(shiftKey);
   const openPersonnelShiftEditor = () => {
     setPersonnelShiftDraft({ ...DEFAULT_PERSONNEL_SHIFT_LABELS, ...personnelShiftLabels });
     setPersonnelShiftModal(true);
@@ -6506,7 +6498,7 @@ const tourColumns = Object.entries(
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-4xl font-black leading-tight">{getPersonnelTvShiftLabel(personalShift)}</div>
+                  <div className="text-4xl font-black leading-tight">{getPersonnelShiftLabel(personalShift)}</div>
                   <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-red-700"}`}>
                     {personnelSyncStatus === "connected" ? "Automatisch aktuell" : personnelSyncStatus === "waiting" ? "Warte auf die erste Planung" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
                   </div>
