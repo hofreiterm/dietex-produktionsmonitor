@@ -3410,7 +3410,30 @@ const tourColumns = Object.entries(
         });
       });
 
-      return { ...prev, [targetKey]: copiedPlan };
+      if (personalShift === "15-schluss") {
+        const end15Names = new Set(copiedPlan.end15 || []);
+        workplaceSections.forEach((sectionName) => {
+          copiedPlan[sectionName] = (copiedPlan[sectionName] || []).filter((name) => !end15Names.has(name));
+        });
+        copiedPlan.waescherei = (copiedPlan.waescherei || []).filter((name) => !end15Names.has(name));
+        copiedPlan.putzerei = (copiedPlan.putzerei || []).filter((name) => !end15Names.has(name));
+      }
+
+      const assignedNames = new Set(
+        workplaceSections.flatMap((sectionName) => copiedPlan[sectionName] || [])
+      );
+      const updatedPlans = { ...prev, [targetKey]: copiedPlan };
+
+      if (assignedNames.size) {
+        const start12Key = getPersonalKey(personalDate, "07-12", "waescherei");
+        const start12Plan = updatedPlans[start12Key] || prev[start12Key] || {};
+        updatedPlans[start12Key] = {
+          ...start12Plan,
+          start12: (start12Plan.start12 || []).filter((name) => !assignedNames.has(name)),
+        };
+      }
+
+      return updatedPlans;
     });
   };
 
