@@ -2451,9 +2451,12 @@ const tourColumns = Object.entries(
   };
 
   const getPersonalKey = (date = personalDate, shift = personalShift, dept = personalDepartment) => `${dept}_${date}_${shift}`;
-  const getVisibleStatusNames = (zoneKey, names, shift = personalShift) => (
-    zoneKey === "end15" && shift !== "15-schluss" ? [] : names || []
-  );
+  const getVisibleStatusNames = (zoneKey, names, shift = personalShift) => {
+    if (zoneKey === "start12" && shift !== "07-12") return [];
+    if (zoneKey === "end12" && shift === "07-12") return [];
+    if (zoneKey === "end15" && shift !== "15-schluss") return [];
+    return names || [];
+  };
 
   const getCurrentPersonalPlan = () => personalPlan[getPersonalKey()] || {};
 
@@ -2490,20 +2493,38 @@ const tourColumns = Object.entries(
       return false;
     }
 
-    const endsAt15 = ["waescherei", "putzerei"].some((planDepartment) => (
+    const hasTimingStatus = (statusKey) => ["waescherei", "putzerei"].some((planDepartment) => (
       PERSONNEL_SHIFTS.some((shift) => (
-        (personalPlan[getPersonalKey(personalDate, shift.key, planDepartment)]?.end15 || []).includes(employeeName)
+        (personalPlan[getPersonalKey(personalDate, shift.key, planDepartment)]?.[statusKey] || []).includes(employeeName)
       ))
     ));
-    if (isWorkplace && targetShift === "15-schluss" && endsAt15) {
+
+    if (isWorkplace && targetShift === "07-12" && hasTimingStatus("start12")) {
+      window.alert(`${employeeName} ist mit Start 12 Uhr eingetragen und kann nicht in der ersten Schicht eingesetzt werden.`);
+      return false;
+    }
+    if (isWorkplace && targetShift !== "07-12" && hasTimingStatus("end12")) {
+      window.alert(`${employeeName} ist mit Ende 12 Uhr eingetragen und kann nur in der ersten Schicht eingesetzt werden.`);
+      return false;
+    }
+    if (isWorkplace && targetShift === "15-schluss" && hasTimingStatus("end15")) {
       window.alert(`${employeeName} ist mit Ende 15 Uhr eingetragen und kann nicht in der dritten Schicht eingesetzt werden.`);
       return false;
     }
 
-    if (sectionName === "end15" || sectionName === "end18") {
+    if (["start12", "end12", "end15", "end18"].includes(sectionName)) {
+      if (sectionName === "start12" && department !== "waescherei") return false;
+      const allowedShiftsByTimingZone = {
+        start12: new Set(["12-15", "15-schluss"]),
+        end12: new Set(["07-12"]),
+        end15: new Set(["07-12", "12-15"]),
+        end18: new Set(PERSONNEL_SHIFTS.map((shift) => shift.key)),
+      };
+      const allowedShifts = allowedShiftsByTimingZone[sectionName];
+
       setPersonalPlan((prev) => {
         const updatedPlans = { ...prev };
-        const timingZones = ["end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges"];
+        const timingZones = ["start12", "end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges"];
 
         PERSONNEL_SHIFTS.forEach((shift) => {
           ["waescherei", "putzerei"].forEach((planDepartment) => {
@@ -2517,11 +2538,14 @@ const tourColumns = Object.entries(
               }
             });
 
-            if (planDepartment === department) {
+            const storesStatus = sectionName === "start12"
+              ? planDepartment === "waescherei" && shift.key === "07-12"
+              : planDepartment === department;
+            if (storesStatus) {
               next[sectionName] = [...new Set([...(next[sectionName] || []), employeeName])];
             }
 
-            if (sectionName === "end15" && shift.key === "15-schluss") {
+            if (!allowedShifts.has(shift.key)) {
               sectionsForDepartment(planDepartment).forEach((section) => {
                 next[section.name] = (current[section.name] || []).filter((name) => name !== employeeName);
               });
@@ -2538,33 +2562,10 @@ const tourColumns = Object.entries(
       return true;
     }
 
-    if (sectionName === "start12") {
-      if (department !== "waescherei") return false;
-      setPersonalPlan((prev) => {
-        const updatedPlans = { ...prev };
-        PERSONNEL_SHIFTS.forEach((shift) => {
-          const key = getPersonalKey(personalDate, shift.key, "waescherei");
-          const current = prev[key] || {};
-          const next = { ...current };
-          const zonesToClear = shift.key === "07-12"
-            ? allPlanningZones("waescherei")
-            : ["start12", "end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"];
-          zonesToClear.forEach((zone) => {
-            if (zone === "end15" || zone === "end18") return;
-            next[zone] = (current[zone] || []).filter((name) => name !== employeeName);
-          });
-          if (shift.key === "07-12") next.start12 = [...(next.start12 || []), employeeName];
-          updatedPlans[key] = next;
-        });
-        return updatedPlans;
-      });
-      return true;
-    }
-
     setPersonalPlan((prev) => {
       const allZones = allPlanningZones(department);
       const globalZones = new Set(["end12", "end15", "end18", "urlaub", "za", "krank", "sonstiges", "waescherei", "putzerei"]);
-      const independentTimingZones = new Set(["end15", "end18"]);
+      const independentTimingZones = new Set(["start12", "end12", "end15", "end18"]);
       const isPlacementDestination = isWorkplace || sectionName === "pool" || sectionName === "waescherei" || sectionName === "putzerei";
       const hasGlobalAssignment = PERSONNEL_SHIFTS.some((shift) => {
         const shiftPlan = prev[getPersonalKey(personalDate, shift.key, department)] || {};
@@ -2603,15 +2604,6 @@ const tourColumns = Object.entries(
             ])
           );
         });
-      }
-
-      if (targetShift !== "07-12" && sectionName !== "pool") {
-        const start12Key = getPersonalKey(personalDate, "07-12", "waescherei");
-        const start12Plan = updatedPlans[start12Key] || prev[start12Key] || {};
-        updatedPlans[start12Key] = {
-          ...start12Plan,
-          start12: (start12Plan.start12 || []).filter((name) => name !== employeeName),
-        };
       }
 
       return updatedPlans;
@@ -2738,11 +2730,28 @@ const tourColumns = Object.entries(
     [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), "de", { numeric: true }));
 
   const getUnassignedEmployees = () => {
+    const plan = getCurrentPersonalPlan();
     const start12Names = personalDepartment === "waescherei"
       ? personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []
       : [];
+    const assignedNames = new Set([
+      ...currentSections().flatMap((section) => plan[section.name] || []),
+      ...(plan.waescherei || []),
+      ...(plan.putzerei || []),
+    ]);
+    const unavailableNames = new Set([
+      ...(plan.urlaub || []),
+      ...(plan.za || []),
+      ...(plan.krank || []),
+      ...(plan.sonstiges || []),
+      ...(personalShift === "07-12" ? start12Names : []),
+      ...(personalShift === "07-12" ? [] : plan.end12 || []),
+      ...(personalShift === "15-schluss" ? plan.end15 || [] : []),
+    ]);
     return getSortedEmployees(
-      getActiveEmployees().filter((employee) => !getEmployeeAssignment(employee.name) && !start12Names.includes(employee.name))
+      getActiveEmployees().filter((employee) => (
+        !assignedNames.has(employee.name) && !unavailableNames.has(employee.name)
+      ))
     );
   };
 
@@ -3274,7 +3283,7 @@ const tourColumns = Object.entries(
     });
 
     const unavailable = new Set([
-      ...nextPlan.end12,
+      ...(personalShift === "07-12" ? [] : nextPlan.end12),
       ...(personalShift === "15-schluss" ? nextPlan.end15 : []),
       ...nextPlan.urlaub,
       ...nextPlan.za,
@@ -3377,25 +3386,7 @@ const tourColumns = Object.entries(
       fillSectionTo(section, target);
     });
 
-    const assignedStart12Names = personalDepartment === "waescherei" && personalShift !== "07-12"
-      ? new Set(currentSections().flatMap((section) => nextPlan[section.name] || []).filter((name) => start12Names.includes(name)))
-      : new Set();
-
-    setPersonalPlan((prev) => {
-      const updatedPlans = {
-        ...prev,
-        [currentKey]: nextPlan,
-      };
-      if (assignedStart12Names.size) {
-        const start12Key = getPersonalKey(personalDate, "07-12", "waescherei");
-        const start12Plan = updatedPlans[start12Key] || prev[start12Key] || {};
-        updatedPlans[start12Key] = {
-          ...start12Plan,
-          start12: (start12Plan.start12 || []).filter((name) => !assignedStart12Names.has(name)),
-        };
-      }
-      return updatedPlans;
-    });
+    setPersonalPlan((prev) => ({ ...prev, [currentKey]: nextPlan }));
   };
 
   const absenceStatsRows = () => {
@@ -3546,30 +3537,19 @@ const tourColumns = Object.entries(
         });
       });
 
+      const timingBlockedNames = new Set(copiedPlan.end12 || []);
       if (personalShift === "15-schluss") {
-        const end15Names = new Set(copiedPlan.end15 || []);
+        (copiedPlan.end15 || []).forEach((name) => timingBlockedNames.add(name));
+      }
+      if (timingBlockedNames.size) {
         workplaceSections.forEach((sectionName) => {
-          copiedPlan[sectionName] = (copiedPlan[sectionName] || []).filter((name) => !end15Names.has(name));
+          copiedPlan[sectionName] = (copiedPlan[sectionName] || []).filter((name) => !timingBlockedNames.has(name));
         });
-        copiedPlan.waescherei = (copiedPlan.waescherei || []).filter((name) => !end15Names.has(name));
-        copiedPlan.putzerei = (copiedPlan.putzerei || []).filter((name) => !end15Names.has(name));
+        copiedPlan.waescherei = (copiedPlan.waescherei || []).filter((name) => !timingBlockedNames.has(name));
+        copiedPlan.putzerei = (copiedPlan.putzerei || []).filter((name) => !timingBlockedNames.has(name));
       }
 
-      const assignedNames = new Set(
-        workplaceSections.flatMap((sectionName) => copiedPlan[sectionName] || [])
-      );
-      const updatedPlans = { ...prev, [targetKey]: copiedPlan };
-
-      if (assignedNames.size) {
-        const start12Key = getPersonalKey(personalDate, "07-12", "waescherei");
-        const start12Plan = updatedPlans[start12Key] || prev[start12Key] || {};
-        updatedPlans[start12Key] = {
-          ...start12Plan,
-          start12: (start12Plan.start12 || []).filter((name) => !assignedNames.has(name)),
-        };
-      }
-
-      return updatedPlans;
+      return { ...prev, [targetKey]: copiedPlan };
     });
   };
 
@@ -3647,9 +3627,9 @@ const tourColumns = Object.entries(
       ...(personalDepartment === "waescherei" ? [{
         key: "start12",
         title: "Start 12 Uhr",
-        names: personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [],
+        names: getVisibleStatusNames("start12", personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []),
       }] : []),
-      { key: "end12", title: "Ende 12 Uhr", names: plan.end12 || [] },
+      { key: "end12", title: "Ende 12 Uhr", names: getVisibleStatusNames("end12", plan.end12) },
       { key: "end15", title: "Ende 15 Uhr", names: getVisibleStatusNames("end15", plan.end15) },
       { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
@@ -3923,21 +3903,31 @@ const tourColumns = Object.entries(
       waescherei: planForDepartment("waescherei", shiftKey),
       putzerei: planForDepartment("putzerei", shiftKey),
     };
-    const assignedNames = new Set(
-      Object.values(plans).flatMap((plan) => Object.values(plan).flatMap((names) => Array.isArray(names) ? names : [])),
-    );
     const start12Names = personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [];
-    start12Names.forEach((name) => assignedNames.add(name));
+    const assignedNames = new Set(["waescherei", "putzerei"].flatMap((department) => [
+      ...sectionsForDepartment(department).flatMap((section) => plans[department][section.name] || []),
+      ...(plans[department].waescherei || []),
+      ...(plans[department].putzerei || []),
+    ]));
+    const unavailableNames = new Set(["waescherei", "putzerei"].flatMap((department) => [
+      ...(plans[department].urlaub || []),
+      ...(plans[department].za || []),
+      ...(plans[department].krank || []),
+      ...(plans[department].sonstiges || []),
+      ...(shiftKey === "07-12" && department === "waescherei" ? start12Names : []),
+      ...(shiftKey === "07-12" ? [] : plans[department].end12 || []),
+      ...(shiftKey === "15-schluss" ? plans[department].end15 || [] : []),
+    ]));
     const unassignedNames = Object.entries(personnelEmployeesByDept)
       .flatMap(([department, employees]) => (employees || [])
         .filter((employee) => (employeeStatus[`${department}_${employee.name}`] || "anwesend") === "anwesend")
       .map((employee) => employee.name))
-      .filter((name) => !assignedNames.has(name))
+      .filter((name) => !assignedNames.has(name) && !unavailableNames.has(name))
       .sort((a, b) => a.localeCompare(b, "de"));
     const uniqueNames = (names) => [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
     const statusRows = [
-      { title: "Start 12 Uhr", names: uniqueNames(start12Names), color: "#ecfdf5", border: "#059669" },
-      { title: "Ende 12 Uhr", names: uniqueNames([...(plans.waescherei.end12 || []), ...(plans.putzerei.end12 || [])]), color: "#ecfeff", border: "#0891b2" },
+      { title: "Start 12 Uhr", names: uniqueNames(getVisibleStatusNames("start12", start12Names, shiftKey)), color: "#ecfdf5", border: "#059669" },
+      { title: "Ende 12 Uhr", names: uniqueNames(getVisibleStatusNames("end12", [...(plans.waescherei.end12 || []), ...(plans.putzerei.end12 || [])], shiftKey)), color: "#ecfeff", border: "#0891b2" },
       { title: "Ende 15 Uhr", names: uniqueNames(getVisibleStatusNames("end15", [...(plans.waescherei.end15 || []), ...(plans.putzerei.end15 || [])], shiftKey)), color: "#f0f9ff", border: "#0284c7" },
       { title: "Ende 18 Uhr", names: uniqueNames([...(plans.waescherei.end18 || []), ...(plans.putzerei.end18 || [])]), color: "#eef2ff", border: "#4f46e5" },
       { title: "Urlaub", names: uniqueNames([...(plans.waescherei.urlaub || []), ...(plans.putzerei.urlaub || [])]), color: "#eff6ff", border: "#3b82f6" },
@@ -4265,19 +4255,29 @@ const tourColumns = Object.entries(
       .sort((a, b) => String(a).localeCompare(String(b), "de", { numeric: true }));
     const unassignedNamesForDepartment = (department) => {
       const departmentPlan = planForDepartment(department);
-      const assignedNames = new Set(
-        Object.values(departmentPlan).flatMap((names) => Array.isArray(names) ? names : [])
-      );
-      if (department === "waescherei") start12Names.forEach((name) => assignedNames.add(name));
+      const assignedNames = new Set([
+        ...sectionsForDepartment(department).flatMap((section) => departmentPlan[section.name] || []),
+        ...(departmentPlan.waescherei || []),
+        ...(departmentPlan.putzerei || []),
+      ]);
+      const unavailableNames = new Set([
+        ...(departmentPlan.urlaub || []),
+        ...(departmentPlan.za || []),
+        ...(departmentPlan.krank || []),
+        ...(departmentPlan.sonstiges || []),
+        ...(department === "waescherei" && personalShift === "07-12" ? start12Names : []),
+        ...(personalShift === "07-12" ? [] : departmentPlan.end12 || []),
+        ...(personalShift === "15-schluss" ? departmentPlan.end15 || [] : []),
+      ]);
       const employees = personnelEmployeesByDept[department] || PERSONNEL_DEPARTMENTS[department]?.employees || [];
       return employees
         .filter((employee) => (employeeStatus[`${department}_${employee.name}`] || "anwesend") === "anwesend")
-        .filter((employee) => !assignedNames.has(employee.name))
+        .filter((employee) => !assignedNames.has(employee.name) && !unavailableNames.has(employee.name))
         .map((employee) => employee.name);
     };
     const statusZones = [
-      { key: "start12", title: "Start 12 Uhr", names: uniqueSortedNames(start12Names), color: "border-emerald-600 bg-emerald-50/95 text-emerald-950" },
-      { key: "end12", title: "Ende 12 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end12 || []), ...(putzereiPlan.end12 || [])]), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
+      { key: "start12", title: "Start 12 Uhr", names: uniqueSortedNames(getVisibleStatusNames("start12", start12Names)), color: "border-emerald-600 bg-emerald-50/95 text-emerald-950" },
+      { key: "end12", title: "Ende 12 Uhr", names: uniqueSortedNames(getVisibleStatusNames("end12", [...(waeschereiPlan.end12 || []), ...(putzereiPlan.end12 || [])])), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
       { key: "end15", title: "Ende 15 Uhr", names: uniqueSortedNames(getVisibleStatusNames("end15", [...(waeschereiPlan.end15 || []), ...(putzereiPlan.end15 || [])])), color: "border-sky-600 bg-sky-50/95 text-sky-950" },
       { key: "end18", title: "Ende 18 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end18 || []), ...(putzereiPlan.end18 || [])]), color: "border-indigo-600 bg-indigo-50/95 text-indigo-950" },
       { key: "urlaub", title: "Urlaub", names: uniqueSortedNames([...(waeschereiPlan.urlaub || []), ...(putzereiPlan.urlaub || [])]), color: "border-blue-500 bg-blue-50/95 text-blue-950" },
@@ -4865,10 +4865,11 @@ const tourColumns = Object.entries(
           {absenceZones.map((zone) => {
             const zoneNames = zone.key === "start12"
               ? personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []
-              : null;
-            const zoneEmployees = getSortedEmployees(getVisibleStatusNames(zone.key, zoneNames
-              ? currentEmployees().filter((employee) => zoneNames.includes(employee.name))
-              : currentEmployees().filter((employee) => getEmployeeAssignment(employee.name) === zone.key)));
+              : getCurrentPersonalPlan()[zone.key] || [];
+            const zoneEmployees = getSortedEmployees(getVisibleStatusNames(
+              zone.key,
+              currentEmployees().filter((employee) => zoneNames.includes(employee.name)),
+            ));
 
             return (
               <div
@@ -4916,7 +4917,7 @@ const tourColumns = Object.entries(
     const plan = getCurrentPersonalPlan();
     const zones = [
       { key: "pool", title: "Nicht eingeteilt", names: getUnassignedEmployees().map((employee) => employee.name) },
-      { key: "end12", title: "Ende 12 Uhr", names: plan.end12 || [] },
+      { key: "end12", title: "Ende 12 Uhr", names: getVisibleStatusNames("end12", plan.end12) },
       { key: "end15", title: "Ende 15 Uhr", names: getVisibleStatusNames("end15", plan.end15) },
       { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
