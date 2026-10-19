@@ -3056,22 +3056,44 @@ const tourColumns = Object.entries(
       window.alert("Bitte Kopierdatum auswählen.");
       return;
     }
+    if (copyPersonalDate === personalDate) {
+      window.alert("Quelltag und Zieltag sind identisch. Bitte zwei unterschiedliche Tage auswählen.");
+      return;
+    }
 
-    if (!window.confirm(`Einteilung vom ${copyPersonalDate} auf ${personalDate} kopieren?`)) return;
+    const sourcePlans = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
+      shift.key,
+      personalPlan[getPersonalKey(copyPersonalDate, shift.key, personalDepartment)],
+    ]));
+    const existingSourceShifts = PERSONNEL_SHIFTS.filter((shift) => sourcePlans[shift.key]);
+    if (!existingSourceShifts.length) {
+      window.alert(`Für ${copyPersonalDate} wurde bei ${currentDepartmentConfig().label} keine Einteilung gefunden.`);
+      return;
+    }
+
+    if (!window.confirm(`Kompletten Tag ${currentDepartmentConfig().label} vom ${copyPersonalDate} auf ${personalDate} kopieren? Die drei Zielschichten werden ersetzt.`)) return;
 
     setPersonalPlan((prev) => {
       const next = { ...prev };
 
       PERSONNEL_SHIFTS.forEach((shift) => {
-        const sourceKey = getPersonalKey(copyPersonalDate, shift.key);
         const targetKey = getPersonalKey(personalDate, shift.key);
-        if (prev[sourceKey]) {
-          next[targetKey] = JSON.parse(JSON.stringify(prev[sourceKey]));
-        }
+        next[targetKey] = sourcePlans[shift.key]
+          ? JSON.parse(JSON.stringify(sourcePlans[shift.key]))
+          : {};
       });
 
       return next;
     });
+
+    const sourceStrengthKey = `${personalDepartment}_${copyPersonalDate}`;
+    const targetStrengthKey = `${personalDepartment}_${personalDate}`;
+    setPersonnelDayStrengthByDate((prev) => ({
+      ...prev,
+      [targetStrengthKey]: prev[sourceStrengthKey] || "mittel",
+    }));
+
+    window.alert(`Der Tag wurde für ${currentDepartmentConfig().label} mit allen drei Schichten kopiert.`);
   };
 
   const addPersonnelEmployee = () => {
