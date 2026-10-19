@@ -937,16 +937,13 @@ function App() {
       .subscribe();
 
     const refreshPersonnelDisplay = () => {
-      if (!personnelDisplayMode || document.visibilityState === "visible") {
+      if (personnelDisplayMode || document.visibilityState === "visible") {
         loadRemotePersonnelState();
       }
     };
 
     loadRemotePersonnelState();
-    const pollInterval = window.setInterval(
-      refreshPersonnelDisplay,
-      personnelDisplayMode ? 3000 : 15000
-    );
+    const pollInterval = window.setInterval(refreshPersonnelDisplay, 15000);
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") loadRemotePersonnelState();
     };
