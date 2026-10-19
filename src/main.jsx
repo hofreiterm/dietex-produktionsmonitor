@@ -1887,13 +1887,28 @@ function App() {
       const washItems = laundryItems.filter((item) => WASH_CATEGORIES.includes(item.category));
       const washedItems = washItems.filter((item) => item.washed_at);
       const latestWashedAt = washedItems.map((item) => item.washed_at).filter(Boolean).sort().at(-1) || null;
+      const latestStatusAt = [
+        order.updated_at,
+        order.completed_at,
+        order.created_at,
+        ...laundryItems.flatMap((item) => [item.updated_at, item.done_at, item.washed_at]),
+      ]
+        .filter(Boolean)
+        .sort()
+        .at(-1) || order.created_at;
       return {
         ...order,
         groups: getOrderCategories(order.id).join(", ") || "-",
         washed: washedItems.length,
         washTotal: washItems.length,
         latestWashedAt,
+        latestStatusAt,
       };
+    })
+    .sort((a, b) => {
+      const statusDifference = new Date(b.latestStatusAt).getTime() - new Date(a.latestStatusAt).getTime();
+      if (statusDifference !== 0) return statusDifference;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   const todayKey = new Date().toISOString().slice(0, 10);
 
@@ -2402,6 +2417,9 @@ const tourColumns = Object.entries(
   };
 
   const getPersonalKey = (date = personalDate, shift = personalShift, dept = personalDepartment) => `${dept}_${date}_${shift}`;
+  const getVisibleStatusNames = (zoneKey, names, shift = personalShift) => (
+    zoneKey === "end15" && shift !== "15-schluss" ? [] : names || []
+  );
 
   const getCurrentPersonalPlan = () => personalPlan[getPersonalKey()] || {};
 
@@ -3514,7 +3532,7 @@ const tourColumns = Object.entries(
         names: personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [],
       }] : []),
       { key: "end12", title: "Ende 12 Uhr", names: plan.end12 || [] },
-      { key: "end15", title: "Ende 15 Uhr", names: plan.end15 || [] },
+      { key: "end15", title: "Ende 15 Uhr", names: getVisibleStatusNames("end15", plan.end15) },
       { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
@@ -3800,7 +3818,7 @@ const tourColumns = Object.entries(
     const statusRows = [
       { title: "Start 12 Uhr", names: uniqueNames(start12Names), color: "#ecfdf5", border: "#059669" },
       { title: "Ende 12 Uhr", names: uniqueNames([...(plans.waescherei.end12 || []), ...(plans.putzerei.end12 || [])]), color: "#ecfeff", border: "#0891b2" },
-      { title: "Ende 15 Uhr", names: uniqueNames([...(plans.waescherei.end15 || []), ...(plans.putzerei.end15 || [])]), color: "#f0f9ff", border: "#0284c7" },
+      { title: "Ende 15 Uhr", names: uniqueNames(getVisibleStatusNames("end15", [...(plans.waescherei.end15 || []), ...(plans.putzerei.end15 || [])], shiftKey)), color: "#f0f9ff", border: "#0284c7" },
       { title: "Ende 18 Uhr", names: uniqueNames([...(plans.waescherei.end18 || []), ...(plans.putzerei.end18 || [])]), color: "#eef2ff", border: "#4f46e5" },
       { title: "Urlaub", names: uniqueNames([...(plans.waescherei.urlaub || []), ...(plans.putzerei.urlaub || [])]), color: "#eff6ff", border: "#3b82f6" },
       { title: "ZA", names: uniqueNames([...(plans.waescherei.za || []), ...(plans.putzerei.za || [])]), color: "#fffbeb", border: "#f59e0b" },
@@ -4140,7 +4158,7 @@ const tourColumns = Object.entries(
     const statusZones = [
       { key: "start12", title: "Start 12 Uhr", names: uniqueSortedNames(start12Names), color: "border-emerald-600 bg-emerald-50/95 text-emerald-950" },
       { key: "end12", title: "Ende 12 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end12 || []), ...(putzereiPlan.end12 || [])]), color: "border-cyan-600 bg-cyan-50/95 text-cyan-950" },
-      { key: "end15", title: "Ende 15 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end15 || []), ...(putzereiPlan.end15 || [])]), color: "border-sky-600 bg-sky-50/95 text-sky-950" },
+      { key: "end15", title: "Ende 15 Uhr", names: uniqueSortedNames(getVisibleStatusNames("end15", [...(waeschereiPlan.end15 || []), ...(putzereiPlan.end15 || [])])), color: "border-sky-600 bg-sky-50/95 text-sky-950" },
       { key: "end18", title: "Ende 18 Uhr", names: uniqueSortedNames([...(waeschereiPlan.end18 || []), ...(putzereiPlan.end18 || [])]), color: "border-indigo-600 bg-indigo-50/95 text-indigo-950" },
       { key: "urlaub", title: "Urlaub", names: uniqueSortedNames([...(waeschereiPlan.urlaub || []), ...(putzereiPlan.urlaub || [])]), color: "border-blue-500 bg-blue-50/95 text-blue-950" },
       { key: "za", title: "ZA", names: uniqueSortedNames([...(waeschereiPlan.za || []), ...(putzereiPlan.za || [])]), color: "border-amber-500 bg-amber-50/95 text-amber-950" },
@@ -4726,9 +4744,9 @@ const tourColumns = Object.entries(
             const zoneNames = zone.key === "start12"
               ? personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []
               : null;
-            const zoneEmployees = getSortedEmployees(zoneNames
+            const zoneEmployees = getSortedEmployees(getVisibleStatusNames(zone.key, zoneNames
               ? currentEmployees().filter((employee) => zoneNames.includes(employee.name))
-              : currentEmployees().filter((employee) => getEmployeeAssignment(employee.name) === zone.key));
+              : currentEmployees().filter((employee) => getEmployeeAssignment(employee.name) === zone.key)));
 
             return (
               <div
@@ -4777,7 +4795,7 @@ const tourColumns = Object.entries(
     const zones = [
       { key: "pool", title: "Nicht eingeteilt", names: getUnassignedEmployees().map((employee) => employee.name) },
       { key: "end12", title: "Ende 12 Uhr", names: plan.end12 || [] },
-      { key: "end15", title: "Ende 15 Uhr", names: plan.end15 || [] },
+      { key: "end15", title: "Ende 15 Uhr", names: getVisibleStatusNames("end15", plan.end15) },
       { key: "end18", title: "Ende 18 Uhr", names: plan.end18 || [] },
       { key: "urlaub", title: "Urlaub", names: plan.urlaub || [] },
       { key: "za", title: "ZA", names: plan.za || [] },
