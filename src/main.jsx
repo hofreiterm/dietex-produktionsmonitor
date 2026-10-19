@@ -3884,27 +3884,34 @@ const tourColumns = Object.entries(
       const centerY = headerHeight + zone.y / 100 * floorHeight;
       const baseTitle = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
       const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
-      const title = `${baseTitle}${visibleStartTime ? ` · ${visibleStartTime}` : ""}`;
       context.font = "900 27px Arial";
-      const titleWidth = context.measureText(title).width + 20;
+      const titleNameWidth = context.measureText(baseTitle).width;
+      context.font = "900 25px Arial";
+      const titleTimeWidth = visibleStartTime ? context.measureText(visibleStartTime).width : 0;
+      const titleWidth = Math.max(titleNameWidth, titleTimeWidth) + 24;
       const zoneWidth = Math.max(120, Number(zone.w || 5.2) / 100 * canvasWidth, titleWidth);
-      const totalHeight = assigned.length ? 90 + (assigned.length - 1) * 48 : 42;
-      const left = centerX - zoneWidth / 2;
+      const titleHeight = visibleStartTime ? 74 : 42;
+      const totalHeight = assigned.length ? titleHeight + 48 + (assigned.length - 1) * 48 : titleHeight;
+      const left = Math.max(4, Math.min(canvasWidth - zoneWidth - 4, centerX - zoneWidth / 2));
       const top = Math.max(
         headerHeight + 4,
         Math.min(canvas.height - totalHeight - 4, centerY - totalHeight / 2),
       );
-      const titleBox = drawTextBox(title, left, top, {
-        font: "900 27px Arial",
-        height: 42,
-        paddingY: 7,
-        color: "#065f46",
-        background: "rgba(236,253,245,0.96)",
-        border,
-        lineWidth: 5,
-      });
+      context.fillStyle = "rgba(236,253,245,0.96)";
+      context.fillRect(left, top, zoneWidth, titleHeight);
+      context.strokeStyle = border;
+      context.lineWidth = 5;
+      context.strokeRect(left, top, zoneWidth, titleHeight);
+      context.fillStyle = "#065f46";
+      context.font = "900 27px Arial";
+      context.fillText(baseTitle, left + 12, top + 32);
+      if (visibleStartTime) {
+        context.fillStyle = "#047857";
+        context.font = "900 25px Arial";
+        context.fillText(visibleStartTime, left + 12, top + 64);
+      }
       assigned.forEach((name, index) => {
-        drawTextBox(name, titleBox.left, top + 46 + index * 48, {
+        drawTextBox(name, left, top + titleHeight + 4 + index * 48, {
           font: "900 30px Arial",
           height: 44,
           paddingY: 7,
@@ -4439,11 +4446,10 @@ const tourColumns = Object.entries(
             const employeeClass = zone.department === "waescherei"
               ? "border-blue-300 bg-blue-100 text-blue-950"
               : "border-violet-300 bg-violet-100 text-violet-950";
-            const displayName = section.name
-              .replace("Waschmaschinen", "Wasch\u00admaschinen")
-              .replace("Reinigungsmaschinen", "Reinigungs\u00admaschinen");
+            const displayName = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
             const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
             const zoneKey = `${zone.department}-${zone.section}`;
+            const labelMinWidth = Math.max(92, Math.min(250, displayName.length * 9.5 + 24));
 
             return (
               <React.Fragment key={zoneKey}>
@@ -4453,7 +4459,7 @@ const tourColumns = Object.entries(
                     left: `${zone.x}%`,
                     top: `${zone.y}%`,
                     width: `${zone.w}%`,
-                    minWidth: section.name.length > 15 ? "100px" : section.name.length > 11 ? "86px" : "68px",
+                    minWidth: `${labelMinWidth}px`,
                   }}
                   onPointerDown={editable ? (event) => {
                     event.preventDefault();
@@ -4474,9 +4480,9 @@ const tourColumns = Object.entries(
                     setOverviewDragEmployee(null);
                   } : undefined}
                 >
-                  <div className={`flex items-center gap-1 border-l-4 bg-emerald-50/95 px-1.5 py-0.5 text-[16px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
-                    <span className="min-w-0 break-words">{section.name === "Waschstraßen" ? "Waschstraße" : displayName}</span>
-                    {visibleStartTime && <span className="shrink-0 text-emerald-800">{visibleStartTime}</span>}
+                  <div className={`flex flex-col items-start border-l-4 bg-emerald-50/95 px-1.5 py-0.5 text-[16px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
+                    <span className="whitespace-nowrap">{displayName}</span>
+                    {visibleStartTime && <span className="whitespace-nowrap text-emerald-800">{visibleStartTime}</span>}
                   </div>
                   <div className="mt-0.5 flex flex-col items-start gap-px">
                     {assigned.map((name) => assignmentsEditable ? (
