@@ -490,15 +490,15 @@ function Input(props) {
   );
 }
 
-function Logo() {
+function Logo({ compact = false } = {}) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border-4 border-red-600 font-black text-red-600">
+    <div className={`flex items-center ${compact ? "gap-2" : "gap-3"}`}>
+      <div className={`flex items-center justify-center rounded-full border-red-600 font-black text-red-600 ${compact ? "h-8 w-8 border-2 text-xs" : "h-12 w-12 border-4"}`}>
         DIE
       </div>
       <div>
-        <div className="text-2xl font-black text-sky-600">WÄSCHEREI</div>
-        <div className="text-xs font-bold text-sky-600">
+        <div className={`${compact ? "text-lg" : "text-2xl"} font-black leading-none text-sky-600`}>WÄSCHEREI</div>
+        <div className={`${compact ? "text-[9px]" : "text-xs"} font-bold text-sky-600`}>
           by <span className="text-red-600">♡</span> DieTex
         </div>
       </div>
@@ -5042,12 +5042,22 @@ const tourColumns = Object.entries(
   }
 
   */
+  const personnelTvDesignWidth = 2100;
+  const personnelTvDesignHeight = 1100;
+  const personnelTvHeaderHeight = 39;
+  const personnelTvScale = personnelDisplayMode
+    ? Math.min(
+        window.innerWidth / personnelTvDesignWidth,
+        Math.max(1, window.innerHeight - personnelTvHeaderHeight) / personnelTvDesignHeight,
+      )
+    : 1;
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className={`border-b bg-white px-8 ${fixedView ? "py-2" : "py-4"}`}>
+    <div className={`${personnelDisplayMode ? "h-screen overflow-hidden" : "min-h-screen"} bg-slate-50 text-slate-900`}>
+      <header className={`border-b bg-white ${personnelDisplayMode ? "px-3 py-0.5" : `px-8 ${fixedView ? "py-2" : "py-4"}`}`}>
         <div className="grid grid-cols-3 items-center">
-          <Logo />
-          <div className={`${personnelDisplayMode && fixedView ? "text-xl" : fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>
+          <Logo compact={personnelDisplayMode} />
+          <div className={`${personnelDisplayMode && fixedView ? "text-lg" : fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>
             {personnelDisplayMode ? "Personalplanung Wäscherei + Putzerei" : expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}
           </div>
           <div className="flex items-center justify-end gap-3">
@@ -5065,7 +5075,7 @@ const tourColumns = Object.entries(
                 Admin entsperren
               </Button>
             ))}
-            <span className="text-2xl font-bold">◷ {fmtTime(new Date())}</span>
+            <span className={`${personnelDisplayMode ? "text-lg" : "text-2xl"} font-bold`}>◷ {fmtTime(new Date())}</span>
           </div>
         </div>
       </header>
@@ -5731,7 +5741,7 @@ const tourColumns = Object.entries(
         </div>
       )}
 
-      <main className={`mx-auto w-full ${view === "personalmonitor" || view === "personaldisplay" ? "max-w-none" : "max-w-[1800px]"} ${fixedView ? "p-2" : "p-5"}`}>
+      <main className={`mx-auto w-full ${view === "personalmonitor" || view === "personaldisplay" ? "max-w-none" : "max-w-[1800px]"} ${personnelDisplayMode ? "p-0" : fixedView ? "p-2" : "p-5"}`}>
         {(!fixedView || takeoverMode) && (
           <nav className="mb-5 flex flex-wrap justify-center gap-2">
             {(takeoverMode
@@ -6431,22 +6441,33 @@ const tourColumns = Object.entries(
         )}
 
         {view === "personaldisplay" && (
-          <section className="space-y-2">
-            <div className="flex items-center justify-between rounded-xl border bg-white px-4 py-2 shadow-sm">
-              <div>
-                <h2 className="text-2xl font-black">Aktuelle Einteilung Wäscherei + Putzerei</h2>
-                <div className="text-sm font-bold text-slate-500">
-                  {new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
+          <section className="relative overflow-hidden" style={{ height: `calc(100vh - ${personnelTvHeaderHeight}px)` }}>
+            <div
+              className="absolute top-0 space-y-2"
+              style={{
+                left: "50%",
+                marginLeft: `${-personnelTvDesignWidth / 2}px`,
+                width: `${personnelTvDesignWidth}px`,
+                transform: `scale(${personnelTvScale})`,
+                transformOrigin: "top center",
+              }}
+            >
+              <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-1.5 shadow-sm">
+                <div>
+                  <h2 className="text-xl font-black">Aktuelle Einteilung Wäscherei + Putzerei</h2>
+                  <div className="text-xs font-bold text-slate-500">
+                    {new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-base font-black">{getPersonnelShiftLabel(personalShift)}</div>
+                  <div className={`text-[10px] font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-red-700"}`}>
+                    {personnelSyncStatus === "connected" ? "Automatisch aktuell" : personnelSyncStatus === "waiting" ? "Warte auf die erste Planung" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
+                  </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-lg font-black">{getPersonnelShiftLabel(personalShift)}</div>
-                <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-red-700"}`}>
-                  {personnelSyncStatus === "connected" ? "Automatisch aktuell" : personnelSyncStatus === "waiting" ? "Warte auf die erste Planung" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
-                </div>
-              </div>
+              <div className="pointer-events-none">{CombinedPersonnelFloorPlan()}</div>
             </div>
-            <div className="pointer-events-none">{CombinedPersonnelFloorPlan()}</div>
           </section>
         )}
 
