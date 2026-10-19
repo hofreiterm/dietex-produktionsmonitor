@@ -90,6 +90,12 @@ const PERSONNEL_SHIFTS = [
   { key: "15-schluss", label: "15:00–Schluss" },
 ];
 
+const PERSONNEL_TV_SHIFT_LABELS = {
+  "07-12": "1. Schicht – 11:00 Uhr",
+  "12-15": "2. Schicht 11:00–14:30 Uhr",
+  "15-schluss": "3. Schicht 14:30–21:00 Uhr",
+};
+
 const DEFAULT_PERSONNEL_SHIFT_LABELS = Object.fromEntries(
   PERSONNEL_SHIFTS.map((shift) => [shift.key, shift.label])
 );
@@ -492,13 +498,13 @@ function Input(props) {
 
 function Logo({ compact = false } = {}) {
   return (
-    <div className={`flex items-center ${compact ? "gap-2" : "gap-3"}`}>
-      <div className={`flex items-center justify-center rounded-full border-red-600 font-black text-red-600 ${compact ? "h-8 w-8 border-2 text-xs" : "h-12 w-12 border-4"}`}>
+    <div className={`flex items-center ${compact ? "gap-1.5" : "gap-3"}`}>
+      <div className={`flex items-center justify-center rounded-full border-red-600 font-black text-red-600 ${compact ? "h-6 w-6 border text-[8px]" : "h-12 w-12 border-4"}`}>
         DIE
       </div>
       <div>
-        <div className={`${compact ? "text-lg" : "text-2xl"} font-black leading-none text-sky-600`}>WÄSCHEREI</div>
-        <div className={`${compact ? "text-[9px]" : "text-xs"} font-bold text-sky-600`}>
+        <div className={`${compact ? "text-sm" : "text-2xl"} font-black leading-none text-sky-600`}>WÄSCHEREI</div>
+        <div className={`${compact ? "text-[7px] leading-none" : "text-xs"} font-bold text-sky-600`}>
           by <span className="text-red-600">♡</span> DieTex
         </div>
       </div>
@@ -564,6 +570,39 @@ function dateKeyInTimeZone(value = new Date(), timeZone = "Europe/Vienna") {
   }).formatToParts(value);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function getPersonnelDisplaySchedule(value = new Date(), timeZone = "Europe/Vienna") {
+  const parts = new Intl.DateTimeFormat("de-AT", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const minutes = Number(values.hour) * 60 + Number(values.minute);
+  let date = `${values.year}-${values.month}-${values.day}`;
+  let shift = "07-12";
+
+  if (minutes >= 21 * 60) {
+    date = addDaysToDateKey(date, 1);
+  } else if (minutes >= 14 * 60 + 30) {
+    shift = "15-schluss";
+  } else if (minutes >= 11 * 60) {
+    shift = "12-15";
+  }
+
+  return { date, shift };
 }
 
 function getHtmlBuildSignature(html) {
@@ -667,7 +706,10 @@ function App() {
   const [tick, setTick] = useState(Date.now());
   const [hiddenStationOrders, setHiddenStationOrders] = useState({});
 
-  const [personalDate, setPersonalDate] = useState(() => personnelDisplayMode ? dateKeyInTimeZone() : localDateKey());
+  const [personalDate, setPersonalDate] = useState(() => {
+    if (!personnelDisplayMode) return localDateKey();
+    return requestedDisplayShift ? dateKeyInTimeZone() : getPersonnelDisplaySchedule().date;
+  });
   const [personalDepartment, setPersonalDepartment] = useState("waescherei");
   const [copyPersonalDate, setCopyPersonalDate] = useState(() => new Date(Date.now() - 86400000).toISOString().slice(0, 10));
   const [personalStatsFrom, setPersonalStatsFrom] = useState(() => new Date().toISOString().slice(0, 10));
@@ -675,7 +717,7 @@ function App() {
   const [personalShift, setPersonalShift] = useState(() => {
     if (!personnelDisplayMode) return "07-12";
     if (requestedDisplayShift) return requestedDisplayShift;
-    return PERSONNEL_SHIFTS[Math.floor(Date.now() / 15000) % PERSONNEL_SHIFTS.length].key;
+    return getPersonnelDisplaySchedule().shift;
   });
   const [personnelShiftLabels, setPersonnelShiftLabels] = useState(() => {
     try {
@@ -998,7 +1040,10 @@ function App() {
           const serverTime = Date.parse(response.headers.get("date") || "");
           if (Number.isFinite(serverTime)) {
             personnelDisplayClockOffset.current = serverTime - Date.now();
-            setPersonalDate(dateKeyInTimeZone(new Date(serverTime)));
+            const serverNow = new Date(serverTime);
+            const schedule = getPersonnelDisplaySchedule(serverNow);
+            setPersonalDate(requestedDisplayShift ? dateKeyInTimeZone(serverNow) : schedule.date);
+            setPersonalShift(requestedDisplayShift || schedule.shift);
           }
         }
         const nextSignature = getHtmlBuildSignature(await response.text());
@@ -1077,11 +1122,10 @@ function App() {
   useEffect(() => {
     if (!personnelDisplayMode) return;
     const now = new Date(tick + personnelDisplayClockOffset.current);
-    const shiftIndex = Math.floor(now.getTime() / 15000) % PERSONNEL_SHIFTS.length;
-    const shift = requestedDisplayShift || PERSONNEL_SHIFTS[shiftIndex].key;
+    const schedule = getPersonnelDisplaySchedule(now);
     setPersonalDepartment("waescherei");
-    setPersonalDate(dateKeyInTimeZone(now));
-    setPersonalShift(shift);
+    setPersonalDate(requestedDisplayShift ? dateKeyInTimeZone(now) : schedule.date);
+    setPersonalShift(requestedDisplayShift || schedule.shift);
   }, [personnelDisplayMode, requestedDisplayShift, tick]);
 
   useEffect(() => {
@@ -2352,6 +2396,8 @@ const tourColumns = Object.entries(
   const getPersonnelShiftLabel = (shiftKey) => personnelShiftLabels[shiftKey]
     || PERSONNEL_SHIFTS.find((shift) => shift.key === shiftKey)?.label
     || shiftKey;
+  const getPersonnelTvShiftLabel = (shiftKey) => PERSONNEL_TV_SHIFT_LABELS[shiftKey]
+    || getPersonnelShiftLabel(shiftKey);
   const openPersonnelShiftEditor = () => {
     setPersonnelShiftDraft({ ...DEFAULT_PERSONNEL_SHIFT_LABELS, ...personnelShiftLabels });
     setPersonnelShiftModal(true);
@@ -5043,8 +5089,8 @@ const tourColumns = Object.entries(
 
   */
   const personnelTvDesignWidth = 2100;
-  const personnelTvDesignHeight = 1100;
-  const personnelTvHeaderHeight = 39;
+  const personnelTvDesignHeight = 1140;
+  const personnelTvHeaderHeight = 29;
   const personnelTvScale = personnelDisplayMode
     ? Math.min(
         window.innerWidth / personnelTvDesignWidth,
@@ -5054,10 +5100,10 @@ const tourColumns = Object.entries(
 
   return (
     <div className={`${personnelDisplayMode ? "h-screen overflow-hidden" : "min-h-screen"} bg-slate-50 text-slate-900`}>
-      <header className={`border-b bg-white ${personnelDisplayMode ? "px-3 py-0.5" : `px-8 ${fixedView ? "py-2" : "py-4"}`}`}>
+      <header className={`border-b bg-white ${personnelDisplayMode ? "px-2 py-0" : `px-8 ${fixedView ? "py-2" : "py-4"}`}`}>
         <div className="grid grid-cols-3 items-center">
           <Logo compact={personnelDisplayMode} />
-          <div className={`${personnelDisplayMode && fixedView ? "text-lg" : fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>
+          <div className={`${personnelDisplayMode && fixedView ? "text-sm" : fixedView ? "text-2xl" : "text-3xl"} text-center font-black`}>
             {personnelDisplayMode ? "Personalplanung Wäscherei + Putzerei" : expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}
           </div>
           <div className="flex items-center justify-end gap-3">
@@ -5075,7 +5121,7 @@ const tourColumns = Object.entries(
                 Admin entsperren
               </Button>
             ))}
-            <span className={`${personnelDisplayMode ? "text-lg" : "text-2xl"} font-bold`}>◷ {fmtTime(new Date())}</span>
+            <span className={`${personnelDisplayMode ? "text-sm" : "text-2xl"} font-bold`}>◷ {fmtTime(new Date())}</span>
           </div>
         </div>
       </header>
@@ -6452,16 +6498,16 @@ const tourColumns = Object.entries(
                 transformOrigin: "top center",
               }}
             >
-              <div className="flex items-center justify-between rounded-lg border bg-white px-4 py-1.5 shadow-sm">
+              <div className="flex items-center justify-between rounded-lg border bg-white px-5 py-2 shadow-sm">
                 <div>
-                  <h2 className="text-xl font-black">Aktuelle Einteilung Wäscherei + Putzerei</h2>
-                  <div className="text-xs font-bold text-slate-500">
+                  <h2 className="text-base font-black text-slate-600">Aktuelle Einteilung Wäscherei + Putzerei</h2>
+                  <div className="text-3xl font-black leading-tight text-slate-950">
                     {new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-base font-black">{getPersonnelShiftLabel(personalShift)}</div>
-                  <div className={`text-[10px] font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-red-700"}`}>
+                  <div className="text-4xl font-black leading-tight">{getPersonnelTvShiftLabel(personalShift)}</div>
+                  <div className={`text-xs font-black ${personnelSyncStatus === "connected" ? "text-emerald-700" : "text-red-700"}`}>
                     {personnelSyncStatus === "connected" ? "Automatisch aktuell" : personnelSyncStatus === "waiting" ? "Warte auf die erste Planung" : personnelSyncStatus === "setup_required" ? "Supabase-Einrichtung fehlt" : "Verbindung wird hergestellt"}
                   </div>
                 </div>
