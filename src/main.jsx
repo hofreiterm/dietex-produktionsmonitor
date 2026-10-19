@@ -184,6 +184,9 @@ const PUTZEREI_GROUPS = [
 function normalizePersonnelSections(sections, fallback) {
   const source = Array.isArray(sections) && sections.length ? sections : fallback;
   return source.map((section, index) => {
+    const allowedEmployeeNames = Array.isArray(section.allowedEmployeeNames)
+      ? [...new Set(section.allowedEmployeeNames.map((name) => String(name || "").trim()).filter(Boolean))]
+      : [];
     const baseTarget = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
       shift.key,
       section.target?.[shift.key] ?? section.target?.default ?? (section.target?.flexible ? null : 0),
@@ -194,6 +197,10 @@ function normalizePersonnelSections(sections, fallback) {
       id: section.id || `section-${index}-${String(section.name || "abteilung").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       startTime: String(section.startTime || "").trim(),
       priority: normalizePersonnelSectionPriority(section.priority),
+      restrictedEmployees: section.restrictedEmployees === undefined
+        ? allowedEmployeeNames.length > 0
+        : Boolean(section.restrictedEmployees),
+      allowedEmployeeNames,
       target: baseTarget,
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
@@ -2362,6 +2369,19 @@ const tourColumns = Object.entries(
   const currentGroups = () => currentDepartmentConfig().groups;
   const currentBaseEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
   const sectionsForDepartment = (department) => personnelSectionsByDept[department] || PERSONNEL_DEPARTMENTS[department]?.sections || [];
+  const isEmployeeAllowedInSection = (employeeName, section) => {
+    if (!section?.restrictedEmployees) return true;
+    return (section.allowedEmployeeNames || []).includes(employeeName);
+  };
+  const getAllPersonnelEmployees = () => {
+    const employeesByName = new Map();
+    ["waescherei", "putzerei"].forEach((department) => {
+      (personnelEmployeesByDept[department] || []).forEach((employee) => {
+        if (!employeesByName.has(employee.name)) employeesByName.set(employee.name, { ...employee, department });
+      });
+    });
+    return [...employeesByName.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "de", { numeric: true }));
+  };
   const resolvePersonnelFloorPlanZones = (sourceZones = personnelFloorPlanZones) => {
     const zones = normalizePersonnelFloorPlanZones(sourceZones);
     const resolved = [];
@@ -2456,11 +2476,17 @@ const tourColumns = Object.entries(
     const employeeBorrowedFrom = departmentEmployees.some((entry) => entry.name === employeeName)
       ? null
       : counterpartDepartment;
-    const isWorkplace = sectionsForDepartment(department).some((section) => section.name === sectionName);
+    const destinationSection = sectionsForDepartment(department).find((section) => section.name === sectionName);
+    const isWorkplace = Boolean(destinationSection);
     const noGoWorkplaces = [employee?.noGoWorkplace1, employee?.noGoWorkplace2].filter(Boolean);
 
     if (isWorkplace && noGoWorkplaces.includes(sectionName)) {
       window.alert(`${employeeName} darf laut Mitarbeiterstamm nicht bei ${sectionName} eingeteilt werden.`);
+      return false;
+    }
+
+    if (isWorkplace && !isEmployeeAllowedInSection(employeeName, destinationSection)) {
+      window.alert(`${employeeName} ist für ${sectionName} nicht freigegeben.`);
       return false;
     }
 
@@ -2618,6 +2644,11 @@ const tourColumns = Object.entries(
 
     if (destinationSection && noGoWorkplaces.includes(sectionName)) {
       window.alert(`${draggedEmployee.name} darf laut Mitarbeiterstamm nicht bei ${sectionName} eingeteilt werden.`);
+      return false;
+    }
+
+    if (destinationSection && !isEmployeeAllowedInSection(draggedEmployee.name, destinationSection)) {
+      window.alert(`${draggedEmployee.name} ist für ${sectionName} nicht freigegeben.`);
       return false;
     }
 
@@ -2821,6 +2852,19 @@ const tourColumns = Object.entries(
     });
 
     if (editingEmployeeName) {
+      if (editingEmployeeName !== name) {
+        setPersonnelSectionsByDept((prev) => Object.fromEntries(
+          Object.entries(prev).map(([department, sections]) => [
+            department,
+            (sections || []).map((section) => ({
+              ...section,
+              allowedEmployeeNames: (section.allowedEmployeeNames || []).map((allowedName) => (
+                allowedName === editingEmployeeName ? name : allowedName
+              )),
+            })),
+          ])
+        ));
+      }
       setPersonalPlan((prev) => {
         const next = {};
         Object.entries(prev).forEach(([key, plan]) => {
@@ -2858,6 +2902,8 @@ const tourColumns = Object.entries(
       name: section.name,
       startTime: section.startTime || "",
       priority: normalizePersonnelSectionPriority(section.priority),
+      restrictedEmployees: Boolean(section.restrictedEmployees),
+      allowedEmployeeNames: [...(section.allowedEmployeeNames || [])],
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
         Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
@@ -2889,6 +2935,8 @@ const tourColumns = Object.entries(
         name: section.name.trim(),
         startTime: String(section.startTime || "").trim(),
         priority: normalizePersonnelSectionPriority(section.priority),
+        restrictedEmployees: Boolean(section.restrictedEmployees),
+        allowedEmployeeNames: [...new Set((section.allowedEmployeeNames || []).map((name) => String(name || "").trim()).filter(Boolean))],
         target: { ...targetsByStrength.mittel },
         targetsByStrength,
       };
@@ -2912,6 +2960,10 @@ const tourColumns = Object.entries(
       window.alert("Soll-Personen bitte als positive Zahl oder 0 eingeben.");
       return;
     }
+    if (cleaned.some((section) => section.restrictedEmployees && !section.allowedEmployeeNames.length)) {
+      window.alert("Bei einer beschränkten Abteilung muss mindestens eine zugelassene Person ausgewählt sein.");
+      return;
+    }
 
     const oldSections = currentSections();
     const renames = oldSections
@@ -2932,27 +2984,32 @@ const tourColumns = Object.entries(
       ...personnelNoteDraft.map((note) => ({ ...note, department: personalDepartment })),
     ]));
 
-    if (renames.length || deletedNames.length) {
-      setPersonalPlan((prev) => {
-        const next = {};
-        Object.entries(prev).forEach(([key, plan]) => {
-          if (!key.startsWith(`${personalDepartment}_`)) {
-            next[key] = plan;
-            return;
-          }
-          const nextPlan = { ...(plan || {}) };
-          renames.forEach(({ oldName, newName }) => {
-            const oldNames = Array.isArray(nextPlan[oldName]) ? nextPlan[oldName] : [];
-            const newNames = Array.isArray(nextPlan[newName]) ? nextPlan[newName] : [];
-            nextPlan[newName] = [...new Set([...newNames, ...oldNames])];
-            delete nextPlan[oldName];
-          });
-          deletedNames.forEach((deletedName) => delete nextPlan[deletedName]);
-          next[key] = nextPlan;
+    setPersonalPlan((prev) => {
+      const next = {};
+      Object.entries(prev).forEach(([key, plan]) => {
+        if (!key.startsWith(`${personalDepartment}_`)) {
+          next[key] = plan;
+          return;
+        }
+        const nextPlan = { ...(plan || {}) };
+        renames.forEach(({ oldName, newName }) => {
+          const oldNames = Array.isArray(nextPlan[oldName]) ? nextPlan[oldName] : [];
+          const newNames = Array.isArray(nextPlan[newName]) ? nextPlan[newName] : [];
+          nextPlan[newName] = [...new Set([...newNames, ...oldNames])];
+          delete nextPlan[oldName];
         });
-        return next;
+        deletedNames.forEach((deletedName) => delete nextPlan[deletedName]);
+        cleaned.forEach((section) => {
+          if (!section.restrictedEmployees || !Array.isArray(nextPlan[section.name])) return;
+          const allowed = new Set(section.allowedEmployeeNames);
+          nextPlan[section.name] = nextPlan[section.name].filter((name) => allowed.has(name));
+        });
+        next[key] = nextPlan;
       });
+      return next;
+    });
 
+    if (renames.length || deletedNames.length) {
       setPersonnelEmployeesByDept((prev) => ({
         ...prev,
         [personalDepartment]: (prev[personalDepartment] || []).map((employee) => {
@@ -3105,6 +3162,16 @@ const tourColumns = Object.entries(
       ...prev,
       [personalDepartment]: (prev[personalDepartment] || []).filter((e) => e.name !== name),
     }));
+
+    setPersonnelSectionsByDept((prev) => Object.fromEntries(
+      Object.entries(prev).map(([department, sections]) => [
+        department,
+        (sections || []).map((section) => ({
+          ...section,
+          allowedEmployeeNames: (section.allowedEmployeeNames || []).filter((allowedName) => allowedName !== name),
+        })),
+      ])
+    ));
 
     setPersonalPlan((prev) => {
       const next = {};
@@ -3259,6 +3326,7 @@ const tourColumns = Object.entries(
         .filter((emp) => isEmployeeRegularShift(emp))
         .filter((emp) => !assigned.has(emp.name))
         .filter((emp) => emp.noGoWorkplace1 !== section.name && emp.noGoWorkplace2 !== section.name)
+        .filter((emp) => isEmployeeAllowedInSection(emp.name, section))
         .map((emp) => {
           let score = 0;
           const history = historyByEmployee[emp.name];
@@ -5315,6 +5383,60 @@ const tourColumns = Object.entries(
                       </button>
                     </div>
 
+                    <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3">
+                      <label className="flex cursor-pointer items-start gap-2 text-sm font-black text-blue-950">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4"
+                          checked={Boolean(section.restrictedEmployees)}
+                          onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? {
+                            ...entry,
+                            restrictedEmployees: event.target.checked,
+                          } : entry))}
+                        />
+                        <span>
+                          Nur ausgewählte Mitarbeiter zulassen
+                          <span className="mt-0.5 block text-xs font-semibold text-blue-800">
+                            Gilt für KI-Vorschlag, Anklicken und Verschieben.
+                          </span>
+                        </span>
+                      </label>
+                      {section.restrictedEmployees && (
+                        <div className="mt-3 max-h-48 overflow-auto rounded-lg border border-blue-200 bg-white p-2">
+                          <div className="mb-2 text-xs font-black text-slate-600">
+                            Zugelassene Personen ({(section.allowedEmployeeNames || []).length})
+                          </div>
+                          <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                            {getAllPersonnelEmployees().map((employee) => {
+                              const checked = (section.allowedEmployeeNames || []).includes(employee.name);
+                              return (
+                                <label key={employee.name} className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-xs font-bold ${checked ? "border-blue-400 bg-blue-50 text-blue-950" : "border-slate-200 bg-white text-slate-600"}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => setDepartmentDraft((prev) => prev.map((entry, index) => {
+                                      if (index !== sectionIndex) return entry;
+                                      const currentNames = entry.allowedEmployeeNames || [];
+                                      return {
+                                        ...entry,
+                                        allowedEmployeeNames: checked
+                                          ? currentNames.filter((name) => name !== employee.name)
+                                          : [...currentNames, employee.name],
+                                      };
+                                    }))}
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="block truncate">{employee.name}</span>
+                                    <span className="block text-[10px] font-semibold text-slate-400">{PERSONNEL_DEPARTMENTS[employee.department]?.label}</span>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="min-w-[650px] overflow-hidden rounded-lg border bg-white">
                       <div className="grid grid-cols-[130px_1fr_1fr_1fr] bg-slate-100 px-3 py-2 text-xs font-black text-slate-600">
                         <div>Tagesstärke</div>
@@ -5358,6 +5480,8 @@ const tourColumns = Object.entries(
                   name: "Neue Abteilung",
                   startTime: "",
                   priority: "normal",
+                  restrictedEmployees: false,
+                  allowedEmployeeNames: [],
                   targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
                     strength.key,
                     Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [shift.key, 0])),
