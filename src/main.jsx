@@ -100,6 +100,17 @@ const PERSONNEL_DAY_STRENGTHS = [
   { key: "stark", label: "Stark" },
 ];
 
+const PERSONNEL_SECTION_PRIORITIES = [
+  { key: "must", label: "Muss besetzt sein", rank: 0 },
+  { key: "high", label: "Hohe Priorität", rank: 1 },
+  { key: "normal", label: "Normal", rank: 2 },
+  { key: "optional", label: "Optional", rank: 3 },
+];
+
+function normalizePersonnelSectionPriority(priority) {
+  return PERSONNEL_SECTION_PRIORITIES.some((entry) => entry.key === priority) ? priority : "normal";
+}
+
 const PERSONNEL_SECTIONS = [
   { name: "Übernahme", target: { default: 4 } },
   { name: "Waschstraßen", target: { default: 1 } },
@@ -182,6 +193,7 @@ function normalizePersonnelSections(sections, fallback) {
       ...section,
       id: section.id || `section-${index}-${String(section.name || "abteilung").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       startTime: String(section.startTime || "").trim(),
+      priority: normalizePersonnelSectionPriority(section.priority),
       target: baseTarget,
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
@@ -2385,14 +2397,16 @@ const tourColumns = Object.entries(
   };
   const planForDepartment = (department, shift = personalShift) => personalPlan[getPersonalKey(personalDate, shift, department)] || {};
   const sectionTargetForDepartment = (section, department, shift = personalShift) => {
-    if (!section || section.target?.flexible) return null;
+    if (!section) return null;
+    const minimum = section.priority === "must" ? 1 : 0;
+    if (section.target?.flexible && minimum === 0) return null;
     const strength = personnelDayStrengthByDate[`${department}_${personalDate}`] || "mittel";
     const strengthTargets = section.targetsByStrength?.[strength];
     const shiftTarget = strengthTargets && Object.prototype.hasOwnProperty.call(strengthTargets, shift)
       ? strengthTargets[shift]
       : section.target?.[shift];
-    if (shiftTarget === null || shiftTarget === "") return null;
-    return Number(shiftTarget ?? section.target?.default ?? 0);
+    if (shiftTarget === null || shiftTarget === "") return minimum || null;
+    return Math.max(minimum, Number(shiftTarget ?? section.target?.default ?? 0));
   };
   const currentEmployees = () => {
     const baseEmployees = currentBaseEmployees();
@@ -2643,13 +2657,14 @@ const tourColumns = Object.entries(
   );
 
   const getSectionTarget = (section) => {
-    if (section.target.flexible) return null;
+    const minimum = section.priority === "must" ? 1 : 0;
+    if (section.target.flexible && minimum === 0) return null;
     const strengthTargets = section.targetsByStrength?.[getPersonnelDayStrength()];
     const shiftTarget = strengthTargets && Object.prototype.hasOwnProperty.call(strengthTargets, personalShift)
       ? strengthTargets[personalShift]
       : section.target?.[personalShift];
-    if (shiftTarget === null || shiftTarget === "") return null;
-    return Number(shiftTarget ?? section.target?.default ?? 0);
+    if (shiftTarget === null || shiftTarget === "") return minimum || null;
+    return Math.max(minimum, Number(shiftTarget ?? section.target?.default ?? 0));
   };
 
   const getSectionColor = (section) => {
@@ -2657,6 +2672,7 @@ const tourColumns = Object.entries(
     if (target === null) return "border-slate-300 bg-slate-50";
 
     const actual = getEmployeesInSection(section.name).length;
+    if (section.priority === "must" && actual < 1) return "border-red-500 bg-red-50";
     if (actual < target) return "border-yellow-400 bg-yellow-50";
     if (actual > target) return "border-red-400 bg-red-50";
     return "border-green-300 bg-green-50";
@@ -2841,6 +2857,7 @@ const tourColumns = Object.entries(
       id: section.id,
       name: section.name,
       startTime: section.startTime || "",
+      priority: normalizePersonnelSectionPriority(section.priority),
       targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
         strength.key,
         Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
@@ -2871,6 +2888,7 @@ const tourColumns = Object.entries(
         id: section.id,
         name: section.name.trim(),
         startTime: String(section.startTime || "").trim(),
+        priority: normalizePersonnelSectionPriority(section.priority),
         target: { ...targetsByStrength.mittel },
         targetsByStrength,
       };
@@ -3222,11 +3240,19 @@ const tourColumns = Object.entries(
     });
 
     const assigned = new Set(unavailable);
+    const priorityRanks = Object.fromEntries(PERSONNEL_SECTION_PRIORITIES.map((priority) => [priority.key, priority.rank]));
+    const prioritizedSections = currentSections()
+      .map((section, index) => ({ section, index }))
+      .sort((a, b) => {
+        const rankDifference = priorityRanks[normalizePersonnelSectionPriority(a.section.priority)]
+          - priorityRanks[normalizePersonnelSectionPriority(b.section.priority)];
+        return rankDifference || a.index - b.index;
+      })
+      .map(({ section }) => section);
 
-    currentSections().forEach((section) => {
-      const target = getSectionTarget(section);
-      if (target === null || target <= 0) return;
-
+    const fillSectionTo = (section, desiredCount) => {
+      const missingCount = Math.max(0, desiredCount - (nextPlan[section.name] || []).length);
+      if (missingCount <= 0) return;
       const candidates = currentEmployees()
         .filter((emp) => getEmployeeStatus(emp.name) === "anwesend")
         .filter((emp) => isEmployeeRegularDay(emp))
@@ -3253,10 +3279,20 @@ const tourColumns = Object.entries(
           return String(a.emp.name).localeCompare(String(b.emp.name), "de", { numeric: true });
         });
 
-      candidates.slice(0, target).forEach(({ emp }) => {
+      candidates.slice(0, missingCount).forEach(({ emp }) => {
         nextPlan[section.name].push(emp.name);
         assigned.add(emp.name);
       });
+    };
+
+    prioritizedSections
+      .filter((section) => section.priority === "must")
+      .forEach((section) => fillSectionTo(section, 1));
+
+    prioritizedSections.forEach((section) => {
+      const target = getSectionTarget(section);
+      if (target === null || target <= 0) return;
+      fillSectionTo(section, target);
     });
 
     const assignedStart12Names = personalDepartment === "waescherei" && personalShift !== "07-12"
@@ -3733,7 +3769,9 @@ const tourColumns = Object.entries(
       if (!section) return;
       const assigned = planForDepartment(zone.department, shiftKey)[section.name] || [];
       const target = sectionTargetForDepartment(section, zone.department, shiftKey);
-      const border = target === null
+      const border = section.priority === "must" && assigned.length < 1
+        ? "#dc2626"
+        : target === null
         ? "#64748b"
         : assigned.length < target
           ? "#eab308"
@@ -4258,7 +4296,9 @@ const tourColumns = Object.entries(
             if (!section) return null;
             const assigned = planForDepartment(zone.department)[section.name] || [];
             const target = sectionTargetForDepartment(section, zone.department);
-            const occupancyClass = target === null
+            const occupancyClass = section.priority === "must" && assigned.length < 1
+              ? "border-red-600"
+              : target === null
               ? "border-slate-500"
               : assigned.length < target
                 ? "border-yellow-500"
@@ -5227,7 +5267,7 @@ const tourColumns = Object.entries(
             <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
               <div>
                 <h2 className="text-xl font-black">Abteilungen bearbeiten</h2>
-                <p className="text-sm text-slate-500">{currentDepartmentConfig().label}</p>
+                <p className="text-sm text-slate-500">{currentDepartmentConfig().label} · Pflichtabteilungen erhalten beim KI-Vorschlag mindestens eine Person.</p>
               </div>
               <Button onClick={() => setPersonnelDepartmentModal(false)}>Schließen</Button>
             </div>
@@ -5253,6 +5293,18 @@ const tourColumns = Object.entries(
                           value={section.startTime || ""}
                           onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, startTime: event.target.value } : entry))}
                         />
+                      </label>
+                      <label className="block w-52 text-xs font-black text-slate-600">
+                        Priorität beim KI-Vorschlag
+                        <select
+                          className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
+                          value={normalizePersonnelSectionPriority(section.priority)}
+                          onChange={(event) => setDepartmentDraft((prev) => prev.map((entry, index) => index === sectionIndex ? { ...entry, priority: event.target.value } : entry))}
+                        >
+                          {PERSONNEL_SECTION_PRIORITIES.map((priority) => (
+                            <option key={priority.key} value={priority.key}>{priority.label}</option>
+                          ))}
+                        </select>
                       </label>
                       <button
                         type="button"
@@ -5305,6 +5357,7 @@ const tourColumns = Object.entries(
                   id: `custom-${Date.now()}`,
                   name: "Neue Abteilung",
                   startTime: "",
+                  priority: "normal",
                   targetsByStrength: Object.fromEntries(PERSONNEL_DAY_STRENGTHS.map((strength) => [
                     strength.key,
                     Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [shift.key, 0])),
