@@ -100,10 +100,14 @@ export default async function handler(req, res) {
       }),
     });
     if (!response.ok) {
-      const message = response.status === 429 ? 'Das KI-Kontingent ist aufgebraucht oder die KI ist ausgelastet. Bitte die Produktionsleitung informieren.'
+      let upstreamCode = '';
+      try { const detail = await response.json(); upstreamCode = detail.error?.code || ''; } catch { /* Provider may return a non-JSON error. */ }
+      const quotaMissing = response.status === 429 && ['insufficient_quota', 'billing_hard_limit_reached'].includes(upstreamCode);
+      const message = quotaMissing ? 'Das OpenAI-API-Guthaben fehlt oder das Ausgabenlimit ist erreicht. Bitte die Produktionsleitung bitten, API-Guthaben und Abrechnung zu prüfen.'
+        : response.status === 429 ? 'Das KI-Kontingent ist vorübergehend begrenzt. Bitte nach einer Minute erneut versuchen.'
         : response.status === 401 || response.status === 403 ? 'Der KI-Zugang muss in Vercel geprüft werden. Bitte die Produktionsleitung informieren.'
         : 'Die KI ist gerade nicht erreichbar. Bitte später erneut versuchen.';
-      return send(res, 502, { error: message });
+      return send(res, 502, { error: message, code: quotaMissing ? 'api_quota_missing' : response.status === 429 ? 'api_rate_limit' : 'api_unavailable' });
     }
     const result = await response.json();
     if (result.status !== 'completed') return send(res, 422, { error: 'Die Analyse blieb unvollständig. Bitte ein einzelnes, scharfes Etikettfoto versuchen.' });
