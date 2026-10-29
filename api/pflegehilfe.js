@@ -101,8 +101,13 @@ export default async function handler(req, res) {
     });
     if (!response.ok) {
       let upstreamCode = '';
-      try { const detail = await response.json(); upstreamCode = detail.error?.code || ''; } catch { /* Provider may return a non-JSON error. */ }
-      const quotaMissing = response.status === 429 && ['insufficient_quota', 'billing_hard_limit_reached'].includes(upstreamCode);
+      let upstreamType = '';
+      try {
+        const detail = await response.json(); upstreamCode = detail.error?.code || ''; upstreamType = detail.error?.type || '';
+        const message = String(detail.error?.message || '').replaceAll(process.env.OPENAI_API_KEY, '[redacted]').slice(0, 1500);
+        console.warn('Dietex Care provider error', JSON.stringify({ status: response.status, code: upstreamCode, type: upstreamType, message }));
+      } catch { /* Provider may return a non-JSON error. */ }
+      const quotaMissing = response.status === 429 && [upstreamCode, upstreamType].some(value => ['insufficient_quota', 'billing_hard_limit_reached'].includes(value));
       const message = quotaMissing ? 'Das OpenAI-API-Guthaben fehlt oder das Ausgabenlimit ist erreicht. Bitte die Produktionsleitung bitten, API-Guthaben und Abrechnung zu prüfen.'
         : response.status === 429 ? 'Das KI-Kontingent ist vorübergehend begrenzt. Bitte nach einer Minute erneut versuchen.'
         : response.status === 401 || response.status === 403 ? 'Der KI-Zugang muss in Vercel geprüft werden. Bitte die Produktionsleitung informieren.'
@@ -129,3 +134,4 @@ export default async function handler(req, res) {
       : 'Die Analyse wurde unterbrochen. Bitte später erneut versuchen.' });
   }
 }
+
