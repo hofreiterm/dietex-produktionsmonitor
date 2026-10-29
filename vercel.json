@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/pflegehilfe",
+      "destination": "/pflegehilfe/index.html"
+    },
+    {
+      "source": "/pflegehilfe/",
+      "destination": "/pflegehilfe/index.html"
+    },
+    {
       "source": "/personaldisplay/:shift",
       "destination": "/index.html"
     },
