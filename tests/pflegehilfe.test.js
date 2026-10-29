@@ -55,6 +55,12 @@ test('upstream quota failure and timeouts produce useful errors',async()=>{
   configured();globalThis.fetch=async()=>({ok:false,status:429});assert.match((await call()).body.error,/Kontingent/);
   globalThis.fetch=async()=>({ok:false,status:429,json:async()=>({error:{code:'insufficient_quota'}})});
   assert.equal((await call()).body.code,'api_quota_missing');
+  for(const code of ['credit_balance_exhausted','organization_spend_limit_exceeded','project_spend_limit_exceeded','organization_usage_limit_exceeded']){
+    globalThis.fetch=async()=>({ok:false,status:429,json:async()=>({error:{code}})});
+    assert.equal((await call()).body.code,'api_quota_missing');
+  }
+  globalThis.fetch=async()=>({ok:false,status:429,json:async()=>({error:{type:'insufficient_quota'}})});
+  assert.equal((await call()).body.code,'api_quota_missing');
   globalThis.fetch=async()=>{const e=new Error();e.name='TimeoutError';throw e;};assert.equal((await call()).statusCode,504);
 });
 test('per-instance rate limit rejects repeated requests before calling the API',async()=>{

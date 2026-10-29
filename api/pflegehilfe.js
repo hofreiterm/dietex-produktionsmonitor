@@ -101,9 +101,13 @@ export default async function handler(req, res) {
     });
     if (!response.ok) {
       let upstreamCode = '';
-      try { const detail = await response.json(); upstreamCode = detail.error?.code || ''; } catch { /* Provider may return a non-JSON error. */ }
-      const quotaMissing = response.status === 429 && ['insufficient_quota', 'billing_hard_limit_reached'].includes(upstreamCode);
-      const message = quotaMissing ? 'Das OpenAI-API-Guthaben fehlt oder das Ausgabenlimit ist erreicht. Bitte die Produktionsleitung bitten, API-Guthaben und Abrechnung zu prüfen.'
+      let upstreamType = '';
+      try {
+        const detail = await response.json(); upstreamCode = detail.error?.code || ''; upstreamType = detail.error?.type || '';
+      } catch { /* Provider may return a non-JSON error. */ }
+      const billingCodes = ['insufficient_quota', 'billing_hard_limit_reached', 'credit_balance_exhausted', 'organization_spend_limit_exceeded', 'project_spend_limit_exceeded', 'organization_usage_limit_exceeded'];
+      const quotaMissing = response.status === 429 && [upstreamCode, upstreamType].some(value => billingCodes.includes(value));
+      const message = quotaMissing ? 'Das OpenAI-API-Guthaben fehlt oder ein API-Ausgaben-/Nutzungslimit ist erreicht. Bitte die Produktionsleitung bitten, API-Guthaben und Limits zu prüfen.'
         : response.status === 429 ? 'Das KI-Kontingent ist vorübergehend begrenzt. Bitte nach einer Minute erneut versuchen.'
         : response.status === 401 || response.status === 403 ? 'Der KI-Zugang muss in Vercel geprüft werden. Bitte die Produktionsleitung informieren.'
         : 'Die KI ist gerade nicht erreichbar. Bitte später erneut versuchen.';
