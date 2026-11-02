@@ -11,7 +11,7 @@
       "hazard_codes": [
         "H319"
       ],
-      "phase": "Detachur am Detachiertisch / Vordetachur zur Nassreinigung / Nachdetachur",
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
       "constraints": [
         "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
       ],
@@ -32,7 +32,7 @@
         "H336",
         "H412"
       ],
-      "phase": "Detachur am Detachiertisch / Vordetachur zur Nassreinigung / Nachdetachur",
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
       "constraints": [
         "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen.",
         "Lösemittelhaltig mit niedrigem Flammpunkt. Kreussler empfiehlt die Begrenzung von Fremdlösemittelverschleppung; keine pauschale Maschinenfreigabe nach Auftrag."
@@ -50,7 +50,7 @@
       "hazard_codes": [
         "H319"
       ],
-      "phase": "Detachur am Detachiertisch / Vordetachur zur Nassreinigung / Nachdetachur",
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
       "constraints": [
         "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
       ],
@@ -70,7 +70,7 @@
         "H304",
         "H336"
       ],
-      "phase": "Detachur am Detachiertisch / Vordetachur zur Nassreinigung / Nachdetachur",
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
       "constraints": [
         "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen.",
         "Lösemittelhaltig mit niedrigem Flammpunkt. Kreussler empfiehlt die Begrenzung von Fremdlösemittelverschleppung; keine pauschale Maschinenfreigabe nach Auftrag."
@@ -86,7 +86,7 @@
       "sds_date": "09.12.2024",
       "sds_version": 31,
       "hazard_codes": [],
-      "phase": "Detachur am Detachiertisch / Vordetachur zur Nassreinigung / Nachdetachur",
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
       "constraints": [
         "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
       ],
@@ -101,7 +101,7 @@
       "sds_date": "10.12.2024",
       "sds_version": 18,
       "hazard_codes": [],
-      "phase": "Detachur am Detachiertisch / Vordetachur zur Nassreinigung / Nachdetachur",
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
       "constraints": [
         "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
       ],
@@ -181,7 +181,7 @@
     {
       "id": "hydrob-easydry",
       "name": "Hydrob EASYDRY",
-      "purpose": "Hydrophobier- und Oleophobiermittel zum Imprägnieren und zur Fleckschutzausrüstung von Textilien aus wässriger Lösung. Wirksam bereits bei niedriger Trocknungstemperatur.",
+      "purpose": "Hydrophobier- und Oleopho-biermittel zum Imprägnier en und zur Fleckschutzausrüstung von Textilien aus wässriger Lösung. Wirksam bereits bei niedriger Trocknungstemperatur.",
       "sds_date": "23.01.2024",
       "sds_version": 11,
       "hazard_codes": [],
@@ -196,7 +196,7 @@
     {
       "id": "lanadol-abac",
       "name": "Lanadol ABAC",
-      "purpose": "Desinfektionsmittel für Oberbekleidung, Altenheimware, Schutzkleidung und Atemschutzmasken. Spülzonendesinfektionsmittel in Waschstraßen.",
+      "purpose": "Desinfektionsmittel für Oberbekleidung, Altenheimwa re, Schutzkleidung und Atemschutzmasken. Spülzonendesinfektionsmittel in Waschstraßen.",
       "sds_date": "20.06.2024",
       "sds_version": 31,
       "hazard_codes": [
@@ -263,7 +263,7 @@
     {
       "id": "lanadol-x-press",
       "name": "Lanadol X-Press",
-      "purpose": "Leistungsstarkes Spezialreinigungsmittel für weniger empfindliche Textilien für die Nassreinigung im LANADOL DRY Verfahren",
+      "purpose": "Leistungsstarkes Spezialreinigungsmittel für wenige r empfindliche Textilien für die Nassreinigung im LANADOL DRY Verfahren",
       "sds_date": "23.07.2024",
       "sds_version": 9,
       "hazard_codes": [
@@ -443,8 +443,72 @@
       ],
       "source_url": "https://de.kreussler-chemie.com/produkte.html",
       "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "prenett-a",
+      "name": "PRENETT A",
+      "purpose": "Gerbstoffhaltige Flecken: Kaffee, Tee, Rotwein, Obst, Gras",
+      "sds_date": null,
+      "sds_version": null,
+      "hazard_codes": [],
+      "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
+      "constraints": [
+        "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
+        "Sicherheitsdatenblatt noch nicht hinterlegt; leere Gefahrenliste bedeutet keine Einstufung als ungefährlich.",
+        "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "prenett-b",
+      "name": "PRENETT B",
+      "purpose": "Eiweiß- und stärkehaltige Flecken: Blut, Milch, Speisereste, Schweiß",
+      "sds_date": null,
+      "sds_version": null,
+      "hazard_codes": [],
+      "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
+      "constraints": [
+        "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
+        "Sicherheitsdatenblatt noch nicht hinterlegt; leere Gefahrenliste bedeutet keine Einstufung als ungefährlich.",
+        "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "prenett-c",
+      "name": "PRENETT C",
+      "purpose": "Lösemittellösliche Flecken: Farben, Lacke, Kosmetika, Klebstoffe",
+      "sds_date": null,
+      "sds_version": null,
+      "hazard_codes": [],
+      "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
+      "constraints": [
+        "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
+        "Sicherheitsdatenblatt noch nicht hinterlegt; leere Gefahrenliste bedeutet keine Einstufung als ungefährlich.",
+        "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
     }
   ],
+  "prespotting": {
+    "wash_wet": [
+      "deprit-professional-1",
+      "deprit-professional-2",
+      "deprit-professional-3",
+      "deprit-professional-4",
+      "deprit-professional-5",
+      "deprit-professional-6"
+    ],
+    "solvent": [
+      "prenett-a",
+      "prenett-b",
+      "prenett-c"
+    ],
+    "confirmed_by": "Betriebsangabe des Anwenders"
+  },
   "machines": [
     {
       "id": "k4-1",

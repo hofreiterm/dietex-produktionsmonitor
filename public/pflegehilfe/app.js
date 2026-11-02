@@ -98,7 +98,7 @@ function renderProfessional(pro){
     for(const p of pro.products){const card=document.createElement('article');card.className='productcard';card.append(element('h3',p.reference.name),element('small',p.phase+(p.specialist_review?' · nur mit Verfahrensfreigabe':'')),element('p',p.reason),element('p',p.application));
       const details=document.createElement('details');details.append(element('summary','Produktgrundlage und Einschränkungen'),element('p',p.reference.purpose));
       for(const item of p.reference.constraints)details.append(element('p',item));
-      details.append(element('p',`Sicherheitsdatenblatt: Revision ${p.reference.sds_date}, Version ${p.reference.sds_version}. ${p.reference.hazard_codes.length?'Gefahrenhinweise: '+p.reference.hazard_codes.join(', ')+'. ':''}Schutzmaßnahmen laut SDB und Betriebsanweisung beachten.`));
+      details.append(element('p',p.reference.sds_date ? `Sicherheitsdatenblatt: Revision ${p.reference.sds_date}, Version ${p.reference.sds_version}. ${p.reference.hazard_codes.length?'Gefahrenhinweise: '+p.reference.hazard_codes.join(', ')+'. ':''}Schutzmaßnahmen laut SDB und Betriebsanweisung beachten.` : 'Sicherheitsdatenblatt noch nicht hinterlegt. Gefahreneinstufung und Schutzmaßnahmen anhand des aktuellen SDB und der Betriebsanweisung klären.'));
       const source=element('a','Herstellerinformationen ↗');source.href=p.reference.source_url;source.target='_blank';source.rel='noopener noreferrer';details.append(source);card.append(details);panel.append(card);
     }
   }

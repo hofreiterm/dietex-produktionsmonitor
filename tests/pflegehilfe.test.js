@@ -16,7 +16,7 @@ async function call({ method='POST', body={images:[image],note:''}, headers={}, 
   const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(s){this.statusCode=s;return this;},json(v){this.body=v;return this;}};
   await handler(req,res);return res;
 }
-function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'})),professional:{textile_assessment:'Prüfen',stain_assessment:'Unbekannt',process_recommendation:'Fachlich prüfen',wet_cleaning_assessment:'Offen',manufacturer_deviation:false,inspection_steps:['Saumprobe'],workflow:['Prüfen'],finishing:['Kontrollieren'],stop_conditions:['Bei Veränderung stoppen'],questions:['Programm klären'],products:[]}};}
+function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'})),professional:{selected_process:'undecided',textile_assessment:'Prüfen',stain_assessment:'Unbekannt',process_recommendation:'Fachlich prüfen',wet_cleaning_assessment:'Offen',manufacturer_deviation:false,inspection_steps:['Saumprobe'],workflow:['Prüfen'],finishing:['Kontrollieren'],stop_conditions:['Bei Veränderung stoppen'],questions:['Programm klären'],products:[]}};}
 function upstream(a,extra={}){return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(a)}]}],...extra})};}
 test('missing configuration disables the service without exposing credentials',async()=>{
   delete process.env.OPENAI_API_KEY;delete process.env.PFLEGEHILFE_ACCESS_CODE;
@@ -91,4 +91,29 @@ test('failed trial removes treatment proposals and requires stopping',async()=>{
 test('bleach and disinfection proposals cannot supply unapproved application recipes',async()=>{
   configured();const a=analysis();a.professional.products=[{id:'ottalin-cl',phase:'Hauptreinigung',reason:'Test',application:'Invented dose 50 g/L'}];globalThis.fetch=async()=>upstream(a);
   const product=(await call()).body.analysis.professional.products[0];assert.equal(product.specialist_review,true);assert.ok(!product.application.includes('50 g/L'));assert.match(product.application,/freigegebenen/);
+});
+
+test('prespotting respects the selected wash, wet and solvent process',async()=>{
+  configured();
+  for(const process of ['wash','wet','solvent-k4','solvent-intense','undecided']){
+    const a=analysis();a.professional.selected_process=process;
+    a.professional.products=['deprit-professional-1','prenett-b'].map(id=>({id,phase:'Vordetachur',reason:'Eiweiß',application:'Nach Vorprobe und freigegebenem Verfahren.'}));
+    globalThis.fetch=async()=>upstream(a);
+    const result=await call();assert.equal(result.statusCode,200);
+    const expected=['wash','wet'].includes(process)?['deprit-professional-1']:process.startsWith('solvent-')?['prenett-b']:[];
+    assert.deepEqual(result.body.analysis.professional.products.map(p=>p.id),expected);
+    assert.ok(result.body.analysis.professional.questions.some(q=>q.includes('betriebliche Zuordnung')));
+    if(process.startsWith('solvent-')){
+      const reference=result.body.analysis.professional.products[0].reference;
+      assert.equal(reference.sds_date,null);assert.ok(reference.constraints.some(c=>c.includes('noch nicht hinterlegt')));
+    }
+  }
+});
+
+test('DEPRIT postspotting remains separate and PRENETT is not a main-bath product',async()=>{
+  configured();const a=analysis();a.professional.selected_process='solvent-k4';
+  a.professional.products=[{id:'deprit-professional-3',phase:'Nachdetachur',reason:'Test',application:'Fachprüfung am Detachiertisch.'},{id:'prenett-a',phase:'Hauptreinigung',reason:'Test',application:'Test'}];
+  globalThis.fetch=async()=>upstream(a);
+  assert.deepEqual((await call()).body.analysis.professional.products.map(p=>p.id),['deprit-professional-3']);
+  a.professional.selected_process='invented';assert.equal((await call()).statusCode,502);
 });

@@ -8,7 +8,7 @@ Live Produktionsmonitor mit Supabase, Tablets, Stationen und Monitoransichten.
 
 Die Analyse ergänzt die Herstellerkennzeichnung um einen fachlichen Bearbeitungsentwurf: Textil/Konstruktion, Fleckeneinschätzung, Verfahrensvorschlag, gesonderte Nassreinigungsbewertung, Vorproben, Bearbeitungsfolge, Produktkandidaten, Trocknung/Finish, Abbruchkriterien und offene Fragen. Mitarbeiter können K4-Maschine 1/2, INTENSE oder die Prüfung einer Nassreinigungsoption wählen und Fleckengruppe, Fleckenalter und Vorprobenergebnis angeben.
 
-`lib/care-catalog.json` enthält 25 betrieblich benannte Kreussler-Produkte mit Anwendungsgebiet, Grenzen, SDB-Revisionsstand und Gefahrenhinweisen. Es werden weder die Original-PDFs noch interne Serverpfade veröffentlicht. Herstelleranweisungen ergänzen die SDB; ein SDB allein ist keine Dosierrezeptur oder Textilfreigabe.
+`lib/care-catalog.json` enthält 28 betrieblich benannte Kreussler-Produkte mit Anwendungsgebiet, Grenzen, SDB-Revisionsstand und Gefahrenhinweisen. Es werden weder die Original-PDFs noch interne Serverpfade veröffentlicht. Herstelleranweisungen ergänzen die SDB; ein SDB allein ist keine Dosierrezeptur oder Textilfreigabe.
 
 Noch nicht hinterlegt sind Maschinenmodelle/-programme, Flottenverhältnis, Wasserhärte, Dosierrezepturen und Trocknungs-/Finishaustattung. Der Entwurf muss diese Punkte offenlegen. Alternative Verfahren außerhalb der Herstellerkennzeichnung bleiben fachlich zu prüfende Optionen. Es wird keine PSA-, Desinfektions- oder Imprägnierwirkung zugesichert.
 
@@ -34,3 +34,5 @@ Die Pflegehilfe ist ohne Anmeldung und ohne Team-Code nutzbar. Das optionale Hin
 `node --test tests/pflegehilfe.test.js` prüft Konfiguration, Nutzung ohne Team-Code, Herkunftsprüfung, Eingabevalidierung, KI-Anfragen, unklare Ergebnisse, Quotenfehler und Zeitüberschreitungen mit simulierten API-Antworten. `pnpm build` baut das Frontend. Bei lokalen Windows-Problemen mit dem Vite-Konfigurationsloader: `node node_modules/vite/bin/vite.js build --configLoader runner`.
 
 Vite allein führt die Vercel-Funktion nicht aus; für einen lokalen Test mit API ist Vercel Dev erforderlich. Echte Bildanalysen erst nach Einrichtung des Schlüssels am Deployment testen. Pflegeangaben vor Anwendung am Originaletikett prüfen; unlesbare oder fehlende Zeichen und Schutzkleidung erfordern Klärung bzw. Herstellerangaben.
+
+Betriebliche Vordetachur: DEPRIT 1–6 vor Waschen/Nassreinigung; PRENETT A/B/C vor Lösemittelreinigung. Die strukturierte Verfahrenswahl wird serverseitig gegen diese Zuordnung geprüft. PRENETT-Sicherheitsdatenblätter sind noch nicht hinterlegt; die Oberfläche zeigt diesen fehlenden Nachweis ausdrücklich. DEPRIT-Nachdetachur bleibt getrennt zu beurteilen.
