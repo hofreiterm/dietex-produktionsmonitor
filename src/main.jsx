@@ -5817,6 +5817,11 @@ const tourColumns = Object.entries(
                 {label}
               </Button>
             ))}
+            {!takeoverMode && !expeditMode && (
+              <Button onClick={() => window.location.assign("/pflegehilfe")}>
+                Pflegehilfe
+              </Button>
+            )}
           </nav>
         )}
 
