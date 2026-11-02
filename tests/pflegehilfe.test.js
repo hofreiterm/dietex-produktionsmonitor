@@ -16,7 +16,7 @@ async function call({ method='POST', body={images:[image],note:''}, headers={}, 
   const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(s){this.statusCode=s;return this;},json(v){this.body=v;return this;}};
   await handler(req,res);return res;
 }
-function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'})),professional:{tunnel_finisher:{status:'check_required',reason:'Artikel prüfen; Betriebsprogramm fehlt.'},short_steps:['Vorprobe durchführen.','Verfahren fachlich bestätigen.'],selected_process:'undecided',textile_assessment:'Prüfen',stain_assessment:'Unbekannt',process_recommendation:'Fachlich prüfen',wet_cleaning_assessment:'Offen',manufacturer_deviation:false,inspection_steps:['Saumprobe'],workflow:['Prüfen'],finishing:['Kontrollieren'],stop_conditions:['Bei Veränderung stoppen'],questions:['Programm klären'],products:[]}};}
+function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'})),professional:{wash_program:{id:null,reason:'Programm nach Artikelprüfung auswählen.'},tunnel_finisher:{status:'check_required',reason:'Artikel prüfen; Betriebsprogramm fehlt.'},short_steps:['Vorprobe durchführen.','Verfahren fachlich bestätigen.'],selected_process:'undecided',textile_assessment:'Prüfen',stain_assessment:'Unbekannt',process_recommendation:'Fachlich prüfen',wet_cleaning_assessment:'Offen',manufacturer_deviation:false,inspection_steps:['Saumprobe'],workflow:['Prüfen'],finishing:['Kontrollieren'],stop_conditions:['Bei Veränderung stoppen'],questions:['Programm klären'],products:[]}};}
 function upstream(a,extra={}){return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(a)}]}],...extra})};}
 test('missing configuration disables the service without exposing credentials',async()=>{
   delete process.env.OPENAI_API_KEY;delete process.env.PFLEGEHILFE_ACCESS_CODE;
@@ -143,4 +143,22 @@ test('photographed CF20 program is a reference rather than a confirmed garment r
   assert.equal(p.steam_time_seconds,10);assert.equal(p.dwell_time_seconds,5);assert.equal(p.air_time_seconds,15);
   assert.equal(p.usual_article_group,'Oberbekleidung');assert.equal(p.temperatures_confirmed,false);assert.equal(p.status,'observed_not_approved');assert.equal(t.program_confirmed,false);
   assert.deepEqual(t.equipment.approved_programs,[]);
+});
+
+test('WSM list returns exact program number, temperature and machine scope',async()=>{
+  configured();const a=analysis();a.professional.selected_process='wet';a.professional.wash_program={id:'wsm-12',reason:'Empfindlicher Artikel nach Prüfung.'};globalThis.fetch=async()=>upstream(a);
+  const p=(await call()).body.analysis.professional.wash_program;
+  assert.equal(p.reference.number,12);assert.equal(p.reference.name,'Wet Clean Sensitiv');assert.equal(p.reference.temperature_display,'25');assert.equal(p.machine_group.length,5);
+  a.professional.wash_program.id='wsm-27';assert.equal((await call()).statusCode,502);
+});
+test('solvent cleaning, special programs and supplementary steps cannot use an ordinary wash selection',async()=>{
+  configured();
+  for(const [process,id]of [['solvent-k4','wsm-12'],['wash','wsm-19'],['wash','wsm-24'],['wash','wsm-40'],['wash','wsm-32']]){
+    const a=analysis();a.professional.selected_process=process;a.professional.wash_program={id,reason:'Test'};globalThis.fetch=async()=>upstream(a);
+    const p=(await call()).body.analysis.professional;assert.equal(p.wash_program.id,null);assert.match(p.short_steps[0],/Fachkraft/);
+  }
+});
+test('failed trial clears a selected WSM program',async()=>{
+  configured();const a=analysis();a.professional.selected_process='wet';a.professional.wash_program={id:'wsm-13',reason:'Test'};globalThis.fetch=async()=>upstream(a);
+  assert.equal((await call({body:{images:[image],context:{trial:'failed'}}})).body.analysis.professional.wash_program.id,null);
 });
