@@ -11,14 +11,14 @@ function render() {
   });
   $('analyze').disabled = busy || adding || !ready || !photos.length;
   $('cameraBtn').disabled = $('galleryBtn').disabled = busy || adding || photos.length === 3;
-  $('teamCode').disabled = $('notes').disabled = busy;
+  $('notes').disabled = busy;
 }
 async function checkStatus() {
   ready = false; $('serviceStatus').textContent = 'KI-Verbindung wird geprüft …'; render();
   try {
     const response = await fetch('/api/pflegehilfe',{cache:'no-store',signal:AbortSignal.timeout(10000)});
     const data = await response.json(); ready = response.ok && data.ready === true;
-    $('serviceStatus').textContent = ready ? 'KI-Auswertung bereit. Team-Code eingeben und Fotos auswählen.' : data.message || 'Die KI-Auswertung wird noch eingerichtet.';
+    $('serviceStatus').textContent = ready ? 'KI-Auswertung bereit. Fotos auswählen und analysieren.' : data.message || 'Die KI-Auswertung wird noch eingerichtet.';
   } catch { $('serviceStatus').textContent = 'KI-Verbindung nicht erreichbar. Bitte erneut versuchen.'; }
   $('retryStatus').hidden = ready; render();
 }
@@ -68,11 +68,10 @@ function showResult(a){
 }
 $('analyze').onclick=async()=>{
   if(busy||!ready||!photos.length)return;
-  if(!$('teamCode').value){$('error').textContent='Bitte den Team-Code von der Produktionsleitung eingeben.';$('teamCode').focus();return;}
   busy=true;render();$('error').textContent='';$('analyze').textContent='Fotos werden ausgewertet …';$('cancel').hidden=false;controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort('timeout'),55000);
   try{
-    const response=await fetch('/api/pflegehilfe',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json','x-pflegehilfe-code':$('teamCode').value},body:JSON.stringify({images:photos.map(p=>p.data),note:$('notes').value})});
+    const response=await fetch('/api/pflegehilfe',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({images:photos.map(p=>p.data),note:$('notes').value})});
     let data;try{data=await response.json();}catch{throw new Error('Serverantwort nicht lesbar. Bitte weniger Fotos versuchen.');}
     if(!response.ok)throw new Error(data.error||'Die Analyse konnte nicht abgeschlossen werden.');
     if(!data.analysis||!Array.isArray(data.analysis.steps)||!Array.isArray(data.analysis.warnings))throw new Error('Unvollständige Antwort. Bitte erneut versuchen.');

@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 
 export const config = { maxDuration: 60 };
 const categories = ['Waschen', 'Bleichen', 'Trocknen', 'Bügeln', 'Professionelle Reinigung'];
@@ -33,10 +33,6 @@ function send(res, status, body) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   return res.status(status).json(body);
 }
-function equal(a, b) {
-  return typeof a === 'string' && a.length <= 256 && timingSafeEqual(
-    createHash('sha256').update(a).digest(), createHash('sha256').update(b).digest());
-}
 function validImage(image) {
   if (typeof image !== 'string' || image.length > 1_300_000) return false;
   const match = /^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/.exec(image);
@@ -64,7 +60,7 @@ function allowedRate(ip) {
   return bucket.count <= 20;
 }
 export default async function handler(req, res) {
-  const ready = Boolean(process.env.OPENAI_API_KEY && process.env.PFLEGEHILFE_ACCESS_CODE?.length >= 12);
+  const ready = Boolean(process.env.OPENAI_API_KEY);
   if (req.method === 'GET') return send(res, 200, { ready, message: ready
     ? 'KI-Auswertung bereit.' : 'Die KI-Auswertung wird noch eingerichtet. Bitte die Produktionsleitung informieren.' });
   if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); return send(res, 405, { error: 'Diese Anfrage wird nicht unterstützt.' }); }
@@ -73,7 +69,6 @@ export default async function handler(req, res) {
   if (!ready) return send(res, 503, { error: 'Die KI-Auswertung ist noch nicht eingerichtet. Bitte die Produktionsleitung informieren.' });
   const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0];
   if (!allowedRate(ip)) { res.setHeader('Retry-After', '900'); return send(res, 429, { error: 'Zu viele Anfragen. Bitte in 15 Minuten erneut versuchen.' }); }
-  if (!equal(req.headers['x-pflegehilfe-code'], process.env.PFLEGEHILFE_ACCESS_CODE)) return send(res, 401, { error: 'Der Team-Code ist nicht korrekt.' });
   if (!String(req.headers['content-type'] || '').startsWith('application/json')) return send(res, 415, { error: 'Bitte die Fotos erneut über die Pflegehilfe senden.' });
   let body = req.body;
   try {
