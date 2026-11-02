@@ -1,0 +1,579 @@
+{
+  "source": "Programmliste vom Anwender als Foto bereitgestellt",
+  "list_date": "21.05.2025",
+  "machine_group": [
+    "WSM 1",
+    "WSM 2",
+    "WSM 3",
+    "WSM 4",
+    "WSM 5"
+  ],
+  "programs": [
+    {
+      "id": "wsm-1",
+      "number": 1,
+      "name": "Anorak mit Imprägnierung",
+      "temperature_display": "40-40",
+      "temperature_values_c": [
+        40,
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Spezial-/Ausrüstungsverfahren; passendes Gesamtverfahren gesondert bestätigen."
+    },
+    {
+      "id": "wsm-2",
+      "number": 2,
+      "name": "Anorak ohne Imprägnierung",
+      "temperature_display": "40-40",
+      "temperature_values_c": [
+        40,
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-3",
+      "number": 3,
+      "name": "Brautkleider",
+      "temperature_display": "40-40",
+      "temperature_values_c": [
+        40,
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-4",
+      "number": 4,
+      "name": "Buntwäsche 40",
+      "temperature_display": "40",
+      "temperature_values_c": [
+        40
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-5",
+      "number": 5,
+      "name": "Buntwäsche 60°",
+      "temperature_display": "60",
+      "temperature_values_c": [
+        60
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-6",
+      "number": 6,
+      "name": "Hussen 40°",
+      "temperature_display": "40",
+      "temperature_values_c": [
+        40
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-7",
+      "number": 7,
+      "name": "Hussen 60°",
+      "temperature_display": "60",
+      "temperature_values_c": [
+        60
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-8",
+      "number": 8,
+      "name": "Monturen 40°",
+      "temperature_display": "40-40",
+      "temperature_values_c": [
+        40,
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-9",
+      "number": 9,
+      "name": "Monturen 60°",
+      "temperature_display": "60-60",
+      "temperature_values_c": [
+        60,
+        60
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-10",
+      "number": 10,
+      "name": "Polyesterkleider",
+      "temperature_display": "25",
+      "temperature_values_c": [
+        25
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-11",
+      "number": 11,
+      "name": "Store 45°",
+      "temperature_display": "45",
+      "temperature_values_c": [
+        45
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-12",
+      "number": 12,
+      "name": "Wet Clean Sensitiv",
+      "temperature_display": "25",
+      "temperature_values_c": [
+        25
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-13",
+      "number": 13,
+      "name": "Wet Clean",
+      "temperature_display": "30",
+      "temperature_values_c": [
+        30
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-14",
+      "number": 14,
+      "name": "Wolle",
+      "temperature_display": "25",
+      "temperature_values_c": [
+        25
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-15",
+      "number": 15,
+      "name": "Hemden weiss 60°",
+      "temperature_display": "60",
+      "temperature_values_c": [
+        60
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-16",
+      "number": 16,
+      "name": "Hemden einweichen 40°",
+      "temperature_display": "40",
+      "temperature_values_c": [
+        40
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Zusatzschritt, kein vollständiges Hauptreinigungsprogramm."
+    },
+    {
+      "id": "wsm-17",
+      "number": 17,
+      "name": "Hemden einweichen 60°",
+      "temperature_display": "60",
+      "temperature_values_c": [
+        60
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Zusatzschritt, kein vollständiges Hauptreinigungsprogramm."
+    },
+    {
+      "id": "wsm-18",
+      "number": 18,
+      "name": "Wolle einweichen",
+      "temperature_display": "20",
+      "temperature_values_c": [
+        20
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Zusatzschritt, kein vollständiges Hauptreinigungsprogramm."
+    },
+    {
+      "id": "wsm-19",
+      "number": 19,
+      "name": "Küchenwäsche Chlor",
+      "temperature_display": "60-60",
+      "temperature_values_c": [
+        60,
+        60
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": true,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Spezial-/Ausrüstungsverfahren; passendes Gesamtverfahren gesondert bestätigen."
+    },
+    {
+      "id": "wsm-20",
+      "number": 20,
+      "name": "Brandware",
+      "temperature_display": "40-40",
+      "temperature_values_c": [
+        40,
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Spezial-/Ausrüstungsverfahren; passendes Gesamtverfahren gesondert bestätigen."
+    },
+    {
+      "id": "wsm-21",
+      "number": 21,
+      "name": "Altenheim 40°",
+      "temperature_display": "40-40",
+      "temperature_values_c": [
+        40,
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Spezial-/Ausrüstungsverfahren; passendes Gesamtverfahren gesondert bestätigen."
+    },
+    {
+      "id": "wsm-22",
+      "number": 22,
+      "name": "Buntwäsche 30°",
+      "temperature_display": "30",
+      "temperature_values_c": [
+        30
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-23",
+      "number": 23,
+      "name": "Daunenjacken",
+      "temperature_display": "35",
+      "temperature_values_c": [
+        35
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-24",
+      "number": 24,
+      "name": "Feuerwehr mit Imprägnieren",
+      "temperature_display": "50-40",
+      "temperature_values_c": [
+        50,
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Spezial-/Ausrüstungsverfahren; passendes Gesamtverfahren gesondert bestätigen."
+    },
+    {
+      "id": "wsm-25",
+      "number": 25,
+      "name": "Imprägnieren",
+      "temperature_display": "40",
+      "temperature_values_c": [
+        40
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Zusatzschritt, kein vollständiges Hauptreinigungsprogramm."
+    },
+    {
+      "id": "wsm-26",
+      "number": 26,
+      "name": "Feuerwehr ohne Imprägnieren",
+      "temperature_display": "50-50",
+      "temperature_values_c": [
+        50,
+        50
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Spezial-/Ausrüstungsverfahren; passendes Gesamtverfahren gesondert bestätigen."
+    },
+    {
+      "id": "wsm-28",
+      "number": 28,
+      "name": "Wet Clean Sensitiv 30° wenig schleudern",
+      "temperature_display": "30",
+      "temperature_values_c": [
+        30
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-29",
+      "number": 29,
+      "name": "Buntwäsche 30° weniger schleudern",
+      "temperature_display": "30",
+      "temperature_values_c": [
+        30
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-30",
+      "number": 30,
+      "name": "Jeans 40°",
+      "temperature_display": "40",
+      "temperature_values_c": [
+        40
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": true,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Artikelbezogene Eignung, aktuelle Maschinenbelegung und Dosierrezeptur prüfen."
+    },
+    {
+      "id": "wsm-31",
+      "number": 31,
+      "name": "Imprägnieren stark",
+      "temperature_display": "40",
+      "temperature_values_c": [
+        40
+      ],
+      "prewash_marked": false,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Zusatzschritt, kein vollständiges Hauptreinigungsprogramm."
+    },
+    {
+      "id": "wsm-32",
+      "number": 32,
+      "name": "Gewürze weiß 45°C",
+      "temperature_display": "45",
+      "temperature_values_c": [
+        45
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Programmbeschriftung vom Anwender bestätigt; passende Textil-/Auftragsgruppe und Gesamtverfahren vor Vorschlag klären.",
+      "name_confirmed_by_user": true
+    },
+    {
+      "id": "wsm-33",
+      "number": 33,
+      "name": "Gewürze bunt 40°C",
+      "temperature_display": "40",
+      "temperature_values_c": [
+        40
+      ],
+      "prewash_marked": true,
+      "mainwash_marked": true,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": true,
+      "transcription_review": false,
+      "note": "Programmbeschriftung vom Anwender bestätigt; passende Textil-/Auftragsgruppe und Gesamtverfahren vor Vorschlag klären.",
+      "name_confirmed_by_user": true
+    },
+    {
+      "id": "wsm-40",
+      "number": 40,
+      "name": "schleudern",
+      "temperature_display": null,
+      "temperature_values_c": [],
+      "prewash_marked": false,
+      "mainwash_marked": false,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Zusatzschritt, kein vollständiges Hauptreinigungsprogramm."
+    },
+    {
+      "id": "wsm-41",
+      "number": 41,
+      "name": "spülen schleudern",
+      "temperature_display": null,
+      "temperature_values_c": [],
+      "prewash_marked": false,
+      "mainwash_marked": false,
+      "chlorine_marked": false,
+      "eligible_as_main_process": false,
+      "specialist_review": false,
+      "transcription_review": false,
+      "note": "Zusatzschritt, kein vollständiges Hauptreinigungsprogramm."
+    }
+  ],
+  "excluded_empty_numbers": [
+    0,
+    27,
+    34
+  ],
+  "rules": [
+    "Programmnummer, Name, Temperaturspalte und Markierungen sind vom Foto abgeschrieben; keine vollständige Maschinenrezeptur.",
+    "Doppelwerte wie 40-40 unverändert als Listenangabe behandeln; Temperaturzuordnung zu Prozessphasen ist nicht separat bestätigt.",
+    "Mechanik, Laufzeit, Beladung, Dosierung, Flottenverhältnis und Schleuderdrehzahl sind nicht angegeben. Keine Werte oder spezielle Wirksamkeit erfinden.",
+    "Programmname ersetzt weder Etikettprüfung noch Material-/Konstruktionsfreigabe. Bei abweichendem Etikett nur fachlich zu prüfende Alternative.",
+    "Chlorbleiche, Feuerwehr/PSA, Imprägnierung und Spezialverfahren erfordern bestätigtes Gesamtverfahren; keine Desinfektions- oder Schutzwirkungszusage.",
+    "Einweich-, Imprägnier-, Spül- und Schleuderschritte nicht als vollständiges Hauptprogramm ausgeben.",
+    "Beschriftungen der Nummern 32/33 vom Anwender bestätigt. Passende Textil-/Auftragsgruppe und Gesamtverfahren sind noch zu klären."
+  ]
+}
