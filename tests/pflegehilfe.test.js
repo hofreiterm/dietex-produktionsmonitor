@@ -16,7 +16,7 @@ async function call({ method='POST', body={images:[image],note:''}, headers={}, 
   const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(s){this.statusCode=s;return this;},json(v){this.body=v;return this;}};
   await handler(req,res);return res;
 }
-function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'})),professional:{wash_program:{id:null,reason:'Programm nach Artikelprüfung auswählen.'},tunnel_finisher:{status:'check_required',reason:'Artikel prüfen; Betriebsprogramm fehlt.'},short_steps:['Vorprobe durchführen.','Verfahren fachlich bestätigen.'],selected_process:'undecided',textile_assessment:'Prüfen',stain_assessment:'Unbekannt',process_recommendation:'Fachlich prüfen',wet_cleaning_assessment:'Offen',manufacturer_deviation:false,inspection_steps:['Saumprobe'],workflow:['Prüfen'],finishing:['Kontrollieren'],stop_conditions:['Bei Veränderung stoppen'],questions:['Programm klären'],products:[]}};}
+function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'})),professional:{wash_program:{id:null,reason:'Programm nach Artikelprüfung auswählen.'},tunnel_finisher:{status:'check_required',reason:'Artikel prüfen; Betriebsprogramm fehlt.'},short_steps:['Farbechtheit prüfen.','Keine gezielte Fleckvorbehandlung nötig.','Passendes Programm klären.','Trocknung und Finish klären.'],selected_process:'undecided',textile_assessment:'Prüfen',stain_assessment:'Unbekannt',process_recommendation:'Fachlich prüfen',wet_cleaning_assessment:'Offen',manufacturer_deviation:false,inspection_steps:['Saumprobe'],workflow:['Prüfen'],finishing:['Kontrollieren'],stop_conditions:['Bei Veränderung stoppen'],questions:['Programm klären'],products:[]}};}
 function upstream(a,extra={}){return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(a)}]}],...extra})};}
 test('missing configuration disables the service without exposing credentials',async()=>{
   delete process.env.OPENAI_API_KEY;delete process.env.PFLEGEHILFE_ACCESS_CODE;
@@ -119,9 +119,10 @@ test('DEPRIT postspotting remains separate and PRENETT is not a main-bath produc
 });
 
 test('brief instructions remain bounded and a failed trial overrides the brief plan',async()=>{
-  configured();const a=analysis();a.professional.short_steps=['Behandeln'];globalThis.fetch=async()=>upstream(a);
+  configured();const a=analysis();a.professional.short_steps=['Prüfen.','Vorbehandeln.','Waschen.','Finish.'];globalThis.fetch=async()=>upstream(a);
   const result=await call({body:{images:[image],context:{trial:'failed'}}});assert.match(result.body.analysis.professional.short_steps[0],/stoppen/);
-  for(const steps of [[],Array(6).fill('Test'),['x'.repeat(241)]]){a.professional.short_steps=steps;assert.equal((await call()).statusCode,502);}
+  assert.equal(result.body.analysis.professional.short_steps.length,4);
+  for(const steps of [[],Array(3).fill('Test'),Array(5).fill('Test'),['x'.repeat(201),'Test','Test','Test']]){a.professional.short_steps=steps;assert.equal((await call()).statusCode,502);}
 });
 
 test('tunnel finisher carries the confirmed CF20 profile and requires program confirmation',async()=>{
