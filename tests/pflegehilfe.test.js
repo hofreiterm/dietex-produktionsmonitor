@@ -8,12 +8,11 @@ afterEach(() => { globalThis.fetch = originalFetch;
     if(value===undefined)delete process.env[key];else process.env[key]=value;
   }
 });
-const code = 'test-only-team-code';
 const image = 'data:image/jpeg;base64,'+Buffer.from([255,216,255,0]).toString('base64');
 let id = 0;
-function configured(){ process.env.OPENAI_API_KEY='test-only-key';process.env.PFLEGEHILFE_ACCESS_CODE=code; }
+function configured(){ process.env.OPENAI_API_KEY='test-only-key';delete process.env.PFLEGEHILFE_ACCESS_CODE; }
 async function call({ method='POST', body={images:[image],note:''}, headers={}, ip }={}){
-  const req={method,body,headers:{host:'dietex.example',origin:'https://dietex.example','content-type':'application/json','x-pflegehilfe-code':code,...headers},socket:{remoteAddress:ip||`test-${++id}`}};
+  const req={method,body,headers:{host:'dietex.example',origin:'https://dietex.example','content-type':'application/json',...headers},socket:{remoteAddress:ip||`test-${++id}`}};
   const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(s){this.statusCode=s;return this;},json(v){this.body=v;return this;}};
   await handler(req,res);return res;
 }
@@ -24,10 +23,9 @@ test('missing configuration disables the service without exposing credentials',a
   const status=await call({method:'GET'});assert.equal(status.body.ready,false);assert.equal(status.headers['Cache-Control'],'no-store');
   assert.equal((await call()).statusCode,503);
 });
-test('status reports readiness but no secret values',async()=>{configured();const result=await call({method:'GET'});assert.equal(result.body.ready,true);assert.ok(!JSON.stringify(result.body).includes(code));});
-test('invalid code and cross-origin request never call OpenAI',async()=>{
+test('status reports readiness without a team code and exposes no API key',async()=>{configured();const result=await call({method:'GET'});assert.equal(result.body.ready,true);assert.ok(!JSON.stringify(result.body).includes('test-only-key'));});
+test('cross-origin requests never call OpenAI',async()=>{
   configured();globalThis.fetch=()=>{throw new Error('Unexpected network request');};
-  assert.equal((await call({headers:{'x-pflegehilfe-code':'wrong'}})).statusCode,401);
   assert.equal((await call({headers:{origin:'https://untrusted.example'}})).statusCode,403);
 });
 test('invalid images, too many photos, oversized bodies and malformed JSON are rejected',async()=>{
@@ -36,7 +34,7 @@ test('invalid images, too many photos, oversized bodies and malformed JSON are r
   assert.equal((await call({headers:{'content-length':'4000001'}})).statusCode,413);
   assert.equal((await call({body:'{'})).statusCode,400);
 });
-test('valid images are sent only to OpenAI with storage disabled and a strict schema',async()=>{
+test('valid images work without a team code and use storage disabled and a strict schema',async()=>{
   configured();globalThis.fetch=async(url,options)=>{assert.equal(url,'https://api.openai.com/v1/responses');const body=JSON.parse(options.body);assert.equal(body.store,false);assert.equal(body.text.format.strict,true);assert.equal(body.input[0].content[1].image_url,image);return upstream(analysis());};
   const res=await call();assert.equal(res.statusCode,200);assert.equal(res.body.analysis.steps.length,5);
 });
@@ -64,6 +62,6 @@ test('upstream quota failure and timeouts produce useful errors',async()=>{
   globalThis.fetch=async()=>{const e=new Error();e.name='TimeoutError';throw e;};assert.equal((await call()).statusCode,504);
 });
 test('per-instance rate limit rejects repeated requests before calling the API',async()=>{
-  configured();for(let i=0;i<20;i++)assert.equal((await call({ip:'rate-test',headers:{'x-pflegehilfe-code':'wrong'}})).statusCode,401);
+  configured();for(let i=0;i<20;i++)assert.equal((await call({ip:'rate-test',body:{images:[]}})).statusCode,400);
   const result=await call({ip:'rate-test'});assert.equal(result.statusCode,429);assert.equal(result.headers['Retry-After'],'900');
 });
