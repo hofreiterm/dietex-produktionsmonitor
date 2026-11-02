@@ -448,13 +448,21 @@
       "id": "prenett-a",
       "name": "PRENETT A",
       "purpose": "Gerbstoffhaltige Flecken: Kaffee, Tee, Rotwein, Obst, Gras",
-      "sds_date": null,
-      "sds_version": null,
-      "hazard_codes": [],
+      "sds_date": "27.02.2024",
+      "sds_version": 11,
+      "hazard_codes": [
+        "H315",
+        "H318",
+        "H412"
+      ],
+      "sds_jurisdiction": "DE",
       "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
       "constraints": [
         "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
-        "Sicherheitsdatenblatt noch nicht hinterlegt; leere Gefahrenliste bedeutet keine Einstufung als ungefährlich.",
+        "Vorliegendes SDB ist die deutsche Fassung vom 27.02.2024; keine österreichische Fassung hinterlegt.",
+        "Haut-/Augenkontakt vermeiden; geeignete Schutzhandschuhe und dichtschließende Schutzbrille, Lüftung/Absaugung und Vermeidung von Aerosolen gemäß SDB/Betriebsanweisung beachten.",
+        "Herstelleranwendung laut Produktblatt: Fleckart identifizieren, passendes PRENETT unverdünnt sparsam auftragen, nur entsprechend der Textilempfindlichkeit einbürsten; anschließend nach ca. 10–20 Minuten normal reinigen. Diese Referenz ersetzt kein zum Artikel und zur Maschine passendes Betriebsverfahren.",
+        "Bei empfindlichen oder farbunechten Textilien empfiehlt das Produktblatt vor der Maschinenreinigung kurzes Ausblasen der Hauptmenge mit Pressluft; nur am geeigneten Detachierplatz mit Absaugung und nach Betriebsanweisung, Aerosole vermeiden.",
         "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
       ],
       "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
@@ -464,13 +472,20 @@
       "id": "prenett-b",
       "name": "PRENETT B",
       "purpose": "Eiweiß- und stärkehaltige Flecken: Blut, Milch, Speisereste, Schweiß",
-      "sds_date": null,
-      "sds_version": null,
-      "hazard_codes": [],
+      "sds_date": "27.02.2024",
+      "sds_version": 8,
+      "hazard_codes": [
+        "H315",
+        "H318"
+      ],
+      "sds_jurisdiction": "DE",
       "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
       "constraints": [
         "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
-        "Sicherheitsdatenblatt noch nicht hinterlegt; leere Gefahrenliste bedeutet keine Einstufung als ungefährlich.",
+        "Vorliegendes SDB ist die deutsche Fassung vom 27.02.2024; keine österreichische Fassung hinterlegt.",
+        "Haut-/Augenkontakt vermeiden; geeignete Schutzhandschuhe und dichtschließende Schutzbrille, Lüftung/Absaugung und Vermeidung von Aerosolen gemäß SDB/Betriebsanweisung beachten.",
+        "Herstelleranwendung laut Produktblatt: Fleckart identifizieren, passendes PRENETT unverdünnt sparsam auftragen, nur entsprechend der Textilempfindlichkeit einbürsten; anschließend nach ca. 10–20 Minuten normal reinigen. Diese Referenz ersetzt kein zum Artikel und zur Maschine passendes Betriebsverfahren.",
+        "Bei empfindlichen oder farbunechten Textilien empfiehlt das Produktblatt vor der Maschinenreinigung kurzes Ausblasen der Hauptmenge mit Pressluft; nur am geeigneten Detachierplatz mit Absaugung und nach Betriebsanweisung, Aerosole vermeiden.",
         "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
       ],
       "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
@@ -480,13 +495,20 @@
       "id": "prenett-c",
       "name": "PRENETT C",
       "purpose": "Lösemittellösliche Flecken: Farben, Lacke, Kosmetika, Klebstoffe",
-      "sds_date": null,
-      "sds_version": null,
-      "hazard_codes": [],
+      "sds_date": "27.02.2024",
+      "sds_version": 20,
+      "hazard_codes": [
+        "H315",
+        "H318"
+      ],
+      "sds_jurisdiction": "DE",
       "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
       "constraints": [
         "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
-        "Sicherheitsdatenblatt noch nicht hinterlegt; leere Gefahrenliste bedeutet keine Einstufung als ungefährlich.",
+        "Vorliegendes SDB ist die deutsche Fassung vom 27.02.2024; keine österreichische Fassung hinterlegt.",
+        "Haut-/Augenkontakt vermeiden; geeignete Schutzhandschuhe und dichtschließende Schutzbrille, Lüftung/Absaugung und Vermeidung von Aerosolen gemäß SDB/Betriebsanweisung beachten.",
+        "Herstelleranwendung laut Produktblatt: Fleckart identifizieren, passendes PRENETT unverdünnt sparsam auftragen, nur entsprechend der Textilempfindlichkeit einbürsten; anschließend nach ca. 10–20 Minuten normal reinigen. Diese Referenz ersetzt kein zum Artikel und zur Maschine passendes Betriebsverfahren.",
+        "Bei empfindlichen oder farbunechten Textilien empfiehlt das Produktblatt vor der Maschinenreinigung kurzes Ausblasen der Hauptmenge mit Pressluft; nur am geeigneten Detachierplatz mit Absaugung und nach Betriebsanweisung, Aerosole vermeiden.",
         "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
       ],
       "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",

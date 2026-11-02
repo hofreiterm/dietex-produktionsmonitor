@@ -105,7 +105,7 @@ test('prespotting respects the selected wash, wet and solvent process',async()=>
     assert.ok(result.body.analysis.professional.questions.some(q=>q.includes('betriebliche Zuordnung')));
     if(process.startsWith('solvent-')){
       const reference=result.body.analysis.professional.products[0].reference;
-      assert.equal(reference.sds_date,null);assert.ok(reference.constraints.some(c=>c.includes('noch nicht hinterlegt')));
+      assert.equal(reference.sds_date,'27.02.2024');assert.equal(reference.sds_version,8);assert.deepEqual(reference.hazard_codes,['H315','H318']);assert.equal(reference.sds_jurisdiction,'DE');
     }
   }
 });
