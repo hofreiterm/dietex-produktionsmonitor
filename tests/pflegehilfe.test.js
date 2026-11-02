@@ -16,7 +16,7 @@ async function call({ method='POST', body={images:[image],note:''}, headers={}, 
   const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(s){this.statusCode=s;return this;},json(v){this.body=v;return this;}};
   await handler(req,res);return res;
 }
-function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'}))};}
+function analysis(){return {title:'Testetikett',material:'Material nicht lesbar',detected_text:'40',needs_review:false,warnings:[],steps:['Waschen','Bleichen','Trocknen','Bügeln','Professionelle Reinigung'].map(category=>({category,status:'allowed',instruction:'Testanweisung',evidence:'Testetikett'})),professional:{textile_assessment:'Prüfen',stain_assessment:'Unbekannt',process_recommendation:'Fachlich prüfen',wet_cleaning_assessment:'Offen',manufacturer_deviation:false,inspection_steps:['Saumprobe'],workflow:['Prüfen'],finishing:['Kontrollieren'],stop_conditions:['Bei Veränderung stoppen'],questions:['Programm klären'],products:[]}};}
 function upstream(a,extra={}){return {ok:true,json:async()=>({status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(a)}]}],...extra})};}
 test('missing configuration disables the service without exposing credentials',async()=>{
   delete process.env.OPENAI_API_KEY;delete process.env.PFLEGEHILFE_ACCESS_CODE;
@@ -64,4 +64,31 @@ test('upstream quota failure and timeouts produce useful errors',async()=>{
 test('per-instance rate limit rejects repeated requests before calling the API',async()=>{
   configured();for(let i=0;i<20;i++)assert.equal((await call({ip:'rate-test',body:{images:[]}})).statusCode,400);
   const result=await call({ip:'rate-test'});assert.equal(result.statusCode,429);assert.equal(result.headers['Retry-After'],'900');
+});
+
+test('invalid machine and trial context are rejected before provider access',async()=>{
+  configured();globalThis.fetch=()=>{throw new Error('Unexpected network request');};
+  for(const context of [{machine:'unknown-machine'},{trial:'assume-safe'},null,[]])assert.equal((await call({body:{images:[image],context}})).statusCode,400);
+});
+test('unknown products and oversized professional plans are rejected',async()=>{
+  configured();const a=analysis();a.professional.products=[{id:'invented-product',phase:'Vordetachur',reason:'Test',application:'Test'}];globalThis.fetch=async()=>upstream(a);assert.equal((await call()).statusCode,502);
+  a.professional.products=[];a.professional.questions=Array(16).fill('Test');assert.equal((await call()).statusCode,502);
+});
+test('catalog restricts suggestions and attaches verified product references',async()=>{
+  configured();const a=analysis();a.professional.products=[{id:'deprit-professional-3',phase:'Nachdetachur',reason:'Gerbstoff',application:'Vorprobe, danach am Detachiertisch beurteilen.'}];globalThis.fetch=async()=>upstream(a);
+  const result=await call({body:{images:[image],context:{machine:'k4-1',stain:'tannin',trial:'not_done'}}});
+  assert.equal(result.statusCode,200);assert.equal(result.body.analysis.professional.products[0].reference.name,'Deprit Professional 3');assert.equal(result.body.analysis.needs_review,true);
+  assert.ok(!JSON.stringify(result.body).includes('dietex01srv'));
+});
+test('PERAMON and X-PRESS on delicate fibers are excluded from garment treatment',async()=>{
+  configured();const a=analysis();a.material='100 % Seide';a.professional.products=['peramon','lanadol-x-press'].map(id=>({id,phase:'Hauptreinigung',reason:'Test',application:'Test'}));globalThis.fetch=async()=>upstream(a);
+  const result=await call();assert.deepEqual(result.body.analysis.professional.products,[]);assert.match(result.body.analysis.professional.questions.join(' '),/X-PRESS/);
+});
+test('failed trial removes treatment proposals and requires stopping',async()=>{
+  configured();const a=analysis();a.professional.products=[{id:'deprit-professional-2',phase:'Vordetachur',reason:'Test',application:'Test'}];globalThis.fetch=async()=>upstream(a);
+  const result=await call({body:{images:[image],context:{trial:'failed'}}});assert.equal(result.body.analysis.professional.products.length,0);assert.match(result.body.analysis.professional.workflow[0],/stoppen/);
+});
+test('bleach and disinfection proposals cannot supply unapproved application recipes',async()=>{
+  configured();const a=analysis();a.professional.products=[{id:'ottalin-cl',phase:'Hauptreinigung',reason:'Test',application:'Invented dose 50 g/L'}];globalThis.fetch=async()=>upstream(a);
+  const product=(await call()).body.analysis.professional.products[0];assert.equal(product.specialist_review,true);assert.ok(!product.application.includes('50 g/L'));assert.match(product.application,/freigegebenen/);
 });

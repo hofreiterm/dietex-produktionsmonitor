@@ -12,6 +12,7 @@ function render() {
   $('analyze').disabled = busy || adding || !ready || !photos.length;
   $('cameraBtn').disabled = $('galleryBtn').disabled = busy || adding || photos.length === 3;
   $('notes').disabled = busy;
+  for(const id of ['machine','stain','stainAge','trial'])$(id).disabled=busy;
 }
 async function checkStatus() {
   ready = false; $('serviceStatus').textContent = 'KI-Verbindung wird geprüft …'; render();
@@ -64,14 +65,15 @@ function showResult(a){
     const div=document.createElement('div');div.append(element('h3',step.category),element('p',step.instruction));
     const evidence=element('p','Etikett: '+(step.evidence||'nicht eindeutig lesbar'));evidence.className='evidence';div.append(evidence);article.append(icon,div);$('carelist').append(article);
   }
+  renderProfessional(a.professional);
   $('uploadPanel').hidden=true;$('resultPanel').hidden=false;$('resultPanel').focus({preventScroll:true});window.scrollTo({top:0,behavior:'smooth'});
 }
 $('analyze').onclick=async()=>{
   if(busy||!ready||!photos.length)return;
   busy=true;render();$('error').textContent='';$('analyze').textContent='Fotos werden ausgewertet …';$('cancel').hidden=false;controller=new AbortController();
-  const timeout=setTimeout(()=>controller.abort('timeout'),55000);
+  const timeout=setTimeout(()=>controller.abort('timeout'),105000);
   try{
-    const response=await fetch('/api/pflegehilfe',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({images:photos.map(p=>p.data),note:$('notes').value})});
+    const response=await fetch('/api/pflegehilfe',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({images:photos.map(p=>p.data),note:$('notes').value,context:{machine:$('machine').value,stain:$('stain').value,age:$('stainAge').value,trial:$('trial').value}})});
     let data;try{data=await response.json();}catch{throw new Error('Serverantwort nicht lesbar. Bitte weniger Fotos versuchen.');}
     if(!response.ok)throw new Error(data.error||'Die Analyse konnte nicht abgeschlossen werden.');
     if(!data.analysis||!Array.isArray(data.analysis.steps)||!Array.isArray(data.analysis.warnings))throw new Error('Unvollständige Antwort. Bitte erneut versuchen.');
@@ -80,5 +82,28 @@ $('analyze').onclick=async()=>{
   finally{clearTimeout(timeout);busy=false;$('cancel').hidden=true;$('analyze').textContent='Fotos analysieren →';render();}
 };
 $('cancel').onclick=()=>controller?.abort('user');$('retryStatus').onclick=checkStatus;
-$('reset').onclick=()=>{photos.forEach(p=>URL.revokeObjectURL(p.url));photos=[];$('notes').value='';$('error').textContent='';$('resultPanel').hidden=true;$('uploadPanel').hidden=false;render();$('cameraBtn').focus();};
+$('reset').onclick=()=>{photos.forEach(p=>URL.revokeObjectURL(p.url));photos=[];$('notes').value='';$('stain').value='unknown';$('stainAge').value='unknown';$('trial').value='not_done';$('error').textContent='';$('resultPanel').hidden=true;$('uploadPanel').hidden=false;render();$('cameraBtn').focus();};
 $('print').onclick=()=>window.print();checkStatus();
+
+function renderProfessional(pro){
+  const panel=$('professional');panel.replaceChildren();if(!pro)return;
+  const head=element('div','FACHLICHER BEARBEITUNGSENTWURF');head.className='eyebrow';panel.append(head,element('h2','Bearbeitung im Betrieb'));
+  const note=element('p',pro.review_note);note.className='notice';panel.append(note);
+  if(pro.manufacturer_deviation){const warning=element('p','Alternative außerhalb der Herstellerkennzeichnung: fachliche Einzelprüfung erforderlich.');warning.className='deviation';panel.append(warning);}
+  for(const [title,key]of [['Textil und Konstruktion','textile_assessment'],['Fleckeneinschätzung','stain_assessment'],['Verfahrensvorschlag','process_recommendation'],['Nassreinigung gesondert beurteilt','wet_cleaning_assessment']]){const block=document.createElement('section');block.className='prosection';block.append(element('h3',title),element('p',pro[key]));panel.append(block);}
+  function addList(title,items,ordered=false){if(!items?.length)return;const section=document.createElement('section');section.className='prosection';section.append(element('h3',title));const list=document.createElement(ordered?'ol':'ul');for(const item of items)list.append(element('li',item));section.append(list);panel.append(section);}
+  addList('Vorproben und Prüfung',pro.inspection_steps,true);
+  addList('Bearbeitungsfolge',pro.workflow,true);
+  if(pro.products.length){panel.append(element('h3','Passende Produkte aus eurem Bestand'));
+    for(const p of pro.products){const card=document.createElement('article');card.className='productcard';card.append(element('h3',p.reference.name),element('small',p.phase+(p.specialist_review?' · nur mit Verfahrensfreigabe':'')),element('p',p.reason),element('p',p.application));
+      const details=document.createElement('details');details.append(element('summary','Produktgrundlage und Einschränkungen'),element('p',p.reference.purpose));
+      for(const item of p.reference.constraints)details.append(element('p',item));
+      details.append(element('p',`Sicherheitsdatenblatt: Revision ${p.reference.sds_date}, Version ${p.reference.sds_version}. ${p.reference.hazard_codes.length?'Gefahrenhinweise: '+p.reference.hazard_codes.join(', ')+'. ':''}Schutzmaßnahmen laut SDB und Betriebsanweisung beachten.`));
+      const source=element('a','Herstellerinformationen ↗');source.href=p.reference.source_url;source.target='_blank';source.rel='noopener noreferrer';details.append(source);card.append(details);panel.append(card);
+    }
+  }
+  addList('Trocknung, Finish und Nachkontrolle',pro.finishing,true);
+  addList('Abbruch- und Rückfragekriterien',pro.stop_conditions);
+  addList('Vor Bearbeitung noch klären',pro.questions);
+  const open=document.createElement('details');open.append(element('summary','Noch nicht hinterlegte Betriebsparameter'));const list=document.createElement('ul');for(const item of pro.open_parameters)list.append(element('li',item));open.append(list);panel.append(open);
+}

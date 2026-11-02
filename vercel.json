@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/pflegehilfe.js": { "maxDuration": 60 }
+    "api/pflegehilfe.js": { "maxDuration": 120 }
   },
   "rewrites": [
     {

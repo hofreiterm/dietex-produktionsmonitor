@@ -4,6 +4,16 @@ Live Produktionsmonitor mit Supabase, Tablets, Stationen und Monitoransichten.
 
 ## Pflegehilfe mit KI
 
+### Fachmodus (0.3)
+
+Die Analyse ergänzt die Herstellerkennzeichnung um einen fachlichen Bearbeitungsentwurf: Textil/Konstruktion, Fleckeneinschätzung, Verfahrensvorschlag, gesonderte Nassreinigungsbewertung, Vorproben, Bearbeitungsfolge, Produktkandidaten, Trocknung/Finish, Abbruchkriterien und offene Fragen. Mitarbeiter können K4-Maschine 1/2, INTENSE oder die Prüfung einer Nassreinigungsoption wählen und Fleckengruppe, Fleckenalter und Vorprobenergebnis angeben.
+
+`lib/care-catalog.json` enthält 25 betrieblich benannte Kreussler-Produkte mit Anwendungsgebiet, Grenzen, SDB-Revisionsstand und Gefahrenhinweisen. Es werden weder die Original-PDFs noch interne Serverpfade veröffentlicht. Herstelleranweisungen ergänzen die SDB; ein SDB allein ist keine Dosierrezeptur oder Textilfreigabe.
+
+Noch nicht hinterlegt sind Maschinenmodelle/-programme, Flottenverhältnis, Wasserhärte, Dosierrezepturen und Trocknungs-/Finishaustattung. Der Entwurf muss diese Punkte offenlegen. Alternative Verfahren außerhalb der Herstellerkennzeichnung bleiben fachlich zu prüfende Optionen. Es wird keine PSA-, Desinfektions- oder Imprägnierwirkung zugesichert.
+
+Produkt-IDs werden serverseitig validiert. PERAMON wird nicht zur Textilbehandlung vorgeschlagen; LANADOL X-PRESS wird bei empfindlichen bzw. wollhaltigen Materialangaben entfernt. Bei auffälliger Vorprobe entfallen sämtliche Produktvorschläge und die Behandlung wird gestoppt. Für Chlor-/Sauerstoffbleiche und ABAC/PERACET gibt die Oberfläche ohne hinterlegte Verfahrensfreigabe keine Dosier- oder Mischrezeptur aus. Diese Prüfungen ergänzen die Fachprüfung, sie ersetzen keine vollständige Material-/Verfahrensvalidierung.
+
 Die Hauptnavigation führt über „Pflegehilfe“ zu `/pflegehilfe`. Die eigenständige mobile Seite befindet sich in `public/pflegehilfe` und wird beim bestehenden Vite-Build mit ausgeliefert. Vercel-Rewrites unterstützen den Direktaufruf mit und ohne abschließenden Schrägstrich. Über „Produktionsmonitor“ geht es zurück zur Hauptseite.
 
 Die Pflegehilfe bietet Kamera/Fotoauswahl, bis zu drei Bildvorschauen und eine druckbare deutsche Pflegeanleitung. Fotos werden im Browser auf maximal 1800 Pixel verkleinert, als JPEG ohne ursprüngliche EXIF-Metadaten exportiert und erst nach „Fotos analysieren“ an `/api/pflegehilfe` gesendet. Diese Vercel-Funktion ruft die OpenAI Responses API mit Bilddaten, JSON-Schema und `store: false` auf. Diese App persistiert weder Fotos noch Ergebnisse. Für die Verarbeitung durch OpenAI gelten dessen API-Datenbedingungen; `store: false` ist keine Zusage über sämtliche Anbieterprotokolle.
