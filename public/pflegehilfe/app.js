@@ -65,7 +65,7 @@ function element(tag,text){const node=document.createElement(tag);node.textConte
 function showResult(a){
   $('resultTitle').textContent=a.title||'Pflegeetikett geprüft';
   $('resultStatus').textContent=a.material||'Angaben am Textil prüfen';
-  $('shortSteps').replaceChildren();for(const step of a.professional.short_steps)$('shortSteps').append(element('li',step));
+  $('shortSteps').replaceChildren();for(const step of a.professional.short_steps)$('shortSteps').append(element('li',step.replace(/^\s*\d+[.)]\s*/,'')));
   $('resultDetails').open=false;
   $('resultMark').textContent=a.needs_review?'?':'i';
   $('materialTitle').textContent=a.material||'Material nicht sicher lesbar'; $('detectedText').textContent=a.detected_text||'Kein Text sicher erkannt.';
@@ -114,6 +114,7 @@ function renderProfessional(pro){
       const source=element('a','Herstellerinformationen ↗');source.href=p.reference.source_url;source.target='_blank';source.rel='noopener noreferrer';details.append(source);card.append(details);panel.append(card);
     }
   }
+  if(pro.tunnel_finisher){const block=document.createElement('section');block.className='prosection';const status={check_required:'Vor Einsatz prüfen',not_recommended:'Für diesen Artikel nicht empfohlen',not_applicable:'Aktuell nicht anwenden'}[pro.tunnel_finisher.status];block.append(element('h3','Tunnelfinisher · '+pro.tunnel_finisher.equipment.name),element('p',status+': '+pro.tunnel_finisher.reason),element('p','Konkrete Programme und Einstellungen sind noch nicht hinterlegt. Keine automatische Maschinenfreigabe.'));const source=element('a','Herstellerinformationen ↗');source.href=pro.tunnel_finisher.equipment.source_url;source.target='_blank';source.rel='noopener noreferrer';block.append(source);panel.append(block);}
   addList('Trocknung, Finish und Nachkontrolle',pro.finishing,true);
   addList('Abbruch- und Rückfragekriterien',pro.stop_conditions);
   addList('Vor Bearbeitung noch klären',pro.questions);
