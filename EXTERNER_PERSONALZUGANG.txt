@@ -1,4 +1,4 @@
-EXTERNER PERSONALZUGANG FUER DIE PRODUKTIONSLEITUNG
+EXTERNER ZUGANG ZUM PRODUKTIONSMONITOR
 
 1. BENUTZER IN SUPABASE ANLEGEN
 
@@ -32,10 +32,12 @@ Danach Review Changes und Publish ausfuehren.
 
 https://dietex-produktionsmonitor.vercel.app/?portal=personalplanung
 
-Nach der Anmeldung sind nur Personalplanung und Personaluebersicht erreichbar.
+Nach der Anmeldung sind alle Bereiche des Produktionsmonitors erreichbar.
 Die Anmeldung bleibt auf dem Handy gespeichert, bis "Abmelden" gedrueckt wird.
 
 WICHTIG
 
 Die normale Adresse des Produktionsmonitors bleibt weiterhin auf das Firmennetz
-beschraenkt. Den externen Link nur an berechtigte Benutzer weitergeben.
+beschraenkt. Der externe Link ist durch die Supabase-Anmeldung geschuetzt und darf
+nur an berechtigte Benutzer weitergegeben werden.
+
