@@ -5818,7 +5818,7 @@ const tourColumns = Object.entries(
               </Button>
             ))}
             {!takeoverMode && !expeditMode && (
-              <Button onClick={() => window.location.assign("/pflegehilfe")}>
+              <Button onClick={() => window.location.assign(externalAccessPortal ? "/pflegehilfe?portal=personalplanung" : "/pflegehilfe")}>
                 Pflegehilfe
               </Button>
             )}
