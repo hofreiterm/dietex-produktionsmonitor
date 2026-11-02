@@ -42,7 +42,7 @@ async function prepare(file) {
     const ctx=canvas.getContext('2d'); if(!ctx) throw new Error('Bild konnte nicht vorbereitet werden.');
     ctx.fillStyle='#fff'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height);
     let data=canvas.toDataURL('image/jpeg',.85); if(data.length>1250000)data=canvas.toDataURL('image/jpeg',.65);
-    if(data.length>1250000)throw new Error('Bitte nur das Etikett näher aufnehmen. Dieses Foto ist zu groß.');
+    if(data.length>1250000)throw new Error('Bitte das Kleidungsstück oder den Fleck näher aufnehmen. Dieses Foto ist zu groß.');
     const preview=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.8));
     if(!preview)throw new Error('Foto konnte nicht vorbereitet werden.');
     return {data,url:URL.createObjectURL(preview)};
@@ -90,7 +90,7 @@ $('analyze').onclick=async()=>{
     if(!response.ok)throw new Error(data.error||'Die Analyse konnte nicht abgeschlossen werden.');
     if(!data.analysis||!Array.isArray(data.analysis.steps)||!Array.isArray(data.analysis.warnings))throw new Error('Unvollständige Antwort. Bitte erneut versuchen.');
     showResult(data.analysis);
-  }catch(e){$('error').textContent=controller.signal.aborted?(controller.signal.reason==='timeout'?'Zeitüberschreitung. Bitte mit einem Etikettfoto erneut versuchen.':'Analyse abgebrochen. Bereits gestartete Verarbeitung kann noch Kosten verursachen.'):(e.message||'Analyse fehlgeschlagen. Bitte Verbindung prüfen.');}
+  }catch(e){$('error').textContent=controller.signal.aborted?(controller.signal.reason==='timeout'?'Zeitüberschreitung. Bitte mit einem Foto erneut versuchen.':'Analyse abgebrochen. Bereits gestartete Verarbeitung kann noch Kosten verursachen.'):(e.message||'Analyse fehlgeschlagen. Bitte Verbindung prüfen.');}
   finally{clearTimeout(timeout);busy=false;$('cancel').hidden=true;$('analyze').textContent='Fotos analysieren →';render();}
 };
 $('cancel').onclick=()=>controller?.abort('user');$('retryStatus').onclick=checkStatus;
@@ -102,7 +102,7 @@ function renderProfessional(pro){
   const head=element('div','FACHLICHER BEARBEITUNGSENTWURF');head.className='eyebrow';panel.append(head,element('h2','Bearbeitung im Betrieb'));
   const note=element('p',pro.review_note);note.className='notice';panel.append(note);
   if(pro.manufacturer_deviation){const warning=element('p','Alternative außerhalb der Herstellerkennzeichnung: fachliche Einzelprüfung erforderlich.');warning.className='deviation';panel.append(warning);}
-  for(const [title,key]of [['Textil und Konstruktion','textile_assessment'],['Fleckeneinschätzung','stain_assessment'],['Verfahrensvorschlag','process_recommendation'],['Nassreinigung gesondert beurteilt','wet_cleaning_assessment']]){const block=document.createElement('section');block.className='prosection';block.append(element('h3',title),element('p',pro[key]));panel.append(block);}
+  for(const [title,key]of [['Grundlage der Empfehlung','assessment_basis'],['Textil und Konstruktion','textile_assessment'],['Fleckeneinschätzung','stain_assessment'],['Verfahrensvorschlag','process_recommendation'],['Nassreinigung gesondert beurteilt','wet_cleaning_assessment']]){const block=document.createElement('section');block.className='prosection';block.append(element('h3',title),element('p',pro[key]));panel.append(block);}
   function addList(title,items,ordered=false){if(!items?.length)return;const section=document.createElement('section');section.className='prosection';section.append(element('h3',title));const list=document.createElement(ordered?'ol':'ul');for(const item of items)list.append(element('li',item));section.append(list);panel.append(section);}
   addList('Vorproben und Prüfung',pro.inspection_steps,true);
   addList('Bearbeitungsfolge',pro.workflow,true);
