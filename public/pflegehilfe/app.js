@@ -1,5 +1,15 @@
 const $ = id => document.getElementById(id);
 let photos = [], busy = false, ready = false, adding = false, controller;
+
+const presetKey='dietex-care-stains-v1';
+const defaultStains=['Blutfleck','Kaffeefleck','Teefleck','Rotweinfleck','Obstfleck','Fettfleck','Ölfleck','Make-up','Schweißfleck','Speisereste','Klebstoff','Kaugummi','Lack','Rostfleck','Kugelschreiber','Tinte','Geruch'];
+let savedStains=[];
+try{const value=JSON.parse(localStorage.getItem(presetKey)||'[]');if(Array.isArray(value))savedStains=value.filter(x=>typeof x==='string'&&x.trim()&&x.length<=100).slice(0,30);}catch{}
+function renderStains(){ $('stainPresets').replaceChildren();for(const value of [...new Set([...defaultStains,...savedStains])]){const option=document.createElement('option');option.value=value;$('stainPresets').append(option);} }
+function saveStain(){const value=$('stain').value.trim();if(!value||defaultStains.some(s=>s.toLocaleLowerCase('de')===value.toLocaleLowerCase('de')))return;savedStains=[value,...savedStains.filter(s=>s.toLocaleLowerCase('de')!==value.toLocaleLowerCase('de'))].slice(0,30);try{localStorage.setItem(presetKey,JSON.stringify(savedStains));}catch{}renderStains();}
+function stainCategory(value){const s=value.toLocaleLowerCase('de');if(/blut|eiweiß|speise|schweiß|milch/.test(s))return 'protein';if(/kaffee|tee|wein|obst/.test(s))return 'tannin';if(/fett|öl|kosmetik|make-up/.test(s))return 'oil';if(/kleber|klebstoff|kaugummi|lack/.test(s))return 'adhesive';if(/rost|metall/.test(s))return 'rust';if(/tinte|kugelschreiber|farbübertragung/.test(s))return 'ink';if(/geruch/.test(s))return 'odor';return 'unknown';}
+renderStains();
+
 function render() {
   $('photos').replaceChildren();
   photos.forEach((p,i) => {
@@ -12,7 +22,7 @@ function render() {
   $('analyze').disabled = busy || adding || !ready || !photos.length;
   $('cameraBtn').disabled = $('galleryBtn').disabled = busy || adding || photos.length === 3;
   $('notes').disabled = busy;
-  for(const id of ['machine','stain','stainAge','trial'])$(id).disabled=busy;
+  $('stain').disabled=busy;
 }
 async function checkStatus() {
   ready = false; $('serviceStatus').textContent = 'KI-Verbindung wird geprüft …'; render();
@@ -54,7 +64,9 @@ $('dropzone').ondrop=e=>{e.preventDefault();$('dropzone').classList.remove('drag
 function element(tag,text){const node=document.createElement(tag);node.textContent=text;return node;}
 function showResult(a){
   $('resultTitle').textContent=a.title||'Pflegeetikett geprüft';
-  $('resultStatus').textContent=a.needs_review?'Rückfrage nötig – vor der Reinigung klären':'Angaben am Originaletikett prüfen';
+  $('resultStatus').textContent=a.material||'Angaben am Textil prüfen';
+  $('shortSteps').replaceChildren();for(const step of a.professional.short_steps)$('shortSteps').append(element('li',step));
+  $('resultDetails').open=false;
   $('resultMark').textContent=a.needs_review?'?':'i';
   $('materialTitle').textContent=a.material||'Material nicht sicher lesbar'; $('detectedText').textContent=a.detected_text||'Kein Text sicher erkannt.';
   $('warnings').replaceChildren();for(const text of a.warnings)$('warnings').append(element('p',text));
@@ -70,10 +82,10 @@ function showResult(a){
 }
 $('analyze').onclick=async()=>{
   if(busy||!ready||!photos.length)return;
-  busy=true;render();$('error').textContent='';$('analyze').textContent='Fotos werden ausgewertet …';$('cancel').hidden=false;controller=new AbortController();
+  saveStain();busy=true;render();$('error').textContent='';$('analyze').textContent='Fotos werden ausgewertet …';$('cancel').hidden=false;controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort('timeout'),105000);
   try{
-    const response=await fetch('/api/pflegehilfe',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({images:photos.map(p=>p.data),note:$('notes').value,context:{machine:$('machine').value,stain:$('stain').value,age:$('stainAge').value,trial:$('trial').value}})});
+    const response=await fetch('/api/pflegehilfe',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({images:photos.map(p=>p.data),note:[$('stain').value.trim()?'Fleckangabe: '+$('stain').value.trim():'',$('notes').value.trim()].filter(Boolean).join('\n'),context:{stain:stainCategory($('stain').value)}})});
     let data;try{data=await response.json();}catch{throw new Error('Serverantwort nicht lesbar. Bitte weniger Fotos versuchen.');}
     if(!response.ok)throw new Error(data.error||'Die Analyse konnte nicht abgeschlossen werden.');
     if(!data.analysis||!Array.isArray(data.analysis.steps)||!Array.isArray(data.analysis.warnings))throw new Error('Unvollständige Antwort. Bitte erneut versuchen.');
@@ -82,7 +94,7 @@ $('analyze').onclick=async()=>{
   finally{clearTimeout(timeout);busy=false;$('cancel').hidden=true;$('analyze').textContent='Fotos analysieren →';render();}
 };
 $('cancel').onclick=()=>controller?.abort('user');$('retryStatus').onclick=checkStatus;
-$('reset').onclick=()=>{photos.forEach(p=>URL.revokeObjectURL(p.url));photos=[];$('notes').value='';$('stain').value='unknown';$('stainAge').value='unknown';$('trial').value='not_done';$('error').textContent='';$('resultPanel').hidden=true;$('uploadPanel').hidden=false;render();$('cameraBtn').focus();};
+$('reset').onclick=()=>{photos.forEach(p=>URL.revokeObjectURL(p.url));photos=[];$('notes').value='';$('stain').value='';$('error').textContent='';$('resultPanel').hidden=true;$('uploadPanel').hidden=false;render();$('cameraBtn').focus();};
 $('print').onclick=()=>window.print();checkStatus();
 
 function renderProfessional(pro){
