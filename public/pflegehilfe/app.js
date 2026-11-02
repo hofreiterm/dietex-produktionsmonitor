@@ -63,9 +63,9 @@ $('dropzone').ondragleave=()=>$('dropzone').classList.remove('drag');
 $('dropzone').ondrop=e=>{e.preventDefault();$('dropzone').classList.remove('drag');add(e.dataTransfer.files);};
 function element(tag,text){const node=document.createElement(tag);node.textContent=text;return node;}
 function showResult(a){
-  $('resultTitle').textContent=a.title||'Pflegeetikett geprüft';
+  $('resultTitle').textContent='Arbeitsanweisung';
   $('resultStatus').textContent=a.material||'Angaben am Textil prüfen';
-  $('shortSteps').replaceChildren();for(const step of a.professional.short_steps)$('shortSteps').append(element('li',step.replace(/^\s*\d+[.)]\s*/,'')));
+  $('shortSteps').replaceChildren();const headings=['Vorprüfung','Vorbehandlung','Waschen / Reinigen','Trocknen / Finish / Bügeln'];a.professional.short_steps.forEach((step,i)=>{const item=element('li','');item.append(element('strong',headings[i]),element('p',step.replace(/^\s*\d+[.)]\s*/,'').replace(/^(Vorprüfung|Vorbehandlung|Waschen\s*\/\s*Reinigen|Trocknen\s*\/\s*Finish\s*\/\s*Bügeln)\s*:\s*/i,'')));$('shortSteps').append(item);});
   $('resultDetails').open=false;
   $('resultMark').textContent=a.needs_review?'?':'i';
   $('materialTitle').textContent=a.material||'Material nicht sicher lesbar'; $('detectedText').textContent=a.detected_text||'Kein Text sicher erkannt.';
