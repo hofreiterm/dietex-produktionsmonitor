@@ -1,0 +1,569 @@
+{
+  "revision": "2026-11-02",
+  "products": [
+    {
+      "id": "deprit-professional-1",
+      "name": "Deprit Professional 1",
+      "color": "rot",
+      "purpose": "Blut, Eiweiß/Protein, Speisereste, Pigmente",
+      "sds_date": "05.12.2024",
+      "sds_version": 26,
+      "hazard_codes": [
+        "H319"
+      ],
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
+      "constraints": [
+        "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?tx_krproducts_products%5Bproduct%5D=31&tx_krproducts_products%5Bcontroller%5D=product",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "deprit-professional-2",
+      "name": "Deprit Professional 2",
+      "color": "grün",
+      "purpose": "Farben, Öle, Fette, Wachse, Kosmetik, Kugelschreiber, Kleber",
+      "sds_date": "05.12.2024",
+      "sds_version": 37,
+      "hazard_codes": [
+        "H226",
+        "H315",
+        "H318",
+        "H336",
+        "H412"
+      ],
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
+      "constraints": [
+        "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen.",
+        "Lösemittelhaltig mit niedrigem Flammpunkt. Kreussler empfiehlt die Begrenzung von Fremdlösemittelverschleppung; keine pauschale Maschinenfreigabe nach Auftrag."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?tx_krproducts_products%5Bproduct%5D=31&tx_krproducts_products%5Bcontroller%5D=product",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "deprit-professional-3",
+      "name": "Deprit Professional 3",
+      "color": "blau",
+      "purpose": "Tannin, Obst, Saft, Rotwein, Kaffee, Tee, Cola, Arzneimittelverfleckungen",
+      "sds_date": "09.12.2024",
+      "sds_version": 33,
+      "hazard_codes": [
+        "H319"
+      ],
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
+      "constraints": [
+        "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?tx_krproducts_products%5Bproduct%5D=31&tx_krproducts_products%5Bcontroller%5D=product",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "deprit-professional-4",
+      "name": "Deprit Professional 4",
+      "color": "weiß",
+      "purpose": "Fette, Öle, Kleber, Kaugummi, Wachse",
+      "sds_date": "09.12.2024",
+      "sds_version": 27,
+      "hazard_codes": [
+        "EUH066",
+        "H226",
+        "H304",
+        "H336"
+      ],
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
+      "constraints": [
+        "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen.",
+        "Lösemittelhaltig mit niedrigem Flammpunkt. Kreussler empfiehlt die Begrenzung von Fremdlösemittelverschleppung; keine pauschale Maschinenfreigabe nach Auftrag."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?tx_krproducts_products%5Bproduct%5D=31&tx_krproducts_products%5Bcontroller%5D=product",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "deprit-professional-5",
+      "name": "Deprit Professional 5",
+      "color": "gelb",
+      "purpose": "Rost, Metallverfleckungen, metallhaltige Salben, gealterte Blutflecken",
+      "sds_date": "09.12.2024",
+      "sds_version": 31,
+      "hazard_codes": [],
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
+      "constraints": [
+        "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?tx_krproducts_products%5Bproduct%5D=31&tx_krproducts_products%5Bcontroller%5D=product",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "deprit-professional-6",
+      "name": "Deprit Professional 6",
+      "color": "purpur",
+      "purpose": "Tinte, Kugelschreiber, Farbpigmente, Farbübertragungen",
+      "sds_date": "10.12.2024",
+      "sds_version": 18,
+      "hazard_codes": [],
+      "phase": "Vordetachur vor Waschen/Nassreinigung / Nachdetachur am Detachiertisch",
+      "constraints": [
+        "Vorprobe auf Material- und Farbechtheit; Rückstände vor Folgeschritten fachgerecht entfernen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?tx_krproducts_products%5Bproduct%5D=31&tx_krproducts_products%5Bcontroller%5D=product",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "colofix",
+      "name": "Colofix",
+      "purpose": "Fixier- und Egalisiermittel für Substantivfärbungen auf Textilien sowie zur Farbstabilisierung und Vergrauungsschutz bei der Buntwäsche",
+      "sds_date": "19.06.2024",
+      "sds_version": 17,
+      "hazard_codes": [],
+      "phase": "Farbstabilisierung / Fixierung",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Ausrüstung/Griff/Funktion des Textils vor Nachbehandlung prüfen; keine Schutzwirkung zusichern."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "derval-protect",
+      "name": "Derval Protect",
+      "purpose": "Waschkraftverstärker mit hoher Schmutzlösekraft für technische Textilien aus Synthetics und Mischgewebe. Zur nachhaltigen Pflege bei niedriger Alkalität im Temperaturbereich bei 40-60 °C.",
+      "sds_date": "18.11.2025",
+      "sds_version": 13,
+      "hazard_codes": [
+        "H318",
+        "H412"
+      ],
+      "phase": "Waschkraftverstärkung technischer Textilien",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "derval-rent",
+      "name": "Derval Rent",
+      "purpose": "Flüssiges Buntwaschmittel-Konzentrat ohne optischen Aufheller und ohne Bleiche für Textilien aus Baumwolle und Mischgewebe.",
+      "sds_date": "22.02.2024",
+      "sds_version": 29,
+      "hazard_codes": [
+        "H290",
+        "H314",
+        "H318"
+      ],
+      "phase": "Wasserwäsche / Colorwaschmittel",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "derval-solo-rki",
+      "name": "Derval Solo (RKI)",
+      "purpose": "Flüssiges Alleinwaschmittel-Konzentrat für Weiß- und Buntwäsche aus Baumwolle und Mischgewebe.",
+      "sds_date": "23.01.2024",
+      "sds_version": 14,
+      "hazard_codes": [
+        "H290",
+        "H302",
+        "H314",
+        "H318"
+      ],
+      "phase": "Wasserwäsche Baumwolle/Mischgewebe; keine Desinfektionsfreigabe allein aus Produktname",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Keine eigenständige Misch-, Bleich- oder Desinfektionsrezeptur ausgeben. Wirksamkeit nur für ein belegtes, passendes Gesamtverfahren beurteilen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "hydrob-easydry",
+      "name": "Hydrob EASYDRY",
+      "purpose": "Hydrophobier- und Oleopho-biermittel zum Imprägnier en und zur Fleckschutzausrüstung von Textilien aus wässriger Lösung. Wirksam bereits bei niedriger Trocknungstemperatur.",
+      "sds_date": "23.01.2024",
+      "sds_version": 11,
+      "hazard_codes": [],
+      "phase": "Imprägnierung / Nachausrüstung",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Ausrüstung/Griff/Funktion des Textils vor Nachbehandlung prüfen; keine Schutzwirkung zusichern."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "lanadol-abac",
+      "name": "Lanadol ABAC",
+      "purpose": "Desinfektionsmittel für Oberbekleidung, Altenheimwa re, Schutzkleidung und Atemschutzmasken. Spülzonendesinfektionsmittel in Waschstraßen.",
+      "sds_date": "20.06.2024",
+      "sds_version": 31,
+      "hazard_codes": [
+        "H302",
+        "H314",
+        "H318",
+        "H373",
+        "H400",
+        "H411"
+      ],
+      "phase": "Desinfektion nur nach validiertem Verfahren",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Keine eigenständige Misch-, Bleich- oder Desinfektionsrezeptur ausgeben. Wirksamkeit nur für ein belegtes, passendes Gesamtverfahren beurteilen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "lanadol-aktiv",
+      "name": "Lanadol Aktiv",
+      "purpose": "Spezialreinigungs- und Faserschutzmittel für hochempfindliche Textilien in der LANADOL Nassreinigung",
+      "sds_date": "17.01.2024",
+      "sds_version": 13,
+      "hazard_codes": [],
+      "phase": "Nassreinigung empfindlicher Textilien",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "lanadol-apret",
+      "name": "Lanadol Apret",
+      "purpose": "Faserschutzmittel mit Appretierwirkung und antistatischen Effekten zur Anwendung im Ausrüstungsbad bei der Nassreinigung.",
+      "sds_date": "16.12.2024",
+      "sds_version": 21,
+      "hazard_codes": [],
+      "phase": "Ausrüstungsbad der Nassreinigung / Finish",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Ausrüstung/Griff/Funktion des Textils vor Nachbehandlung prüfen; keine Schutzwirkung zusichern."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "lanadol-avant",
+      "name": "Lanadol Avant",
+      "purpose": "Farb- und faserschonender Spezialfettlöser für extr em verschmutzte Partien. Zur Anwendung im Direktauftrag vor Nassreinigungsprozessen im LANADOL-Verfahren.",
+      "sds_date": "29.02.2024",
+      "sds_version": 19,
+      "hazard_codes": [
+        "H318"
+      ],
+      "phase": "Vordetachur vor LANADOL-Nassreinigung",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "lanadol-x-press",
+      "name": "Lanadol X-Press",
+      "purpose": "Leistungsstarkes Spezialreinigungsmittel für wenige r empfindliche Textilien für die Nassreinigung im LANADOL DRY Verfahren",
+      "sds_date": "23.07.2024",
+      "sds_version": 9,
+      "hazard_codes": [
+        "H318",
+        "H412"
+      ],
+      "phase": "Nassreinigung weniger empfindlicher Textilien",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Laut Hersteller nicht für Seide, Angora, Kaschmir und überwiegenden Wollanteil empfohlen; für hochempfindliche Textilien LANADOL AKTIV prüfen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "ottalin-cl",
+      "name": "Ottalin CL",
+      "purpose": "Phosphatfreies Chlorbleichpulver zur Intensivbleiche",
+      "sds_date": "03.06.2025",
+      "sds_version": 15,
+      "hazard_codes": [
+        "EUH031",
+        "H302",
+        "H315",
+        "H319",
+        "H335",
+        "H400",
+        "H410"
+      ],
+      "phase": "Chlorbleiche nur nach freigegebenem Verfahren",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Chlorbleiche. Nicht mit Säuren oder anderen Produkten mischen; EUH031 beachten. Keine Bleiche bei entsprechendem Pflegeverbot."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "ottalin-enzym",
+      "name": "Ottalin Enzym",
+      "purpose": "Enzymkomplex-Konzentrat zum Eiweißabbau und Fettentfernung in der Vorwäsche",
+      "sds_date": "26.02.2024",
+      "sds_version": 20,
+      "hazard_codes": [
+        "H319",
+        "H334"
+      ],
+      "phase": "Enzymatische Vorwäsche",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Eiweißabbau ist keine pauschale Eignung für Eiweißfasern; bei Wolle/Seide nur nach belegter Freigabe. Aerosole vermeiden; H334 beachten."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "ottalin-odx",
+      "name": "Ottalin ODX",
+      "purpose": "Geruchsabsorber für Wäsche zur Entfernung von Fremdgerüchen.",
+      "sds_date": "23.04.2025",
+      "sds_version": 12,
+      "hazard_codes": [],
+      "phase": "Geruchsnachbehandlung",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "ottalin-oxy",
+      "name": "Ottalin Oxy",
+      "purpose": "Hochaktive Perhydrat-Verbindung zur Sauerstoffbleiche bei gleichzeitiger Verbesserung der Waschwirkung",
+      "sds_date": "03.11.2025",
+      "sds_version": 21,
+      "hazard_codes": [
+        "H272",
+        "H302",
+        "H318"
+      ],
+      "phase": "Sauerstoffbleiche nur nach freigegebenem Verfahren",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Keine eigenständige Misch-, Bleich- oder Desinfektionsrezeptur ausgeben. Wirksamkeit nur für ein belegtes, passendes Gesamtverfahren beurteilen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "ottalin-peracet",
+      "name": "Ottalin Peracet",
+      "purpose": "Bleichmittel im Wasch- und Reinigungsmittelbereich",
+      "sds_date": "17.06.2025",
+      "sds_version": 13,
+      "hazard_codes": [
+        "EUH071",
+        "H242",
+        "H290",
+        "H302",
+        "H312",
+        "H314",
+        "H318",
+        "H332",
+        "H335",
+        "H410"
+      ],
+      "phase": "Bleiche/Desinfektion nur nach validiertem Verfahren",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Keine eigenständige Misch-, Bleich- oder Desinfektionsrezeptur ausgeben. Wirksamkeit nur für ein belegtes, passendes Gesamtverfahren beurteilen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "ottalin-soft-intense",
+      "name": "Ottalin Soft Intense",
+      "purpose": "Weichspülerkonzentrat mit langanhaltendem und thermostabilem Frischeduft.",
+      "sds_date": "13.11.2025",
+      "sds_version": 7,
+      "hazard_codes": [],
+      "phase": "Weichspül-Nachbehandlung",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Ausrüstung/Griff/Funktion des Textils vor Nachbehandlung prüfen; keine Schutzwirkung zusichern."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "peramon",
+      "name": "Peramon",
+      "purpose": "Säurebinder und Stabilisator für die Lösemittelpflege.",
+      "sds_date": "29.04.2025",
+      "sds_version": 14,
+      "hazard_codes": [
+        "H319"
+      ],
+      "phase": "Lösemittelpflege der Reinigungsmaschine; keine Fleckendetachur am Kleidungsstück",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Nur Lösemittelpflege; nicht als Fleckenentferner, Textilwaschmittel oder Ausrüstungsmittel empfehlen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "trebon-color",
+      "name": "Trebon Color",
+      "purpose": "Hochkonzentriertes Buntwaschmittel für Textilien aus Baumwolle und Mischgewebe",
+      "sds_date": "19.06.2024",
+      "sds_version": 18,
+      "hazard_codes": [
+        "H315",
+        "H318"
+      ],
+      "phase": "Wasserwäsche Baumwolle/Mischgewebe",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "trebon-plus",
+      "name": "Trebon Plus",
+      "purpose": "Vollwaschmittel-Superkonzentrat für Weißwäsche zur Anwendung in Hart-und Weichwasser bei 30-60-90 °C. Phosphatfrei und NTA frei.",
+      "sds_date": "23.01.2024",
+      "sds_version": 28,
+      "hazard_codes": [
+        "H318"
+      ],
+      "phase": "Wasserwäsche geeigneter Weiß-/Buntwäsche",
+      "constraints": [
+        "Anwendungsgebiet aus SDB ist keine Textil- oder Prozessfreigabe.",
+        "Keine eigenständige Misch-, Bleich- oder Desinfektionsrezeptur ausgeben. Wirksamkeit nur für ein belegtes, passendes Gesamtverfahren beurteilen."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte.html",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "prenett-a",
+      "name": "PRENETT A",
+      "purpose": "Gerbstoffhaltige Flecken: Kaffee, Tee, Rotwein, Obst, Gras",
+      "sds_date": "27.02.2024",
+      "sds_version": 11,
+      "hazard_codes": [
+        "H315",
+        "H318",
+        "H412"
+      ],
+      "sds_jurisdiction": "DE",
+      "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
+      "constraints": [
+        "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
+        "Vorliegendes SDB ist die deutsche Fassung vom 27.02.2024; keine österreichische Fassung hinterlegt.",
+        "Haut-/Augenkontakt vermeiden; geeignete Schutzhandschuhe und dichtschließende Schutzbrille, Lüftung/Absaugung und Vermeidung von Aerosolen gemäß SDB/Betriebsanweisung beachten.",
+        "Herstelleranwendung laut Produktblatt: Fleckart identifizieren, passendes PRENETT unverdünnt sparsam auftragen, nur entsprechend der Textilempfindlichkeit einbürsten; anschließend nach ca. 10–20 Minuten normal reinigen. Diese Referenz ersetzt kein zum Artikel und zur Maschine passendes Betriebsverfahren.",
+        "Bei empfindlichen oder farbunechten Textilien empfiehlt das Produktblatt vor der Maschinenreinigung kurzes Ausblasen der Hauptmenge mit Pressluft; nur am geeigneten Detachierplatz mit Absaugung und nach Betriebsanweisung, Aerosole vermeiden.",
+        "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "prenett-b",
+      "name": "PRENETT B",
+      "purpose": "Eiweiß- und stärkehaltige Flecken: Blut, Milch, Speisereste, Schweiß",
+      "sds_date": "27.02.2024",
+      "sds_version": 8,
+      "hazard_codes": [
+        "H315",
+        "H318"
+      ],
+      "sds_jurisdiction": "DE",
+      "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
+      "constraints": [
+        "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
+        "Vorliegendes SDB ist die deutsche Fassung vom 27.02.2024; keine österreichische Fassung hinterlegt.",
+        "Haut-/Augenkontakt vermeiden; geeignete Schutzhandschuhe und dichtschließende Schutzbrille, Lüftung/Absaugung und Vermeidung von Aerosolen gemäß SDB/Betriebsanweisung beachten.",
+        "Herstelleranwendung laut Produktblatt: Fleckart identifizieren, passendes PRENETT unverdünnt sparsam auftragen, nur entsprechend der Textilempfindlichkeit einbürsten; anschließend nach ca. 10–20 Minuten normal reinigen. Diese Referenz ersetzt kein zum Artikel und zur Maschine passendes Betriebsverfahren.",
+        "Bei empfindlichen oder farbunechten Textilien empfiehlt das Produktblatt vor der Maschinenreinigung kurzes Ausblasen der Hauptmenge mit Pressluft; nur am geeigneten Detachierplatz mit Absaugung und nach Betriebsanweisung, Aerosole vermeiden.",
+        "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    },
+    {
+      "id": "prenett-c",
+      "name": "PRENETT C",
+      "purpose": "Lösemittellösliche Flecken: Farben, Lacke, Kosmetika, Klebstoffe",
+      "sds_date": "27.02.2024",
+      "sds_version": 20,
+      "hazard_codes": [
+        "H315",
+        "H318"
+      ],
+      "sds_jurisdiction": "DE",
+      "phase": "Vordetachur vor chemischer Reinigung in Lösemitteln",
+      "constraints": [
+        "Betrieblicher Einsatz vor chemischer Reinigung vom Anwender bestätigt; nicht vor Waschen/Nassreinigung einsetzen.",
+        "Vorliegendes SDB ist die deutsche Fassung vom 27.02.2024; keine österreichische Fassung hinterlegt.",
+        "Haut-/Augenkontakt vermeiden; geeignete Schutzhandschuhe und dichtschließende Schutzbrille, Lüftung/Absaugung und Vermeidung von Aerosolen gemäß SDB/Betriebsanweisung beachten.",
+        "Herstelleranwendung laut Produktblatt: Fleckart identifizieren, passendes PRENETT unverdünnt sparsam auftragen, nur entsprechend der Textilempfindlichkeit einbürsten; anschließend nach ca. 10–20 Minuten normal reinigen. Diese Referenz ersetzt kein zum Artikel und zur Maschine passendes Betriebsverfahren.",
+        "Bei empfindlichen oder farbunechten Textilien empfiehlt das Produktblatt vor der Maschinenreinigung kurzes Ausblasen der Hauptmenge mit Pressluft; nur am geeigneten Detachierplatz mit Absaugung und nach Betriebsanweisung, Aerosole vermeiden.",
+        "Material-/Farbechtheitsprobe und passendes freigegebenes Maschinenverfahren erforderlich. Keine automatische Übertragung einer K4-Freigabe auf INTENSE."
+      ],
+      "source_url": "https://de.kreussler-chemie.com/produkte/produkt.html?L=648&cHash=c1f49d034078d814de47055085753a72&tx_krproducts_products%5Bcontroller%5D=product&tx_krproducts_products%5Bproduct%5D=55",
+      "recipe_status": "Kein betrieblich freigegebenes Rezept hinterlegt."
+    }
+  ],
+  "prespotting": {
+    "wash_wet": [
+      "deprit-professional-1",
+      "deprit-professional-2",
+      "deprit-professional-3",
+      "deprit-professional-4",
+      "deprit-professional-5",
+      "deprit-professional-6"
+    ],
+    "solvent": [
+      "prenett-a",
+      "prenett-b",
+      "prenett-c"
+    ],
+    "confirmed_by": "Betriebsangabe des Anwenders"
+  },
+  "machines": [
+    {
+      "id": "k4-1",
+      "name": "K4-Maschine 1",
+      "system": "Kreussler SYSTEM K4"
+    },
+    {
+      "id": "k4-2",
+      "name": "K4-Maschine 2",
+      "system": "Kreussler SYSTEM K4"
+    },
+    {
+      "id": "intense-1",
+      "name": "INTENSE-Maschine",
+      "system": "Seitz INTENSE"
+    }
+  ],
+  "missing_parameters": [
+    "Maschinentypen, Beladung und freigegebene Programme",
+    "Nassreinigungsmaschine und konkrete Programme",
+    "Dosierrezepturen, Flottenverhältnis, Wasserhärte",
+    "Trocknung und Finish",
+    "Bestätigte Saum-/Farbechtheits-/Konstruktionsprüfungen"
+  ],
+  "rules": [
+    "Keine Rohstoff- oder Produktmischungen ableiten.",
+    "Keine Konzentration, Einwirkzeit, Temperatur oder Maschineneinstellung ohne hinterlegte passende Rezeptur erfinden.",
+    "P allein verbietet nicht die Wasserwäsche. Durchgestrichenen Waschbottich und Nassreinigung W getrennt auswerten.",
+    "Ein fehlendes W ist weder eine belegte Freigabe noch ein nachgewiesenes Nassreinigungsverbot. Ein durchgestrichenes W ist als Herstellerverbot zu nennen.",
+    "Abweichungen vom Etikett nur als durch Fachkraft zu prüfende Alternative beschreiben; keine automatische Freigabe.",
+    "Foto zeigt weder sichere Farbechtheit noch Klebestabilität, Finishbedarf oder verdeckte Konstruktion.",
+    "pH eines Konzentrats ist nicht der pH der Behandlungslösung.",
+    "DEPRIT nicht pauschal als ohne Vorbehalt in K4/INTENSE ausspülbares Vordetachiermittel behandeln.",
+    "Keine PSA-, Desinfektions- oder Imprägnierwirkung garantieren."
+  ]
+}
