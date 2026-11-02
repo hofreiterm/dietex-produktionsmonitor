@@ -552,7 +552,7 @@
     "Maschinentypen, Beladung und freigegebene Programme",
     "Nassreinigungsmaschine und konkrete Programme",
     "Dosierrezepturen, Flottenverhältnis, Wasserhärte",
-    "Trocknung und Finish",
+    "Trocknung sowie freigegebene VEIT-CF20-Programme mit Temperatur, Dampf/Feuchte und Behandlungszeit",
     "Bestätigte Saum-/Farbechtheits-/Konstruktionsprüfungen"
   ],
   "rules": [
@@ -565,5 +565,21 @@
     "pH eines Konzentrats ist nicht der pH der Behandlungslösung.",
     "DEPRIT nicht pauschal als ohne Vorbehalt in K4/INTENSE ausspülbares Vordetachiermittel behandeln.",
     "Keine PSA-, Desinfektions- oder Imprägnierwirkung garantieren."
+  ],
+  "finishing_equipment": [
+    {
+      "id": "veit-cf20",
+      "name": "VEIT CF20",
+      "type": "Tunnelfinisher / Kompaktfinisher",
+      "available": true,
+      "confirmed_by": "Betriebsangabe des Anwenders",
+      "source_url": "https://www.veit.de/produkte/tunnelfinisher/kompaktfinisher-cf-20/",
+      "approved_programs": [],
+      "constraints": [
+        "Dampf-/Luftfinish nach Artikel- und Konstruktionsprüfung; keine pauschale Materialfreigabe aus Maschinenbesitz.",
+        "Betriebliche Programme, Temperatur, Dampf-/Feuchteeinstellung und Behandlungszeit sind noch nicht hinterlegt. Keine Werte erfinden.",
+        "Waschen, Trommeltrocknen, Bügeln und Tunnelfinish getrennt beurteilen; Pflegesymbole nicht direkt in Tunnelparameter übersetzen."
+      ]
+    }
   ]
 }
