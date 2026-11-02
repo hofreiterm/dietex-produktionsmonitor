@@ -1,0 +1,35 @@
+{
+  "equipment": [
+    {
+      "id": "veit-cf20",
+      "name": "VEIT CF20",
+      "type": "Tunnelfinisher / Kompaktfinisher",
+      "available": true,
+      "confirmed_by": "Betriebsangabe des Anwenders",
+      "source_url": "https://www.veit.de/produkte/tunnelfinisher/kompaktfinisher-cf-20/",
+      "approved_programs": [],
+      "constraints": [
+        "Dampf-/Luftfinish nach Artikel- und Konstruktionsprüfung; keine pauschale Materialfreigabe aus Maschinenbesitz.",
+        "Programm Putzereiware mit Dampfzeit 10 s, Einwirkzeit 5 s und Luftzeit 15 s am Display dokumentiert. Temperaturzuordnung, weitere Einstellungen und Artikel-/Verfahrensfreigabe sind nicht bestätigt; keine zusätzlichen Werte erfinden.",
+        "Waschen, Trommeltrocknen, Bügeln und Tunnelfinish getrennt beurteilen; Pflegesymbole nicht direkt in Tunnelparameter übersetzen."
+      ],
+      "observed_programs": [
+        {
+          "name": "Putzereiware",
+          "status": "observed_not_approved",
+          "source": "Vom Anwender bereitgestelltes Foto der Maschinenanzeige",
+          "steam_time_seconds": 10,
+          "dwell_time_seconds": 5,
+          "air_time_seconds": 15,
+          "temperatures_confirmed": false,
+          "note": "Programmzeiten am Display dokumentiert, üblicher Einsatz für Oberbekleidung vom Anwender bestätigt. Temperaturzuordnung und Eignung für den einzelnen Artikel noch zu prüfen.",
+          "usual_article_group": "Oberbekleidung",
+          "usage_confirmed_by": "Anwender: Programm wird allgemein für Oberbekleidung verwendet"
+        }
+      ]
+    }
+  ],
+  "missing_parameters": [
+    "Trocknung sowie Artikel-/Verfahrensfreigabe und Temperatur-/Dampf-/Feuchteeinstellungen für VEIT CF20; Programmzeiten Putzereiware sind am Display dokumentiert"
+  ]
+}

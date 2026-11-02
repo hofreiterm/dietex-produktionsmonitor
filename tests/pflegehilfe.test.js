@@ -135,3 +135,12 @@ test('failed trial stops finishing as well as the cleaning plan',async()=>{
   const p=(await call({body:{images:[image],context:{trial:'failed'}}})).body.analysis.professional;
   assert.equal(p.tunnel_finisher.status,'not_applicable');assert.match(p.finishing[0],/stoppen/);
 });
+
+test('photographed CF20 program is a reference rather than a confirmed garment recipe',async()=>{
+  configured();globalThis.fetch=async()=>upstream(analysis());
+  const t=(await call()).body.analysis.professional.tunnel_finisher;
+  const p=t.equipment.observed_programs[0];assert.equal(p.name,'Putzereiware');
+  assert.equal(p.steam_time_seconds,10);assert.equal(p.dwell_time_seconds,5);assert.equal(p.air_time_seconds,15);
+  assert.equal(p.usual_article_group,'Oberbekleidung');assert.equal(p.temperatures_confirmed,false);assert.equal(p.status,'observed_not_approved');assert.equal(t.program_confirmed,false);
+  assert.deepEqual(t.equipment.approved_programs,[]);
+});
