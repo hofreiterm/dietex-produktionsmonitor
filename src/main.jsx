@@ -628,11 +628,11 @@ function App() {
   const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
   const personnelDisplayPathMatch = pathname.match(/^\/personaldisplay(?:\/(07-12|12-15|15-schluss))?$/);
   const personnelDisplayPath = Boolean(personnelDisplayPathMatch);
-  const externalPersonnelPortal = params.get("portal") === "personalplanung";
+  const externalAccessPortal = params.get("portal") === "personalplanung";
   const initialView = personnelDisplayPath
     ? "personaldisplay"
-    : externalPersonnelPortal
-      ? (params.get("view") === "personalmonitor" ? "personalmonitor" : "personalplanung")
+    : externalAccessPortal
+      ? (params.get("view") || "annahme")
       : (params.get("view") || "annahme");
   const personnelDisplayMode = initialView === "personaldisplay" || params.get("display") === "waescherei-gang";
   const requestedDisplayShiftValue = personnelDisplayPathMatch?.[1] || params.get("shift");
@@ -658,7 +658,7 @@ function App() {
     : requestedInitialViewRaw === "touren"
       ? "monitor"
       : requestedInitialViewRaw;
-  const initialAdminUnlocked = externalPersonnelPortal || isAdminSessionUnlocked();
+  const initialAdminUnlocked = externalAccessPortal || isAdminSessionUnlocked();
 
   const [view, setView] = useState(() => (isProtectedView(requestedInitialView) && !initialAdminUnlocked ? "annahme" : requestedInitialView));
   const [adminUnlocked, setAdminUnlocked] = useState(initialAdminUnlocked);
@@ -4138,11 +4138,6 @@ const tourColumns = Object.entries(
   }
 
   function goToView(nextView) {
-    if (externalPersonnelPortal && !["personalplanung", "personalmonitor"].includes(nextView)) {
-      setView("personalplanung");
-      return;
-    }
-
     if (takeoverMode && !["annahme", "station"].includes(nextView)) {
       setView("annahme");
       return;
@@ -5108,12 +5103,12 @@ const tourColumns = Object.entries(
             {personnelDisplayMode ? "Personalplanung Wäscherei + Putzerei" : expeditMode ? "DieTex Expedit" : "DieTex Produktionsmonitor"}
           </div>
           <div className="flex items-center justify-end gap-3">
-            {!fixedView && externalPersonnelPortal && (
+            {!fixedView && externalAccessPortal && (
               <Button onClick={() => supabase.auth.signOut()}>
                 Abmelden
               </Button>
             )}
-            {!fixedView && !externalPersonnelPortal && (adminUnlocked ? (
+            {!fixedView && !externalAccessPortal && (adminUnlocked ? (
               <Button className="border-emerald-200 bg-emerald-50 text-emerald-800" onClick={lockAdminArea}>
                 Admin sperren
               </Button>
@@ -5799,8 +5794,13 @@ const tourColumns = Object.entries(
               ? [
                   ["monitor", "Verpackungsmonitor"],
                 ]
-              : externalPersonnelPortal
+              : externalAccessPortal
               ? [
+                  ["annahme", "Kunden übernehmen"],
+                  ["waschplan", "Waschplan"],
+                  ["monitor", "Verpackungsmonitor"],
+                  ["stammdaten", "Stammdaten"],
+                  ["leitung", "Produktionsleitung"],
                   ["personalplanung", "Personalplanung"],
                   ["personalmonitor", "Personalübersicht"],
                 ]
@@ -5817,11 +5817,6 @@ const tourColumns = Object.entries(
                 {label}
               </Button>
             ))}
-            {!takeoverMode && !expeditMode && !externalPersonnelPortal && (
-              <Button onClick={() => window.location.assign("/pflegehilfe")}>
-                Pflegehilfe
-              </Button>
-            )}
           </nav>
         )}
 
@@ -6938,7 +6933,7 @@ const tourColumns = Object.entries(
   );
 }
 
-function ExternalPersonnelPortal() {
+function ExternalAccessPortal() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
@@ -7042,7 +7037,7 @@ function ExternalPersonnelPortal() {
         <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-lg">
           <div className="mb-6 flex justify-center"><Logo /></div>
           <h1 className="text-center text-2xl font-black">Neues Passwort festlegen</h1>
-          <p className="mt-1 text-center text-sm font-semibold text-slate-500">Personalplanung Produktionsleitung</p>
+          <p className="mt-1 text-center text-sm font-semibold text-slate-500">Geschützter externer Zugang</p>
           <form className="mt-6 space-y-3" onSubmit={changePassword}>
             <label className="block text-sm font-black text-slate-700">
               Neues Passwort
@@ -7080,8 +7075,8 @@ function ExternalPersonnelPortal() {
     <div className="flex min-h-screen items-center justify-center bg-slate-100 p-4 text-slate-900">
       <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-lg">
         <div className="mb-6 flex justify-center"><Logo /></div>
-        <h1 className="text-center text-2xl font-black">Personalplanung</h1>
-        <p className="mt-1 text-center text-sm font-semibold text-slate-500">Benutzerzugang für die Produktionsleitung</p>
+        <h1 className="text-center text-2xl font-black">DieTex Produktionsmonitor</h1>
+        <p className="mt-1 text-center text-sm font-semibold text-slate-500">Geschützter externer Zugang</p>
         <form className="mt-6 space-y-3" onSubmit={signIn}>
           <label className="block text-sm font-black text-slate-700">
             E-Mail-Adresse
@@ -7122,5 +7117,6 @@ function ExternalPersonnelPortal() {
   );
 }
 
-const externalPersonnelPortal = new URLSearchParams(window.location.search).get("portal") === "personalplanung";
-ReactDOM.createRoot(document.getElementById("root")).render(externalPersonnelPortal ? <ExternalPersonnelPortal /> : <App />);
+const externalAccessPortal = new URLSearchParams(window.location.search).get("portal") === "personalplanung";
+ReactDOM.createRoot(document.getElementById("root")).render(externalAccessPortal ? <ExternalAccessPortal /> : <App />);
+
