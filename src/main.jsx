@@ -657,12 +657,94 @@ function normalizePersonnelVoiceText(value) {
     .replace(/\s+/g, " ");
 }
 
-function personnelVoicePhraseIndex(text, phrase) {
-  const normalizedText = ` ${normalizePersonnelVoiceText(text)} `;
-  const normalizedPhrase = normalizePersonnelVoiceText(phrase);
-  if (!normalizedPhrase) return -1;
-  const index = normalizedText.indexOf(` ${normalizedPhrase} `);
-  return index < 0 ? -1 : Math.max(0, index - 1);
+function personnelVoiceComparableText(value) {
+  return normalizePersonnelVoiceText(value)
+    .replace(/ph/g, "f")
+    .replace(/ck/g, "k")
+    .replace(/tz/g, "z")
+    .replace(/ie/g, "i")
+    .replace(/y/g, "i")
+    .replace(/v/g, "f")
+    .replace(/c(?=[aou])/g, "k")
+    .replace(/(.)\1+/g, "$1");
+}
+
+function personnelVoiceEditDistance(leftValue, rightValue) {
+  const left = personnelVoiceComparableText(leftValue);
+  const right = personnelVoiceComparableText(rightValue);
+  if (!left) return right.length;
+  if (!right) return left.length;
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      current[rightIndex] = Math.min(
+        current[rightIndex - 1] + 1,
+        previous[rightIndex] + 1,
+        previous[rightIndex - 1] + substitutionCost
+      );
+    }
+    previous.splice(0, previous.length, ...current);
+  }
+
+  return previous[right.length];
+}
+
+function personnelVoiceSimilarity(leftValue, rightValue) {
+  const left = personnelVoiceComparableText(leftValue);
+  const right = personnelVoiceComparableText(rightValue);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  return 1 - (personnelVoiceEditDistance(left, right) / Math.max(left.length, right.length));
+}
+
+function personnelVoiceTokenPositions(value) {
+  const normalized = normalizePersonnelVoiceText(value);
+  const tokens = [];
+  const expression = /\S+/g;
+  let match;
+  while ((match = expression.exec(normalized))) {
+    tokens.push({ value: match[0], start: match.index, end: match.index + match[0].length });
+  }
+  return { normalized, tokens };
+}
+
+function personnelVoiceBestOccurrence(textValue, phraseValue) {
+  const { normalized, tokens } = personnelVoiceTokenPositions(textValue);
+  const phrase = normalizePersonnelVoiceText(phraseValue);
+  if (!normalized || !phrase) return null;
+  const exactExpression = new RegExp(`(?:^|\\s)(${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+")})(?=\\s|$)`);
+  const exactMatch = exactExpression.exec(normalized);
+  if (exactMatch) {
+    const start = exactMatch.index + (exactMatch[0].length - exactMatch[1].length);
+    return { start, end: start + exactMatch[1].length, score: 1 };
+  }
+
+  const phraseTokenCount = phrase.split(" ").length;
+  const phraseLength = personnelVoiceComparableText(phrase).replace(/\s/g, "").length;
+  if (phraseLength <= 3) return null;
+  const candidateLengths = [...new Set([
+    phraseTokenCount,
+    phraseTokenCount > 1 ? phraseTokenCount - 1 : phraseTokenCount,
+    phraseTokenCount + 1,
+  ])];
+  let best = null;
+
+  candidateLengths.forEach((candidateLength) => {
+    for (let index = 0; index + candidateLength <= tokens.length; index += 1) {
+      const endIndex = index + candidateLength - 1;
+      const candidate = normalized.slice(tokens[index].start, tokens[endIndex].end);
+      const score = personnelVoiceSimilarity(candidate, phrase);
+      if (!best || score > best.score) {
+        best = { start: tokens[index].start, end: tokens[endIndex].end, score };
+      }
+    }
+  });
+
+  const threshold = phraseTokenCount > 1 ? 0.7 : phraseLength <= 5 ? 0.82 : 0.74;
+  return best && best.score >= threshold ? best : null;
 }
 
 function App() {
@@ -2515,11 +2597,11 @@ const tourColumns = Object.entries(
     if (shiftTarget === null || shiftTarget === "") return minimum || null;
     return Math.max(minimum, Number(shiftTarget ?? section.target?.default ?? 0));
   };
-  const currentEmployees = () => {
-    const baseEmployees = currentBaseEmployees();
-    const sourceDepartment = personalDepartment === "waescherei" ? "putzerei" : "waescherei";
-    const transferZone = personalDepartment === "waescherei" ? "waescherei" : "putzerei";
-    const sourcePlanKey = getPersonalKey(personalDate, personalShift, sourceDepartment);
+  const employeesForDepartment = (department = personalDepartment, shift = personalShift) => {
+    const baseEmployees = personnelEmployeesByDept[department] || PERSONNEL_DEPARTMENTS[department]?.employees || [];
+    const sourceDepartment = department === "waescherei" ? "putzerei" : "waescherei";
+    const transferZone = department === "waescherei" ? "waescherei" : "putzerei";
+    const sourcePlanKey = getPersonalKey(personalDate, shift, sourceDepartment);
     const borrowedNames = personalPlan[sourcePlanKey]?.[transferZone] || [];
     const sourceEmployees = personnelEmployeesByDept[sourceDepartment] || [];
     const existingNames = new Set(baseEmployees.map((employee) => employee.name.toLowerCase()));
@@ -2530,6 +2612,7 @@ const tourColumns = Object.entries(
 
     return [...baseEmployees, ...borrowedEmployees];
   };
+  const currentEmployees = () => employeesForDepartment(personalDepartment, personalShift);
 
   const getPersonnelDayStrengthKey = () => `${personalDepartment}_${personalDate}`;
   const getPersonnelDayStrength = () => personnelDayStrengthByDate[getPersonnelDayStrengthKey()] || "mittel";
@@ -2705,6 +2788,8 @@ const tourColumns = Object.entries(
 
   const getPersonnelVoiceTargets = () => {
     const aliasesBySection = {
+      Übernahme: ["Uebernahme", "Annahme"],
+      Absortierung: ["Absor tierung", "Sortierung"],
       "Waschstraßen": ["Waschstraße", "Waschstrassen"],
       Waschmaschinen: ["Waschmaschine"],
       Reinigungsmaschinen: ["Reinigungsmaschine", "Putzmaschinen"],
@@ -2733,90 +2818,235 @@ const tourColumns = Object.entries(
     const otherDepartment = personalDepartment === "waescherei" ? "putzerei" : "waescherei";
     const targets = [];
     const seenAliases = new Set();
-    const addTarget = (department, sectionName, label, aliases) => {
+    const addTarget = (department, sectionName, label, aliases, type) => {
       aliases.forEach((alias) => {
         const normalizedAlias = normalizePersonnelVoiceText(alias);
         if (!normalizedAlias || seenAliases.has(normalizedAlias)) return;
         seenAliases.add(normalizedAlias);
-        targets.push({ department, sectionName, label, alias: normalizedAlias });
+        targets.push({ department, sectionName, label, alias: normalizedAlias, type });
       });
     };
 
     [personalDepartment, otherDepartment].forEach((department) => {
       sectionsForDepartment(department).forEach((section) => {
-        addTarget(department, section.name, section.name, [section.name, ...(aliasesBySection[section.name] || [])]);
+        addTarget(department, section.name, section.name, [section.name, ...(aliasesBySection[section.name] || [])], "workplace");
       });
     });
-    statusTargets.forEach((target) => addTarget(personalDepartment, target.sectionName, target.label, target.aliases));
+    statusTargets.forEach((target) => addTarget(personalDepartment, target.sectionName, target.label, target.aliases, "status"));
     return targets.sort((a, b) => b.alias.length - a.alias.length);
   };
 
-  const findPersonnelVoiceEmployees = (segment) => {
-    const normalizedSegment = normalizePersonnelVoiceText(segment);
-    const matches = getAllPersonnelEmployees()
-      .map((employee) => {
-        const phrase = normalizePersonnelVoiceText(employee.name);
-        return { employee, phrase, index: personnelVoicePhraseIndex(normalizedSegment, phrase) };
+  const findPersonnelVoiceTargetOccurrences = (command) => {
+    const candidates = getPersonnelVoiceTargets()
+      .map((target) => {
+        const occurrence = personnelVoiceBestOccurrence(command, target.alias);
+        return occurrence ? { ...target, ...occurrence } : null;
       })
-      .filter((match) => match.index >= 0)
-      .sort((a, b) => b.phrase.length - a.phrase.length);
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || b.alias.length - a.alias.length);
+    const selected = [];
+
+    candidates.forEach((candidate) => {
+      if (selected.some((entry) => candidate.start < entry.end && candidate.end > entry.start)) return;
+      if (selected.some((entry) => entry.department === candidate.department && entry.sectionName === candidate.sectionName)) return;
+      selected.push(candidate);
+    });
+
+    return selected.sort((a, b) => a.start - b.start);
+  };
+
+  const findPersonnelVoiceEmployeeMatches = (segment) => {
+    const employees = getAllPersonnelEmployees();
+    const firstNameCounts = employees.reduce((counts, employee) => {
+      const firstName = normalizePersonnelVoiceText(employee.name).split(" ")[0];
+      counts[firstName] = (counts[firstName] || 0) + 1;
+      return counts;
+    }, {});
+    const matches = employees
+      .map((employee) => {
+        const fullName = normalizePersonnelVoiceText(employee.name);
+        const firstName = fullName.split(" ")[0];
+        const aliases = [fullName];
+        if (firstName.length >= 3 && firstNameCounts[firstName] === 1) aliases.push(firstName);
+        const occurrences = aliases
+          .map((alias) => personnelVoiceBestOccurrence(segment, alias))
+          .filter(Boolean)
+          .sort((a, b) => b.score - a.score);
+        return occurrences[0] ? { employee, ...occurrences[0] } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || (b.end - b.start) - (a.end - a.start));
     const selected = [];
 
     matches.forEach((match) => {
-      const start = match.index;
-      const end = start + match.phrase.length;
-      if (selected.some((entry) => start < entry.end && end > entry.start)) return;
-      selected.push({ ...match, start, end });
+      if (selected.some((entry) => match.start < entry.end && match.end > entry.start)) return;
+      selected.push(match);
     });
 
-    return selected.sort((a, b) => a.start - b.start).map((match) => match.employee.name);
+    return selected.sort((a, b) => a.start - b.start);
   };
 
-  const parsePersonnelVoiceAssignments = (transcript) => {
+  const findPersonnelVoiceEmployees = (segment) => findPersonnelVoiceEmployeeMatches(segment).map((match) => match.employee.name);
+
+  const detectPersonnelVoiceDepartment = (command) => {
+    const departments = [
+      { department: "waescherei", aliases: ["Wäscherei", "Waescherei", "Wäschereibereich"] },
+      { department: "putzerei", aliases: ["Putzerei", "Putzereibereich"] },
+    ];
+    const matches = departments.flatMap((entry) => entry.aliases.map((alias) => {
+      const occurrence = personnelVoiceBestOccurrence(command, alias);
+      return occurrence ? { department: entry.department, ...occurrence } : null;
+    })).filter(Boolean).sort((a, b) => b.score - a.score);
+    return matches[0]?.department || personalDepartment;
+  };
+
+  const detectPersonnelVoiceTimingStatus = (command) => {
+    const timingRules = [
+      { sectionName: "start12", label: "Start 12 Uhr", patterns: ["Start 12 Uhr", "erst ab 12 Uhr", "kommt ab 12 Uhr", "beginnt ab 12 Uhr"] },
+      { sectionName: "end12", label: "Ende 12 Uhr", patterns: ["Ende 12 Uhr", "bis 12 Uhr", "ab 12 Uhr zuhause", "Schluss um 12 Uhr"] },
+      { sectionName: "end15", label: "Ende 15 Uhr", patterns: ["Ende 15 Uhr", "bis 15 Uhr", "ab 15 Uhr zuhause", "Schluss um 15 Uhr"] },
+      { sectionName: "end18", label: "Ende 18 Uhr", patterns: ["Ende 18 Uhr", "bis 18 Uhr", "ab 18 Uhr zuhause", "Schluss um 18 Uhr", "geht um 18 Uhr heim"] },
+    ];
+    const matches = timingRules.flatMap((rule) => rule.patterns.map((pattern) => {
+      const occurrence = personnelVoiceBestOccurrence(command, pattern);
+      return occurrence ? { ...rule, ...occurrence } : null;
+    })).filter(Boolean).sort((a, b) => b.score - a.score);
+    return matches[0] || null;
+  };
+
+  const detectPersonnelVoiceSuggestion = (command) => {
+    const normalized = normalizePersonnelVoiceText(command);
+    const suggestionPhrases = [
+      "Vorschlag",
+      "KI Vorschlag",
+      "mach einen Vorschlag",
+      "mache mir einen Vorschlag",
+      "automatisch einteilen",
+      "teile alles ein",
+      "teile die ganze Wäscherei ein",
+      "teile die ganze Putzerei ein",
+      "erstelle die Einteilung",
+      "plane alle ein",
+    ];
+    const match = suggestionPhrases
+      .map((phrase) => personnelVoiceBestOccurrence(normalized, phrase))
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)[0];
+    if (!match) return null;
+    return {
+      type: "suggestion",
+      department: detectPersonnelVoiceDepartment(normalized),
+      shift: personalShift,
+      confidence: match.score,
+    };
+  };
+
+  const interpretPersonnelVoiceCommand = (transcript) => {
     const normalizedCommand = normalizePersonnelVoiceText(transcript);
-    if (!normalizedCommand) return [];
-    const occurrences = [];
+    if (!normalizedCommand) return null;
+    const suggestion = detectPersonnelVoiceSuggestion(normalizedCommand);
+    if (suggestion) return suggestion;
 
-    getPersonnelVoiceTargets().forEach((target) => {
-      const escapedAlias = target.alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-      const expression = new RegExp(`(?:^|\\s)(${escapedAlias})(?=\\s|$)`, "g");
-      let match;
-      while ((match = expression.exec(normalizedCommand))) {
-        const start = match.index + (match[0].length - match[1].length);
-        const end = start + match[1].length;
-        if (occurrences.some((entry) => start < entry.end && end > entry.start)) continue;
-        occurrences.push({ ...target, start, end });
-      }
-    });
+    const occurrences = findPersonnelVoiceTargetOccurrences(normalizedCommand);
+    const employeeMatches = findPersonnelVoiceEmployeeMatches(normalizedCommand);
+    const workplaceOccurrences = occurrences.filter((entry) => entry.type === "workplace");
+    const timingStatus = detectPersonnelVoiceTimingStatus(normalizedCommand);
 
-    occurrences.sort((a, b) => a.start - b.start);
-    if (!occurrences.length) return [];
+    if (timingStatus && employeeMatches.length === 0 && workplaceOccurrences.length > 0) {
+      return {
+        type: "group-status",
+        source: workplaceOccurrences[0],
+        destination: { ...timingStatus, department: workplaceOccurrences[0].department, type: "status" },
+        confidence: Math.min(workplaceOccurrences[0].score, timingStatus.score),
+      };
+    }
+
+    if (timingStatus && employeeMatches.length > 0 && !occurrences.some((entry) => entry.type === "status")) {
+      occurrences.push({
+        ...timingStatus,
+        department: personalDepartment,
+        type: "status",
+      });
+      occurrences.sort((a, b) => a.start - b.start);
+    }
+
+    if (!occurrences.length) return null;
     const targetFirstMode = findPersonnelVoiceEmployees(normalizedCommand.slice(0, occurrences[0].start)).length === 0;
     const assignments = [];
-    const assignedNames = new Set();
+    const assignedPairs = new Set();
 
     occurrences.forEach((target, index) => {
       const segment = targetFirstMode
         ? normalizedCommand.slice(target.end, occurrences[index + 1]?.start ?? normalizedCommand.length)
         : normalizedCommand.slice(index === 0 ? 0 : occurrences[index - 1].end, target.start);
       findPersonnelVoiceEmployees(segment).forEach((name) => {
-        if (assignedNames.has(name)) return;
-        assignedNames.add(name);
+        const pairKey = `${name}_${target.department}_${target.sectionName}`;
+        if (assignedPairs.has(pairKey)) return;
+        assignedPairs.add(pairKey);
         assignments.push({ name, target });
       });
     });
 
-    return assignments;
+    if (timingStatus && workplaceOccurrences.length > 0 && employeeMatches.length > 0) {
+      employeeMatches.forEach((match) => {
+        const pairKey = `${match.employee.name}_${personalDepartment}_${timingStatus.sectionName}`;
+        if (assignedPairs.has(pairKey)) return;
+        assignedPairs.add(pairKey);
+        assignments.push({
+          name: match.employee.name,
+          target: { ...timingStatus, department: personalDepartment, type: "status" },
+        });
+      });
+    }
+
+    if (!assignments.length) return null;
+    const confidenceValues = [
+      ...occurrences.map((entry) => entry.score || 1),
+      ...employeeMatches.map((entry) => entry.score || 1),
+    ];
+    return {
+      type: "assignments",
+      assignments,
+      confidence: Math.min(...confidenceValues),
+    };
   };
 
-  const applyPersonnelVoiceCommand = (transcript) => {
-    const assignments = parsePersonnelVoiceAssignments(transcript);
-    if (!assignments.length) {
+  const applyPersonnelVoiceCommand = (transcript, interpretedCommand = null) => {
+    const command = interpretedCommand || interpretPersonnelVoiceCommand(transcript);
+    if (!command) {
       setPersonnelVoiceStatus(`Nicht eindeutig erkannt: „${transcript.trim()}“`);
       return;
     }
+
+    if (command.type === "suggestion") {
+      setPersonalDepartment(command.department);
+      applyPersonnelSuggestions({ department: command.department, shift: command.shift });
+      const departmentLabel = PERSONNEL_DEPARTMENTS[command.department]?.label || command.department;
+      setPersonnelVoiceStatus(`KI-Vorschlag erstellt: ${departmentLabel} · ${getPersonnelShiftLabel(command.shift)}`);
+      return;
+    }
+
+    if (command.type === "group-status") {
+      const sourcePlan = personalPlan[getPersonalKey(personalDate, personalShift, command.source.department)] || {};
+      const names = [...new Set(sourcePlan[command.source.sectionName] || [])];
+      if (!names.length) {
+        setPersonnelVoiceStatus(`${command.source.label} ist in dieser Schicht nicht besetzt.`);
+        return;
+      }
+      const appliedNames = names.filter((name) => setEmployeeToSection(
+        name,
+        command.destination.sectionName,
+        personalShift,
+        command.source.department
+      ));
+      setPersonnelVoiceStatus(
+        `${command.source.label}: ${appliedNames.length} Personen → ${command.destination.label}`
+      );
+      return;
+    }
+
     const applied = [];
-    assignments.forEach(({ name, target }) => {
+    command.assignments.forEach(({ name, target }) => {
       if (setEmployeeToSection(name, target.sectionName, personalShift, target.department)) {
         applied.push(`${name} → ${target.label}`);
       }
@@ -2845,7 +3075,7 @@ const tourColumns = Object.entries(
     recognition.lang = "de-DE";
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 5;
     recognition.onstart = () => {
       setPersonnelVoiceListening(true);
       setPersonnelVoiceStatus(`Mikrofon aktiv · ${getPersonnelShiftLabel(personalShift)}`);
@@ -2854,13 +3084,23 @@ const tourColumns = Object.entries(
       const finalParts = [];
       const interimParts = [];
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const spokenText = event.results[index][0]?.transcript?.trim();
+        const result = event.results[index];
+        const spokenText = result[0]?.transcript?.trim();
         if (!spokenText) continue;
-        if (event.results[index].isFinal) finalParts.push(spokenText);
+        if (result.isFinal) {
+          const alternatives = Array.from(result)
+            .map((alternative) => {
+              const transcript = alternative.transcript?.trim();
+              return transcript ? { transcript, command: interpretPersonnelVoiceCommand(transcript) } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => (b.command?.confidence || 0) - (a.command?.confidence || 0));
+          finalParts.push(alternatives[0] || { transcript: spokenText, command: null });
+        }
         else interimParts.push(spokenText);
       }
       if (interimParts.length) setPersonnelVoiceStatus(`Gehört: ${interimParts.join(" ")}`);
-      if (finalParts.length) applyPersonnelVoiceCommand(finalParts.join(" "));
+      finalParts.forEach((entry) => applyPersonnelVoiceCommand(entry.transcript, entry.command));
     };
     recognition.onerror = (event) => {
       const denied = event.error === "not-allowed" || event.error === "service-not-allowed";
@@ -3558,15 +3798,19 @@ const tourColumns = Object.entries(
     "putzerei",
   ];
 
-  const applyPersonnelSuggestions = () => {
-    const currentKey = getPersonalKey();
+  const applyPersonnelSuggestions = (options = {}) => {
+    const targetDepartment = typeof options === "string" ? options : options?.department || personalDepartment;
+    const targetShift = options?.shift || personalShift;
+    const targetSections = sectionsForDepartment(targetDepartment);
+    const targetEmployees = employeesForDepartment(targetDepartment, targetShift);
+    const currentKey = getPersonalKey(personalDate, targetShift, targetDepartment);
     const currentPlan = personalPlan[currentKey] || {};
-    const start12Names = personalDepartment === "waescherei"
+    const start12Names = targetDepartment === "waescherei"
       ? personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || []
       : [];
 
     const nextPlan = {
-      ...(personalDepartment === "waescherei" && personalShift === "07-12" ? { start12: [...start12Names] } : {}),
+      ...(targetDepartment === "waescherei" && targetShift === "07-12" ? { start12: [...start12Names] } : {}),
       end12: [...(currentPlan.end12 || [])],
       end15: [...(currentPlan.end15 || [])],
       end18: [...(currentPlan.end18 || [])],
@@ -3578,30 +3822,30 @@ const tourColumns = Object.entries(
       putzerei: [...(currentPlan.putzerei || [])],
     };
 
-    currentSections().forEach((section) => {
+    targetSections.forEach((section) => {
       nextPlan[section.name] = [];
     });
 
     const unavailable = new Set([
-      ...(personalShift === "07-12" ? [] : nextPlan.end12),
-      ...(personalShift === "15-schluss" ? nextPlan.end15 : []),
+      ...(targetShift === "07-12" ? [] : nextPlan.end12),
+      ...(targetShift === "15-schluss" ? nextPlan.end15 : []),
       ...nextPlan.urlaub,
       ...nextPlan.za,
       ...nextPlan.krank,
       ...nextPlan.sonstiges,
       ...nextPlan.waescherei,
       ...nextPlan.putzerei,
-      ...(personalDepartment === "waescherei" && personalShift === "07-12" ? start12Names : []),
+      ...(targetDepartment === "waescherei" && targetShift === "07-12" ? start12Names : []),
     ]);
 
     const historyPlans = Object.entries(personalPlan)
-      .filter(([key]) => key.startsWith(`${personalDepartment}_`) && key !== currentKey)
+      .filter(([key]) => key.startsWith(`${targetDepartment}_`) && key !== currentKey)
       .map(([, plan]) => plan || {});
 
     const historyByEmployee = {};
-    currentEmployees().forEach((employee) => {
+    targetEmployees.forEach((employee) => {
       const sectionCounts = {};
-      currentSections().forEach((section) => {
+      targetSections.forEach((section) => {
         sectionCounts[section.name] = historyPlans.reduce(
           (count, plan) => count + ((plan[section.name] || []).includes(employee.name) ? 1 : 0),
           0
@@ -3617,7 +3861,7 @@ const tourColumns = Object.entries(
 
     const assigned = new Set(unavailable);
     const priorityRanks = Object.fromEntries(PERSONNEL_SECTION_PRIORITIES.map((priority) => [priority.key, priority.rank]));
-    const prioritizedSections = currentSections()
+    const prioritizedSections = targetSections
       .map((section, index) => ({ section, index }))
       .sort((a, b) => {
         const rankDifference = priorityRanks[normalizePersonnelSectionPriority(a.section.priority)]
@@ -3626,10 +3870,13 @@ const tourColumns = Object.entries(
       })
       .map(({ section }) => section);
 
-    const eligibleEmployeesForSection = (section) => currentEmployees()
-      .filter((emp) => getEmployeeStatus(emp.name) === "anwesend")
+    const eligibleEmployeesForSection = (section) => targetEmployees
+      .filter((emp) => (employeeStatus[`${targetDepartment}_${emp.name}`] || "anwesend") === "anwesend")
       .filter((emp) => isEmployeeRegularDay(emp))
-      .filter((emp) => isEmployeeRegularShift(emp))
+      .filter((emp) => {
+        const shifts = Array.isArray(emp.regularShifts) ? emp.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key);
+        return shifts.includes(targetShift);
+      })
       .filter((emp) => !assigned.has(emp.name))
       .filter((emp) => emp.noGoWorkplace1 !== section.name && emp.noGoWorkplace2 !== section.name)
       .filter((emp) => isEmployeeAllowedInSection(emp.name, section));
@@ -3665,7 +3912,7 @@ const tourColumns = Object.entries(
     };
 
     const uncoveredSections = prioritizedSections.filter((section) => {
-      const target = getSectionTarget(section);
+      const target = sectionTargetForDepartment(section, targetDepartment, targetShift);
       return target !== null && target > 0;
     });
 
@@ -3681,12 +3928,13 @@ const tourColumns = Object.entries(
     }
 
     prioritizedSections.forEach((section) => {
-      const target = getSectionTarget(section);
+      const target = sectionTargetForDepartment(section, targetDepartment, targetShift);
       if (target === null || target <= 0) return;
       fillSectionTo(section, target);
     });
 
     setPersonalPlan((prev) => ({ ...prev, [currentKey]: nextPlan }));
+    return { department: targetDepartment, shift: targetShift };
   };
 
   const absenceStatsRows = () => {
