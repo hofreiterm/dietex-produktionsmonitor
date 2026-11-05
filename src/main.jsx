@@ -2,7 +2,7 @@ import "./index.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
-import { MessageCircle, Phone } from "lucide-react";
+import { MessageCircle, Mic, Phone } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import personnelFloorPlanUrl from "./assets/plan-waescherei-putzerei.jpg";
@@ -479,6 +479,25 @@ function WhatsAppShareButton({ onClick }) {
   );
 }
 
+function VoiceAssignmentButton({ active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={active ? "Spracheingabe beenden" : "Einteilung per Sprache erfassen"}
+      aria-label={active ? "Spracheingabe beenden" : "Einteilung per Sprache erfassen"}
+      aria-pressed={active}
+      className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-white shadow-sm transition active:scale-95 ${
+        active
+          ? "animate-pulse border-red-800 bg-red-600 hover:bg-red-700"
+          : "border-emerald-900 bg-emerald-700 hover:bg-emerald-800"
+      }`}
+    >
+      <Mic size={22} strokeWidth={2.6} />
+    </button>
+  );
+}
+
 function Input(props) {
   return (
     <input
@@ -621,6 +640,29 @@ function displaySubcategory(subcategory) {
     return "Tischtücher + Deckservietten";
   }
   return subcategory;
+}
+
+function normalizePersonnelVoiceText(value) {
+  return String(value || "")
+    .toLocaleLowerCase("de-DE")
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/\b(eins|ein)\b/g, "1")
+    .replace(/\bzwei\b/g, "2")
+    .replace(/\bdrei\b/g, "3")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function personnelVoicePhraseIndex(text, phrase) {
+  const normalizedText = ` ${normalizePersonnelVoiceText(text)} `;
+  const normalizedPhrase = normalizePersonnelVoiceText(phrase);
+  if (!normalizedPhrase) return -1;
+  const index = normalizedText.indexOf(` ${normalizedPhrase} `);
+  return index < 0 ? -1 : Math.max(0, index - 1);
 }
 
 function App() {
@@ -804,6 +846,8 @@ function App() {
   const [departmentDraft, setDepartmentDraft] = useState([]);
   const [personnelNoteDraft, setPersonnelNoteDraft] = useState([]);
   const [personnelSyncStatus, setPersonnelSyncStatus] = useState("loading");
+  const [personnelVoiceListening, setPersonnelVoiceListening] = useState(false);
+  const [personnelVoiceStatus, setPersonnelVoiceStatus] = useState("");
 
   const [tourModal, setTourModal] = useState(null);
   const [tourContainerCount, setTourContainerCount] = useState("");
@@ -824,6 +868,14 @@ function App() {
   const personnelDisplayClockOffset = useRef(0);
   const floorPlanRef = useRef(null);
   const floorPlanDrag = useRef(null);
+  const personnelVoiceRecognition = useRef(null);
+
+  useEffect(() => () => {
+    if (personnelVoiceRecognition.current) {
+      personnelVoiceRecognition.current.abort();
+      personnelVoiceRecognition.current = null;
+    }
+  }, []);
 
   const createPersonnelStatePayload = () => ({
     plan: personalPlan,
@@ -2649,6 +2701,179 @@ const tourColumns = Object.entries(
       return updatedPlans;
     });
     return true;
+  };
+
+  const getPersonnelVoiceTargets = () => {
+    const aliasesBySection = {
+      "Waschstraßen": ["Waschstraße", "Waschstrassen"],
+      Waschmaschinen: ["Waschmaschine"],
+      Reinigungsmaschinen: ["Reinigungsmaschine", "Putzmaschinen"],
+      "BM + SPLT": ["BM SPLT", "B M S P L T", "B M plus S P L T"],
+      "Leitung Wäscherei": ["Leitung", "Leitung Waescherei"],
+      "Wäsche auspacken": ["Auspacken", "Waesche auspacken"],
+      "Jenway Frottee": ["Genway Frottee"],
+      "Jenway Kleinteile": ["Genway Kleinteile"],
+      "Jenway Großteile": ["Genway Grossteile"],
+      Poolwäsche: ["Pool Waesche", "Poolwaesche"],
+      Tunnelfinisher: ["Tunnel Finisher"],
+    };
+    const statusTargets = [
+      { sectionName: "pool", label: "Nicht eingeteilt", aliases: ["nicht eingeteilt"] },
+      { sectionName: "urlaub", label: "Urlaub", aliases: ["Urlaub"] },
+      { sectionName: "za", label: "ZA", aliases: ["ZA", "Z A", "Zeitausgleich"] },
+      { sectionName: "krank", label: "Krank", aliases: ["Krank", "Krankenstand"] },
+      { sectionName: "sonstiges", label: "Büro/Tour/Sonstiges", aliases: ["Buero", "Tour", "Sonstiges", "Buero Tour Sonstiges"] },
+      ...(personalDepartment === "waescherei" ? [
+        { sectionName: "start12", label: "Start 12 Uhr", aliases: ["Start 12 Uhr", "Start um 12 Uhr"] },
+      ] : []),
+      { sectionName: "end12", label: "Ende 12 Uhr", aliases: ["Ende 12 Uhr", "Ende um 12 Uhr"] },
+      { sectionName: "end15", label: "Ende 15 Uhr", aliases: ["Ende 15 Uhr", "Ende um 15 Uhr"] },
+      { sectionName: "end18", label: "Ende 18 Uhr", aliases: ["Ende 18 Uhr", "Ende um 18 Uhr"] },
+    ];
+    const otherDepartment = personalDepartment === "waescherei" ? "putzerei" : "waescherei";
+    const targets = [];
+    const seenAliases = new Set();
+    const addTarget = (department, sectionName, label, aliases) => {
+      aliases.forEach((alias) => {
+        const normalizedAlias = normalizePersonnelVoiceText(alias);
+        if (!normalizedAlias || seenAliases.has(normalizedAlias)) return;
+        seenAliases.add(normalizedAlias);
+        targets.push({ department, sectionName, label, alias: normalizedAlias });
+      });
+    };
+
+    [personalDepartment, otherDepartment].forEach((department) => {
+      sectionsForDepartment(department).forEach((section) => {
+        addTarget(department, section.name, section.name, [section.name, ...(aliasesBySection[section.name] || [])]);
+      });
+    });
+    statusTargets.forEach((target) => addTarget(personalDepartment, target.sectionName, target.label, target.aliases));
+    return targets.sort((a, b) => b.alias.length - a.alias.length);
+  };
+
+  const findPersonnelVoiceEmployees = (segment) => {
+    const normalizedSegment = normalizePersonnelVoiceText(segment);
+    const matches = getAllPersonnelEmployees()
+      .map((employee) => {
+        const phrase = normalizePersonnelVoiceText(employee.name);
+        return { employee, phrase, index: personnelVoicePhraseIndex(normalizedSegment, phrase) };
+      })
+      .filter((match) => match.index >= 0)
+      .sort((a, b) => b.phrase.length - a.phrase.length);
+    const selected = [];
+
+    matches.forEach((match) => {
+      const start = match.index;
+      const end = start + match.phrase.length;
+      if (selected.some((entry) => start < entry.end && end > entry.start)) return;
+      selected.push({ ...match, start, end });
+    });
+
+    return selected.sort((a, b) => a.start - b.start).map((match) => match.employee.name);
+  };
+
+  const parsePersonnelVoiceAssignments = (transcript) => {
+    const normalizedCommand = normalizePersonnelVoiceText(transcript);
+    if (!normalizedCommand) return [];
+    const occurrences = [];
+
+    getPersonnelVoiceTargets().forEach((target) => {
+      const escapedAlias = target.alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+      const expression = new RegExp(`(?:^|\\s)(${escapedAlias})(?=\\s|$)`, "g");
+      let match;
+      while ((match = expression.exec(normalizedCommand))) {
+        const start = match.index + (match[0].length - match[1].length);
+        const end = start + match[1].length;
+        if (occurrences.some((entry) => start < entry.end && end > entry.start)) continue;
+        occurrences.push({ ...target, start, end });
+      }
+    });
+
+    occurrences.sort((a, b) => a.start - b.start);
+    if (!occurrences.length) return [];
+    const targetFirstMode = findPersonnelVoiceEmployees(normalizedCommand.slice(0, occurrences[0].start)).length === 0;
+    const assignments = [];
+    const assignedNames = new Set();
+
+    occurrences.forEach((target, index) => {
+      const segment = targetFirstMode
+        ? normalizedCommand.slice(target.end, occurrences[index + 1]?.start ?? normalizedCommand.length)
+        : normalizedCommand.slice(index === 0 ? 0 : occurrences[index - 1].end, target.start);
+      findPersonnelVoiceEmployees(segment).forEach((name) => {
+        if (assignedNames.has(name)) return;
+        assignedNames.add(name);
+        assignments.push({ name, target });
+      });
+    });
+
+    return assignments;
+  };
+
+  const applyPersonnelVoiceCommand = (transcript) => {
+    const assignments = parsePersonnelVoiceAssignments(transcript);
+    if (!assignments.length) {
+      setPersonnelVoiceStatus(`Nicht eindeutig erkannt: „${transcript.trim()}“`);
+      return;
+    }
+    const applied = [];
+    assignments.forEach(({ name, target }) => {
+      if (setEmployeeToSection(name, target.sectionName, personalShift, target.department)) {
+        applied.push(`${name} → ${target.label}`);
+      }
+    });
+    setPersonnelVoiceStatus(applied.length
+      ? `Eingeteilt: ${applied.join(" · ")}`
+      : `Keine Änderung: „${transcript.trim()}“`);
+  };
+
+  const togglePersonnelVoiceAssignment = () => {
+    if (personnelVoiceRecognition.current) {
+      personnelVoiceRecognition.current.stop();
+      personnelVoiceRecognition.current = null;
+      setPersonnelVoiceListening(false);
+      setPersonnelVoiceStatus("Spracheingabe beendet");
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      window.alert("Die Spracheingabe wird von diesem Browser nicht unterstützt. Bitte Chrome oder Edge verwenden.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = "de-DE";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      setPersonnelVoiceListening(true);
+      setPersonnelVoiceStatus(`Mikrofon aktiv · ${getPersonnelShiftLabel(personalShift)}`);
+    };
+    recognition.onresult = (event) => {
+      const finalParts = [];
+      const interimParts = [];
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const spokenText = event.results[index][0]?.transcript?.trim();
+        if (!spokenText) continue;
+        if (event.results[index].isFinal) finalParts.push(spokenText);
+        else interimParts.push(spokenText);
+      }
+      if (interimParts.length) setPersonnelVoiceStatus(`Gehört: ${interimParts.join(" ")}`);
+      if (finalParts.length) applyPersonnelVoiceCommand(finalParts.join(" "));
+    };
+    recognition.onerror = (event) => {
+      const denied = event.error === "not-allowed" || event.error === "service-not-allowed";
+      setPersonnelVoiceStatus(denied ? "Mikrofonzugriff wurde nicht freigegeben" : "Spracheingabe konnte nicht fortgesetzt werden");
+      setPersonnelVoiceListening(false);
+      personnelVoiceRecognition.current = null;
+    };
+    recognition.onend = () => {
+      setPersonnelVoiceListening(false);
+      if (personnelVoiceRecognition.current === recognition) personnelVoiceRecognition.current = null;
+    };
+    personnelVoiceRecognition.current = recognition;
+    recognition.start();
   };
 
   const selectPersonnelEmployee = (employeeName, department = personalDepartment) => {
@@ -6243,6 +6468,7 @@ const tourColumns = Object.entries(
                   >
                     KI-Vorschlag erstellen
                   </button>
+                  <VoiceAssignmentButton active={personnelVoiceListening} onClick={togglePersonnelVoiceAssignment} />
                 </div>
               </div>
 
@@ -6264,6 +6490,12 @@ const tourColumns = Object.entries(
                 <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
                 <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
               </div>
+
+              {personnelVoiceStatus && (
+                <div className={`mb-2 text-sm font-black ${personnelVoiceListening ? "text-red-700" : "text-emerald-800"}`} role="status">
+                  {personnelVoiceStatus}
+                </div>
+              )}
 
               <div className="grid gap-3 xl:grid-cols-[310px_1fr]">
                 {PersonnelSidePanel()}
@@ -6576,6 +6808,7 @@ const tourColumns = Object.entries(
                       >
                         KI-Vorschlag erstellen
                       </button>
+                      <VoiceAssignmentButton active={personnelVoiceListening} onClick={togglePersonnelVoiceAssignment} />
                       <Button active onClick={beginFloorPlanEdit}>
                         Positionen bearbeiten
                       </Button>
@@ -6610,6 +6843,11 @@ const tourColumns = Object.entries(
                   </Button>
                   <Button onClick={clearPersonalPlanSafe}>Leeren</Button>
                   <WhatsAppShareButton onClick={sharePersonnelOverviewPdf} />
+                </div>
+              )}
+              {!floorPlanEditMode && personnelVoiceStatus && (
+                <div className={`mt-2 text-sm font-black ${personnelVoiceListening ? "text-red-700" : "text-emerald-800"}`} role="status">
+                  {personnelVoiceStatus}
                 </div>
               )}
             </div>
