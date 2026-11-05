@@ -747,6 +747,121 @@ function personnelVoiceBestOccurrence(textValue, phraseValue) {
   return best && best.score >= threshold ? best : null;
 }
 
+function personnelVoiceSpokenNumber(value) {
+  const token = normalizePersonnelVoiceText(value);
+  if (/^\d{1,4}$/.test(token)) return Number(token);
+  const cardinalNumbers = {
+    elf: 11,
+    zwoelf: 12,
+    dreizehn: 13,
+    vierzehn: 14,
+    fuenfzehn: 15,
+    sechzehn: 16,
+    siebzehn: 17,
+    achtzehn: 18,
+    neunzehn: 19,
+    zwanzig: 20,
+    einundzwanzig: 21,
+    zweiundzwanzig: 22,
+    dreiundzwanzig: 23,
+    vierundzwanzig: 24,
+    fuenfundzwanzig: 25,
+    sechsundzwanzig: 26,
+    siebenundzwanzig: 27,
+    achtundzwanzig: 28,
+    neunundzwanzig: 29,
+    dreissig: 30,
+    einunddreissig: 31,
+  };
+  if (Object.prototype.hasOwnProperty.call(cardinalNumbers, token)) return cardinalNumbers[token];
+  const ordinalStems = [
+    "", "erst", "zweit", "dritt", "viert", "fuenft", "sechst", "siebt", "acht", "neunt", "zehnt",
+    "elft", "zwoelft", "dreizehnt", "vierzehnt", "fuenfzehnt", "sechzehnt", "siebzehnt", "achtzehnt", "neunzehnt", "zwanzigst",
+    "einundzwanzigst", "zweiundzwanzigst", "dreiundzwanzigst", "vierundzwanzigst", "fuenfundzwanzigst", "sechsundzwanzigst",
+    "siebenundzwanzigst", "achtundzwanzigst", "neunundzwanzigst", "dreissigst", "einunddreissigst",
+  ];
+  const stem = token.replace(/(?:en|er|es|e)$/g, "");
+  const ordinalValue = ordinalStems.indexOf(stem);
+  return ordinalValue > 0 ? ordinalValue : null;
+}
+
+function personnelVoiceDateKey(year, month, day) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parsePersonnelVoiceDate(value, referenceDateKey) {
+  const normalized = normalizePersonnelVoiceText(value);
+  if (!normalized) return null;
+  if (/\bvorgestern\b/.test(normalized)) return addDaysToDateKey(referenceDateKey, -2);
+  if (/\bgestern\b/.test(normalized)) return addDaysToDateKey(referenceDateKey, -1);
+  if (/\bheute\b/.test(normalized)) return referenceDateKey;
+
+  const referenceDate = new Date(`${referenceDateKey}T12:00:00`);
+  const weekdayMap = {
+    sonntag: 0,
+    montag: 1,
+    dienstag: 2,
+    mittwoch: 3,
+    donnerstag: 4,
+    freitag: 5,
+    samstag: 6,
+  };
+  const weekdayEntry = Object.entries(weekdayMap).find(([weekday]) => new RegExp(`\\b${weekday}\\b`).test(normalized));
+  if (weekdayEntry) {
+    const targetWeekday = weekdayEntry[1];
+    let dayDifference = (referenceDate.getDay() - targetWeekday + 7) % 7;
+    if (dayDifference === 0) dayDifference = 7;
+    return addDaysToDateKey(referenceDateKey, -dayDifference);
+  }
+
+  const monthMap = {
+    januar: 1,
+    jaenner: 1,
+    februar: 2,
+    maerz: 3,
+    april: 4,
+    mai: 5,
+    juni: 6,
+    juli: 7,
+    august: 8,
+    september: 9,
+    oktober: 10,
+    november: 11,
+    dezember: 12,
+  };
+  const tokens = normalized.split(" ");
+  let day = null;
+  let month = null;
+  let year = referenceDate.getFullYear();
+  const monthIndex = tokens.findIndex((token) => Object.prototype.hasOwnProperty.call(monthMap, token));
+
+  if (monthIndex >= 0) {
+    month = monthMap[tokens[monthIndex]];
+    for (let index = monthIndex - 1; index >= 0; index -= 1) {
+      const possibleDay = personnelVoiceSpokenNumber(tokens[index]);
+      if (possibleDay >= 1 && possibleDay <= 31) {
+        day = possibleDay;
+        break;
+      }
+    }
+    const possibleYear = personnelVoiceSpokenNumber(tokens[monthIndex + 1]);
+    if (possibleYear !== null) year = possibleYear < 100 ? 2000 + possibleYear : possibleYear;
+  } else {
+    const spokenNumbers = tokens
+      .map((token) => personnelVoiceSpokenNumber(token))
+      .filter((number) => number !== null);
+    if (spokenNumbers.length >= 2) {
+      [day, month] = spokenNumbers;
+      if (spokenNumbers[2] !== undefined) year = spokenNumbers[2] < 100 ? 2000 + spokenNumbers[2] : spokenNumbers[2];
+    }
+  }
+
+  if (!(day >= 1 && day <= 31 && month >= 1 && month <= 12)) return null;
+  return personnelVoiceDateKey(year, month, day);
+}
+
 function App() {
   const params = new URLSearchParams(window.location.search);
   const pathname = window.location.pathname.replace(/\/+$/, "") || "/";
@@ -2914,6 +3029,83 @@ const tourColumns = Object.entries(
     return matches[0] || null;
   };
 
+  const detectPersonnelVoiceShift = (command) => {
+    const shiftRules = [
+      { shift: "07-12", phrases: ["erste Schicht", "Schicht 1", "Frühschicht"] },
+      { shift: "12-15", phrases: ["zweite Schicht", "Schicht 2", "Mittagsschicht"] },
+      { shift: "15-schluss", phrases: ["dritte Schicht", "Schicht 3", "letzte Schicht", "Abendschicht"] },
+    ];
+    const matches = shiftRules.flatMap((rule) => rule.phrases.map((phrase) => {
+      const occurrence = personnelVoiceBestOccurrence(command, phrase);
+      return occurrence ? { shift: rule.shift, ...occurrence } : null;
+    })).filter(Boolean).sort((a, b) => b.score - a.score);
+    return matches[0] || null;
+  };
+
+  const detectPersonnelVoicePlanningAction = (command) => {
+    const normalized = normalizePersonnelVoiceText(command);
+    const previousShiftPhrases = [
+      "vorherige Schicht übernehmen",
+      "vorige Schicht übernehmen",
+      "letzte Schicht übernehmen",
+      "Schicht von vorher übernehmen",
+      "übernimm die Schicht davor",
+      "nimm die vorherige Schicht",
+      "Einteilung von vorher übernehmen",
+    ];
+    const previousShiftMatch = previousShiftPhrases
+      .map((phrase) => personnelVoiceBestOccurrence(normalized, phrase))
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)[0];
+    if (previousShiftMatch) {
+      const hasExplicitTargetShift = /\b(erste|zweite|dritte|schicht [123]|fruehschicht|mittagsschicht|abendschicht)\b/.test(normalized);
+      return {
+        type: "copy-previous-shift",
+        department: detectPersonnelVoiceDepartment(normalized),
+        shift: hasExplicitTargetShift ? detectPersonnelVoiceShift(normalized)?.shift || personalShift : personalShift,
+        confidence: previousShiftMatch.score,
+      };
+    }
+
+    const copyDayPhrases = [
+      "Tag kopieren",
+      "kopiere den Tag",
+      "übernimm den Tag",
+      "Einteilung vom",
+      "Einteilung von",
+      "kopiere vom",
+      "nimm den Tag vom",
+    ];
+    const copyDayMatch = copyDayPhrases
+      .map((phrase) => personnelVoiceBestOccurrence(normalized, phrase))
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)[0];
+    const spokenDate = parsePersonnelVoiceDate(normalized, personalDate);
+    const hasCopyVerb = ["kopieren", "kopiere", "übernehmen", "uebernehmen", "übernimm", "uebernimm", "nimm"]
+      .some((phrase) => personnelVoiceBestOccurrence(normalized, phrase));
+    if (copyDayMatch || (spokenDate && hasCopyVerb && !/\bschicht\b/.test(normalized))) {
+      return {
+        type: spokenDate ? "copy-day" : "copy-day-missing-date",
+        sourceDate: spokenDate,
+        confidence: copyDayMatch?.score || 0.82,
+      };
+    }
+
+    const requestedShift = detectPersonnelVoiceShift(normalized);
+    const navigationPhrases = ["zeige", "öffne", "oeffne", "wechsle", "wechsel", "gehe zu"];
+    const hasNavigationIntent = navigationPhrases.some((phrase) => personnelVoiceBestOccurrence(normalized, phrase));
+    if (requestedShift && hasNavigationIntent) {
+      return {
+        type: "select-shift",
+        shift: requestedShift.shift,
+        department: detectPersonnelVoiceDepartment(normalized),
+        confidence: requestedShift.score,
+      };
+    }
+
+    return null;
+  };
+
   const detectPersonnelVoiceSuggestion = (command) => {
     const normalized = normalizePersonnelVoiceText(command);
     const suggestionPhrases = [
@@ -2944,6 +3136,8 @@ const tourColumns = Object.entries(
   const interpretPersonnelVoiceCommand = (transcript) => {
     const normalizedCommand = normalizePersonnelVoiceText(transcript);
     if (!normalizedCommand) return null;
+    const planningAction = detectPersonnelVoicePlanningAction(normalizedCommand);
+    if (planningAction) return planningAction;
     const suggestion = detectPersonnelVoiceSuggestion(normalizedCommand);
     if (suggestion) return suggestion;
 
@@ -3015,6 +3209,36 @@ const tourColumns = Object.entries(
     const command = interpretedCommand || interpretPersonnelVoiceCommand(transcript);
     if (!command) {
       setPersonnelVoiceStatus(`Nicht eindeutig erkannt: „${transcript.trim()}“`);
+      return;
+    }
+
+    if (command.type === "copy-previous-shift") {
+      setPersonalDepartment(command.department);
+      setPersonalShift(command.shift);
+      if (copyPreviousShiftSafe({ department: command.department, shift: command.shift })) {
+        const departmentLabel = PERSONNEL_DEPARTMENTS[command.department]?.label || command.department;
+        setPersonnelVoiceStatus(`Vorherige Schicht übernommen: ${departmentLabel} · ${getPersonnelShiftLabel(command.shift)}`);
+      }
+      return;
+    }
+
+    if (command.type === "copy-day-missing-date") {
+      setPersonnelVoiceStatus("Der Kopierbefehl wurde erkannt, aber das Quelldatum fehlt oder war nicht eindeutig.");
+      return;
+    }
+
+    if (command.type === "copy-day") {
+      if (copyWholePersonalDay(command.sourceDate)) {
+        setPersonnelVoiceStatus(`Tag kopiert: ${command.sourceDate} → ${personalDate}`);
+      }
+      return;
+    }
+
+    if (command.type === "select-shift") {
+      setPersonalDepartment(command.department);
+      setPersonalShift(command.shift);
+      const departmentLabel = PERSONNEL_DEPARTMENTS[command.department]?.label || command.department;
+      setPersonnelVoiceStatus(`Geöffnet: ${departmentLabel} · ${getPersonnelShiftLabel(command.shift)}`);
       return;
     }
 
@@ -3556,33 +3780,35 @@ const tourColumns = Object.entries(
     setPersonnelDepartmentModal(false);
   };
 
-  const copyWholePersonalDay = () => {
-    if (!copyPersonalDate) {
+  const copyWholePersonalDay = (sourceDateValue = copyPersonalDate) => {
+    const sourceDate = typeof sourceDateValue === "string" ? sourceDateValue : copyPersonalDate;
+    if (!sourceDate) {
       window.alert("Bitte Kopierdatum auswählen.");
-      return;
+      return false;
     }
-    if (copyPersonalDate === personalDate) {
+    if (sourceDate === personalDate) {
       window.alert("Quelltag und Zieltag sind identisch. Bitte zwei unterschiedliche Tage auswählen.");
-      return;
+      return false;
     }
 
     const sourceDepartments = Object.entries(PERSONNEL_DEPARTMENTS)
       .map(([department, config]) => {
         const plans = Object.fromEntries(PERSONNEL_SHIFTS.map((shift) => [
           shift.key,
-          personalPlan[getPersonalKey(copyPersonalDate, shift.key, department)],
+          personalPlan[getPersonalKey(sourceDate, shift.key, department)],
         ]));
         return { department, label: config.label, plans };
       })
       .filter(({ plans }) => PERSONNEL_SHIFTS.some((shift) => plans[shift.key]));
 
     if (!sourceDepartments.length) {
-      window.alert(`Für ${copyPersonalDate} wurde keine Einteilung gefunden.`);
-      return;
+      window.alert(`Für ${sourceDate} wurde keine Einteilung gefunden.`);
+      return false;
     }
 
     const copiedLabels = sourceDepartments.map(({ label }) => label).join(" und ");
-    if (!window.confirm(`Kompletten Tag vom ${copyPersonalDate} auf ${personalDate} kopieren? Für ${copiedLabels} werden alle drei Zielschichten ersetzt.`)) return;
+    if (!window.confirm(`Kompletten Tag vom ${sourceDate} auf ${personalDate} kopieren? Für ${copiedLabels} werden alle drei Zielschichten ersetzt.`)) return false;
+    setCopyPersonalDate(sourceDate);
 
     setPersonalPlan((prev) => {
       const next = { ...prev };
@@ -3602,7 +3828,7 @@ const tourColumns = Object.entries(
     setPersonnelDayStrengthByDate((prev) => {
       const next = { ...prev };
       sourceDepartments.forEach(({ department }) => {
-        const sourceStrengthKey = `${department}_${copyPersonalDate}`;
+        const sourceStrengthKey = `${department}_${sourceDate}`;
         const targetStrengthKey = `${department}_${personalDate}`;
         next[targetStrengthKey] = prev[sourceStrengthKey] || "mittel";
       });
@@ -3612,6 +3838,7 @@ const tourColumns = Object.entries(
     window.setTimeout(() => {
       window.alert(`Der Tag wurde für ${copiedLabels} mit allen drei Schichten kopiert.`);
     }, 0);
+    return true;
   };
 
   const addPersonnelEmployee = () => {
@@ -4033,19 +4260,21 @@ const tourColumns = Object.entries(
     });
   };
 
-  const copyPreviousShiftSafe = () => {
-    const idx = PERSONNEL_SHIFTS.findIndex((s) => s.key === personalShift);
+  const copyPreviousShiftSafe = (options = {}) => {
+    const targetDepartment = options?.department || personalDepartment;
+    const targetShift = options?.shift || personalShift;
+    const idx = PERSONNEL_SHIFTS.findIndex((s) => s.key === targetShift);
     if (idx <= 0) {
       window.alert("Die erste Schicht wird direkt geplant und kann keine vorherige Schicht übernehmen.");
-      return;
+      return false;
     }
 
     const previousShift = PERSONNEL_SHIFTS[idx - 1].key;
-    const sourceKey = getPersonalKey(personalDate, previousShift, personalDepartment);
-    const targetKey = getPersonalKey(personalDate, personalShift, personalDepartment);
+    const sourceKey = getPersonalKey(personalDate, previousShift, targetDepartment);
+    const targetKey = getPersonalKey(personalDate, targetShift, targetDepartment);
     if (!personalPlan[sourceKey]) {
       window.alert("Für die vorherige Schicht ist kein Plan vorhanden.");
-      return;
+      return false;
     }
 
     setPersonalPlan((prev) => {
@@ -4057,7 +4286,7 @@ const tourColumns = Object.entries(
           .filter(([zone]) => zone !== "start12")
           .map(([zone, names]) => [zone, Array.isArray(names) ? [...new Set(names.filter(Boolean))] : names])
       );
-      const workplaceSections = sectionsForDepartment(personalDepartment).map((section) => section.name);
+      const workplaceSections = sectionsForDepartment(targetDepartment).map((section) => section.name);
       const workplaceAssignments = new Map();
 
       workplaceSections.forEach((sectionName) => {
@@ -4072,8 +4301,8 @@ const tourColumns = Object.entries(
         if (assignedSections.length < 2) return;
 
         const employee = [
-          ...(personnelEmployeesByDept[personalDepartment] || []),
-          ...(personnelEmployeesByDept[personalDepartment === "waescherei" ? "putzerei" : "waescherei"] || []),
+          ...(personnelEmployeesByDept[targetDepartment] || []),
+          ...(personnelEmployeesByDept[targetDepartment === "waescherei" ? "putzerei" : "waescherei"] || []),
         ].find((entry) => entry.name === employeeName);
         const preferredSection = [employee?.preferredWorkplace1, employee?.preferredWorkplace2]
           .find((sectionName) => assignedSections.includes(sectionName));
@@ -4086,7 +4315,7 @@ const tourColumns = Object.entries(
       });
 
       const timingBlockedNames = new Set(copiedPlan.end12 || []);
-      if (personalShift === "15-schluss") {
+      if (targetShift === "15-schluss") {
         (copiedPlan.end15 || []).forEach((name) => timingBlockedNames.add(name));
       }
       if (timingBlockedNames.size) {
@@ -4099,6 +4328,7 @@ const tourColumns = Object.entries(
 
       return { ...prev, [targetKey]: copiedPlan };
     });
+    return true;
   };
 
   const printPersonalPlanSafe = () => {
