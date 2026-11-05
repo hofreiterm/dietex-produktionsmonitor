@@ -3918,7 +3918,7 @@ const tourColumns = Object.entries(
       const centerX = zone.x / 100 * canvasWidth;
       const centerY = headerHeight + zone.y / 100 * floorHeight;
       const baseTitle = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
-      const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
+      const visibleStartTime = shiftKey === "07-12" && section.startTime && section.startTime !== "00:00" ? section.startTime : "";
       context.font = "900 27px Arial";
       const titleNameWidth = context.measureText(baseTitle).width;
       context.font = "900 25px Arial";
@@ -4484,7 +4484,7 @@ const tourColumns = Object.entries(
             const employeeClass = "border-black/30 bg-[#FFFF00] text-black";
             const employeeStyle = { backgroundColor: "#FFFF00", color: "#000000" };
             const displayName = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
-            const visibleStartTime = section.startTime && section.startTime !== "00:00" ? section.startTime : "";
+            const visibleStartTime = personalShift === "07-12" && section.startTime && section.startTime !== "00:00" ? section.startTime : "";
             const zoneKey = `${zone.department}-${zone.section}`;
             const labelMinWidth = Math.max(92, Math.min(250, displayName.length * 9.5 + 24));
 
