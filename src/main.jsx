@@ -148,7 +148,7 @@ const PERSONNEL_GROUPS = [
 
 const PERSONNEL_EMPLOYEES = [
   { name: "Janos", hours: 40 }, { name: "Arpi", hours: 40 }, { name: "Dida", hours: 40 },
-  { name: "Laszlo", hours: 40 }, { name: "Mate", hours: 40 }, { name: "Milena", hours: 40 },
+  { name: "Laszlo", hours: 40 }, { name: "Mate", hours: 40, maxWorkDaysPerWeek: 2 }, { name: "Milena", hours: 40 },
   { name: "Manu K.", hours: 40 }, { name: "Ibolya", hours: 30 }, { name: "Gabriella", hours: 20 },
   { name: "Olga", hours: 40 }, { name: "Attila", hours: 40 }, { name: "Ahmed", hours: 40 },
   { name: "Norbert", hours: 40 }, { name: "Carina", hours: 24 }, { name: "Krisztian", hours: 40 },
@@ -278,9 +278,16 @@ const PERSONNEL_WEEKDAYS = [
   { key: 5, label: "Freitag", short: "Fr" },
 ];
 
+const PERSONNEL_START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const hours = String(Math.floor(index / 2)).padStart(2, "0");
+  const minutes = index % 2 ? "30" : "00";
+  return `${hours}:${minutes}`;
+});
+
 const EMPTY_EMPLOYEE_FORM = {
   name: "",
   hours: "",
+  maxWorkDaysPerWeek: "",
   preferredWorkplace1: "",
   preferredWorkplace2: "",
   noGoWorkplace1: "",
@@ -290,8 +297,17 @@ const EMPTY_EMPLOYEE_FORM = {
 };
 
 function normalizePersonnelEmployee(employee) {
+  const rawMaxWorkDays = employee?.maxWorkDaysPerWeek === undefined && employee?.name === "Mate"
+    ? 2
+    : employee?.maxWorkDaysPerWeek;
+  const parsedMaxWorkDays = rawMaxWorkDays === "" || rawMaxWorkDays === null || rawMaxWorkDays === undefined
+    ? ""
+    : Number(rawMaxWorkDays);
   return {
     ...employee,
+    maxWorkDaysPerWeek: Number.isInteger(parsedMaxWorkDays) && parsedMaxWorkDays >= 1 && parsedMaxWorkDays <= 7
+      ? parsedMaxWorkDays
+      : "",
     preferredWorkplace1: employee?.preferredWorkplace1 || "",
     preferredWorkplace2: employee?.preferredWorkplace2 || "",
     noGoWorkplace1: employee?.noGoWorkplace1 || "",
@@ -961,6 +977,14 @@ function App() {
   });
   const [personnelShiftModal, setPersonnelShiftModal] = useState(false);
   const [personnelShiftDraft, setPersonnelShiftDraft] = useState(DEFAULT_PERSONNEL_SHIFT_LABELS);
+  const [personnelStartTimesByDate, setPersonnelStartTimesByDate] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("dietexPersonnelStartTimesByDate") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [personnelStartTimeModal, setPersonnelStartTimeModal] = useState(null);
   const [personnelDayStrengthByDate, setPersonnelDayStrengthByDate] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("dietexPersonnelDayStrengthByDate") || "{}");
@@ -1083,6 +1107,7 @@ function App() {
     floorPlanZones: personnelFloorPlanZones,
     floorPlanNotes: personnelFloorPlanNotes,
     shiftLabels: personnelShiftLabels,
+    startTimesByDate: personnelStartTimesByDate,
   });
 
   const applyRemotePersonnelState = (remoteState) => {
@@ -1103,6 +1128,9 @@ function App() {
       floorPlanZones: normalizePersonnelFloorPlanZones(remoteState.floorPlanZones),
       floorPlanNotes: normalizePersonnelFloorPlanNotes(remoteState.floorPlanNotes),
       shiftLabels: { ...DEFAULT_PERSONNEL_SHIFT_LABELS, ...(remoteState.shiftLabels || {}) },
+      startTimesByDate: remoteState.startTimesByDate && typeof remoteState.startTimesByDate === "object"
+        ? remoteState.startTimesByDate
+        : {},
     };
 
     lastPersonnelStateJson.current = JSON.stringify(nextState);
@@ -1114,6 +1142,7 @@ function App() {
     setPersonnelFloorPlanZones(nextState.floorPlanZones);
     setPersonnelFloorPlanNotes(nextState.floorPlanNotes);
     setPersonnelShiftLabels(nextState.shiftLabels);
+    setPersonnelStartTimesByDate(nextState.startTimesByDate);
     setPersonnelSyncStatus("connected");
   };
 
@@ -1239,7 +1268,7 @@ function App() {
     return () => {
       if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
     };
-  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones, personnelFloorPlanNotes, personnelShiftLabels]);
+  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones, personnelFloorPlanNotes, personnelShiftLabels, personnelStartTimesByDate]);
 
   useEffect(() => {
     if (personnelDisplayMode) return undefined;
@@ -1353,6 +1382,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelShiftLabels", JSON.stringify(personnelShiftLabels));
   }, [personnelShiftLabels]);
+
+  useEffect(() => {
+    localStorage.setItem("dietexPersonnelStartTimesByDate", JSON.stringify(personnelStartTimesByDate));
+  }, [personnelStartTimesByDate]);
 
   useEffect(() => {
     setSelectedPersonnelEmployee(null);
@@ -2653,6 +2686,53 @@ const tourColumns = Object.entries(
   const currentGroups = () => currentDepartmentConfig().groups;
   const currentBaseEmployees = () => personnelEmployeesByDept[personalDepartment] || currentDepartmentConfig().employees;
   const sectionsForDepartment = (department) => personnelSectionsByDept[department] || PERSONNEL_DEPARTMENTS[department]?.sections || [];
+  const getPersonnelStartTimeKey = (section, department = personalDepartment, date = personalDate) => (
+    `${department}_${date}_${section.id || section.name}`
+  );
+  const getPersonnelSectionStartTime = (section, department = personalDepartment, date = personalDate) => {
+    const key = getPersonnelStartTimeKey(section, department, date);
+    return Object.prototype.hasOwnProperty.call(personnelStartTimesByDate, key)
+      ? String(personnelStartTimesByDate[key] || "")
+      : String(section.startTime || "");
+  };
+  const openPersonnelStartTimeEditor = (section, department = personalDepartment) => {
+    if (!section || personnelDisplayMode || floorPlanEditMode) return;
+    setPersonnelStartTimeModal({
+      department,
+      sectionId: section.id,
+      sectionName: section.name,
+      value: getPersonnelSectionStartTime(section, department, personalDate),
+    });
+  };
+  const savePersonnelStartTime = () => {
+    if (!personnelStartTimeModal) return;
+    const section = sectionsForDepartment(personnelStartTimeModal.department)
+      .find((entry) => entry.id === personnelStartTimeModal.sectionId);
+    if (!section) {
+      setPersonnelStartTimeModal(null);
+      return;
+    }
+    const key = getPersonnelStartTimeKey(section, personnelStartTimeModal.department, personalDate);
+    setPersonnelStartTimesByDate((prev) => ({
+      ...prev,
+      [key]: personnelStartTimeModal.value || "",
+    }));
+    setPersonnelStartTimeModal(null);
+  };
+  const resetPersonnelStartTime = () => {
+    if (!personnelStartTimeModal) return;
+    const section = sectionsForDepartment(personnelStartTimeModal.department)
+      .find((entry) => entry.id === personnelStartTimeModal.sectionId);
+    if (section) {
+      const key = getPersonnelStartTimeKey(section, personnelStartTimeModal.department, personalDate);
+      setPersonnelStartTimesByDate((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+    setPersonnelStartTimeModal(null);
+  };
   const isEmployeeAllowedInSection = (employeeName, section) => {
     if (!section?.restrictedEmployees) return true;
     return (section.allowedEmployeeNames || []).includes(employeeName);
@@ -2736,6 +2816,43 @@ const tourColumns = Object.entries(
   };
 
   const getPersonalKey = (date = personalDate, shift = personalShift, dept = personalDepartment) => `${dept}_${date}_${shift}`;
+  const getPersonnelWeekBounds = (dateKey) => {
+    const date = new Date(`${dateKey}T12:00:00`);
+    const weekday = date.getDay() || 7;
+    const monday = new Date(date);
+    monday.setDate(date.getDate() - weekday + 1);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const toKey = (value) => [
+      value.getFullYear(),
+      String(value.getMonth() + 1).padStart(2, "0"),
+      String(value.getDate()).padStart(2, "0"),
+    ].join("-");
+    return { from: toKey(monday), to: toKey(sunday) };
+  };
+  const getEmployeeAssignedWorkDates = (employeeName, referenceDate = personalDate) => {
+    const bounds = getPersonnelWeekBounds(referenceDate);
+    const assignedDates = new Set();
+
+    Object.entries(personalPlan).forEach(([key, plan]) => {
+      const match = key.match(/^(waescherei|putzerei)_(\d{4}-\d{2}-\d{2})_/);
+      if (!match) return;
+      const [, department, date] = match;
+      if (date < bounds.from || date > bounds.to || assignedDates.has(date)) return;
+      const isAssigned = sectionsForDepartment(department).some((section) => (
+        (plan?.[section.name] || []).includes(employeeName)
+      ));
+      if (isAssigned) assignedDates.add(date);
+    });
+
+    return assignedDates;
+  };
+  const isEmployeeWithinWeeklyDayLimit = (employee, date = personalDate) => {
+    const limit = Number(employee?.maxWorkDaysPerWeek);
+    if (!Number.isInteger(limit) || limit < 1) return true;
+    const assignedDates = getEmployeeAssignedWorkDates(employee.name, date);
+    return assignedDates.has(date) || assignedDates.size < limit;
+  };
   const isPersonnelOverviewStatusVisible = (zoneKey, shift = personalShift) => {
     if (zoneKey === "end15") return shift !== "07-12";
     if (zoneKey === "end18") return shift === "15-schluss";
@@ -2781,6 +2898,21 @@ const tourColumns = Object.entries(
     if (isWorkplace && !isEmployeeAllowedInSection(employeeName, destinationSection)) {
       window.alert(`${employeeName} ist für ${sectionName} nicht freigegeben.`);
       return false;
+    }
+
+    if (isWorkplace && employee && !isEmployeeWithinWeeklyDayLimit(employee, personalDate)) {
+      const assignedDates = [...getEmployeeAssignedWorkDates(employeeName, personalDate)].sort();
+      const formattedDates = assignedDates.map((date) => new Date(`${date}T12:00:00`).toLocaleDateString("de-AT", {
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
+      }));
+      const confirmed = window.confirm(
+        `${employeeName} ist in dieser Kalenderwoche bereits an ${assignedDates.length} Tagen eingeteilt `
+        + `(${formattedDates.join(", ")}). Das eingestellte Wochenkontingent von ${employee.maxWorkDaysPerWeek} Tagen ist erreicht.\n\n`
+        + `Trotzdem am ${new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT")} einteilen?`
+      );
+      if (!confirmed) return false;
     }
 
     const hasTimingStatus = (statusKey) => ["waescherei", "putzerei"].some((planDepartment) => (
@@ -3507,6 +3639,7 @@ const tourColumns = Object.entries(
     setEmployeeForm(employee ? {
       name: employee.name,
       hours: employee.hours ?? "",
+      maxWorkDaysPerWeek: employee.maxWorkDaysPerWeek ?? "",
       preferredWorkplace1: employee.preferredWorkplace1 || "",
       preferredWorkplace2: employee.preferredWorkplace2 || "",
       noGoWorkplace1: employee.noGoWorkplace1 || "",
@@ -3534,6 +3667,8 @@ const tourColumns = Object.entries(
     const name = employeeForm.name.trim();
     const hoursText = String(employeeForm.hours ?? "").trim();
     const hours = hoursText === "" ? "" : Number(hoursText);
+    const maxWorkDaysText = String(employeeForm.maxWorkDaysPerWeek ?? "").trim();
+    const maxWorkDaysPerWeek = maxWorkDaysText === "" ? "" : Number(maxWorkDaysText);
 
     if (!name) {
       window.alert("Bitte Namen eingeben.");
@@ -3541,6 +3676,10 @@ const tourColumns = Object.entries(
     }
     if (hoursText !== "" && Number.isNaN(hours)) {
       window.alert("Wochenstunden bitte als Zahl eingeben.");
+      return;
+    }
+    if (maxWorkDaysText !== "" && (!Number.isInteger(maxWorkDaysPerWeek) || maxWorkDaysPerWeek < 1 || maxWorkDaysPerWeek > 7)) {
+      window.alert("Maximale Arbeitstage bitte als ganze Zahl zwischen 1 und 7 eingeben.");
       return;
     }
     if (employeeForm.preferredWorkplace1 && employeeForm.preferredWorkplace1 === employeeForm.preferredWorkplace2) {
@@ -3573,6 +3712,7 @@ const tourColumns = Object.entries(
     const savedEmployee = normalizePersonnelEmployee({
       name,
       hours,
+      maxWorkDaysPerWeek,
       preferredWorkplace1: employeeForm.preferredWorkplace1,
       preferredWorkplace2: employeeForm.preferredWorkplace2,
       noGoWorkplace1: employeeForm.noGoWorkplace1,
@@ -4100,6 +4240,7 @@ const tourColumns = Object.entries(
     const eligibleEmployeesForSection = (section) => targetEmployees
       .filter((emp) => (employeeStatus[`${targetDepartment}_${emp.name}`] || "anwesend") === "anwesend")
       .filter((emp) => isEmployeeRegularDay(emp))
+      .filter((emp) => isEmployeeWithinWeeklyDayLimit(emp, personalDate))
       .filter((emp) => {
         const shifts = Array.isArray(emp.regularShifts) ? emp.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key);
         return shifts.includes(targetShift);
@@ -4621,7 +4762,8 @@ const tourColumns = Object.entries(
       const centerX = zone.x / 100 * canvasWidth;
       const centerY = headerHeight + zone.y / 100 * floorHeight;
       const baseTitle = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
-      const visibleStartTime = shiftKey === "07-12" && section.startTime && section.startTime !== "00:00" ? section.startTime : "";
+      const sectionStartTime = getPersonnelSectionStartTime(section, zone.department, personalDate);
+      const visibleStartTime = shiftKey === "07-12" && sectionStartTime && sectionStartTime !== "00:00" ? sectionStartTime : "";
       context.font = "900 27px Arial";
       const titleNameWidth = context.measureText(baseTitle).width;
       context.font = "900 25px Arial";
@@ -5187,7 +5329,8 @@ const tourColumns = Object.entries(
             const employeeClass = "border-black/30 bg-[#FFFF00] text-black";
             const employeeStyle = { backgroundColor: "#FFFF00", color: "#000000" };
             const displayName = section.name === "Waschstraßen" ? "Waschstraße" : section.name;
-            const visibleStartTime = personalShift === "07-12" && section.startTime && section.startTime !== "00:00" ? section.startTime : "";
+            const sectionStartTime = getPersonnelSectionStartTime(section, zone.department, personalDate);
+            const visibleStartTime = personalShift === "07-12" && sectionStartTime && sectionStartTime !== "00:00" ? sectionStartTime : "";
             const zoneKey = `${zone.department}-${zone.section}`;
             const labelMinWidth = Math.max(92, Math.min(250, displayName.length * 9.5 + 24));
 
@@ -5220,10 +5363,19 @@ const tourColumns = Object.entries(
                     setOverviewDragEmployee(null);
                   } : undefined}
                 >
-                  <div className={`flex flex-col items-start border-l-4 bg-emerald-50/95 px-1.5 py-0.5 text-[16px] font-black leading-tight shadow-sm ${occupancyClass} ${departmentClass}`}>
+                  <button
+                    type="button"
+                    disabled={editable || personnelDisplayMode}
+                    title={!editable && !personnelDisplayMode ? "Startzeit für diesen Tag ändern" : undefined}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openPersonnelStartTimeEditor(section, zone.department);
+                    }}
+                    className={`flex w-full flex-col items-start border-l-4 bg-emerald-50/95 px-1.5 py-0.5 text-left text-[16px] font-black leading-tight shadow-sm ${!editable && !personnelDisplayMode ? "cursor-pointer hover:bg-emerald-100" : ""} ${occupancyClass} ${departmentClass}`}
+                  >
                     <span className="whitespace-nowrap">{displayName}</span>
                     {visibleStartTime && <span className="whitespace-nowrap text-emerald-800">{visibleStartTime}</span>}
-                  </div>
+                  </button>
                   <div className="mt-0.5 flex flex-col items-start gap-px">
                     {assigned.map((name) => assignmentsEditable ? (
                       <button
@@ -5299,7 +5451,17 @@ const tourColumns = Object.entries(
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-black text-white">
                   {stationNumber}
                 </span>
-                <h4 className="break-words text-sm font-black leading-tight">{displayName}</h4>
+                <button
+                  type="button"
+                  className="break-words text-left text-sm font-black leading-tight hover:text-blue-700 hover:underline"
+                  title="Startzeit für diesen Tag ändern"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openPersonnelStartTimeEditor(section, personalDepartment);
+                  }}
+                >
+                  {displayName}
+                </button>
               </div>
               <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-700">
                 {assigned.length}/{target === null ? "Bedarf" : target}
@@ -5430,7 +5592,17 @@ const tourColumns = Object.entries(
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-700 text-xs font-black text-white">
                         {index + 1}
                       </span>
-                      <h4 className="break-words text-sm font-black leading-tight">{section.name}</h4>
+                      <button
+                        type="button"
+                        className="break-words text-left text-sm font-black leading-tight hover:text-blue-700 hover:underline"
+                        title="Startzeit für diesen Tag ändern"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openPersonnelStartTimeEditor(section, personalDepartment);
+                        }}
+                      >
+                        {section.name}
+                      </button>
                     </div>
                     <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-700">
                       {assigned.length}/{maximum}
@@ -5825,7 +5997,7 @@ const tourColumns = Object.entries(
         </div>
       </header>
 
-      {selectedPersonnelEmployee && (view === "personalplanung" || view === "personalmonitor") && !personnelEmployeeModal && !personnelDepartmentModal && !personnelShiftModal && (
+      {selectedPersonnelEmployee && (view === "personalplanung" || view === "personalmonitor") && !personnelEmployeeModal && !personnelDepartmentModal && !personnelShiftModal && !personnelStartTimeModal && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-2xl bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-3">
@@ -5919,7 +6091,43 @@ const tourColumns = Object.entries(
             </div>
             <div className="mt-5 flex justify-end gap-2 border-t pt-4">
               <Button onClick={() => setPersonnelShiftDraft(DEFAULT_PERSONNEL_SHIFT_LABELS)}>Standard</Button>
-              <Button className="bg-blue-700 text-white" onClick={savePersonnelShiftLabels}>Speichern</Button>
+              <Button active onClick={savePersonnelShiftLabels}>Speichern</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {personnelStartTimeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black">Startzeit festlegen</h2>
+                <p className="text-sm font-semibold text-slate-600">
+                  {personnelStartTimeModal.sectionName} · {new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT")}
+                </p>
+              </div>
+              <Button onClick={() => setPersonnelStartTimeModal(null)}>Schließen</Button>
+            </div>
+
+            <label className="block text-sm font-black text-slate-700">
+              Tagesaktuelle Startzeit
+              <select
+                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-lg font-black text-slate-900"
+                value={personnelStartTimeModal.value}
+                onChange={(event) => setPersonnelStartTimeModal((prev) => ({ ...prev, value: event.target.value }))}
+              >
+                <option value="">Keine Startzeit anzeigen</option>
+                {PERSONNEL_START_TIME_OPTIONS.map((time) => <option key={time} value={time}>{time} Uhr</option>)}
+              </select>
+              <span className="mt-2 block text-xs font-semibold text-slate-500">
+                Die Auswahl gilt nur für diesen Tag. Die Vorschläge erfolgen im Halbstundentakt.
+              </span>
+            </label>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2 border-t pt-4">
+              <Button onClick={resetPersonnelStartTime}>Grundeinstellung verwenden</Button>
+              <Button active onClick={savePersonnelStartTime}>Speichern</Button>
             </div>
           </div>
         </div>
@@ -6035,6 +6243,20 @@ const tourColumns = Object.entries(
                     />
                   </label>
                   <label className="block text-sm font-bold">
+                    Max. Arbeitstage pro Woche
+                    <Input
+                      className="mt-1 w-full"
+                      type="number"
+                      min="1"
+                      max="7"
+                      step="1"
+                      placeholder="Keine Begrenzung"
+                      value={employeeForm.maxWorkDaysPerWeek}
+                      onChange={(e) => setEmployeeForm((prev) => ({ ...prev, maxWorkDaysPerWeek: e.target.value }))}
+                    />
+                    <span className="mt-1 block text-xs font-semibold text-slate-500">Leer lassen, wenn kein Tageslimit gilt.</span>
+                  </label>
+                  <label className="block text-sm font-bold">
                     Priorität 1
                     <select
                       className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2"
@@ -6143,7 +6365,7 @@ const tourColumns = Object.entries(
 
                 <div className="mt-6 flex justify-end gap-2 border-t pt-4">
                   <Button onClick={resetPersonnelEmployeeForm}>Eingaben leeren</Button>
-                  <Button className="bg-blue-700 text-white" onClick={savePersonnelEmployee}>
+                  <Button active onClick={savePersonnelEmployee}>
                     {editingEmployeeName ? "Änderungen speichern" : "Mitarbeiter speichern"}
                   </Button>
                 </div>
@@ -7164,7 +7386,17 @@ const tourColumns = Object.entries(
                             >
                               <div className="mb-1 flex items-start justify-between gap-1">
                                 <div>
-                                  <h4 className="text-[13px] font-black leading-tight">{section.name}</h4>
+                                  <button
+                                    type="button"
+                                    className="text-left text-[13px] font-black leading-tight hover:text-blue-700 hover:underline"
+                                    title="Startzeit für diesen Tag ändern"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openPersonnelStartTimeEditor(section, personalDepartment);
+                                    }}
+                                  >
+                                    {section.name}
+                                  </button>
                                   <div className="text-[10px] font-bold leading-tight">
                                     Soll: {target === null ? "bei Bedarf" : target} | Ist: {assigned.length}
                                   </div>
@@ -7840,4 +8072,3 @@ function ExternalAccessPortal() {
 
 const externalAccessPortal = new URLSearchParams(window.location.search).get("portal") === "personalplanung";
 ReactDOM.createRoot(document.getElementById("root")).render(externalAccessPortal ? <ExternalAccessPortal /> : <App />);
-
