@@ -2888,17 +2888,6 @@ const tourColumns = Object.entries(
       : counterpartDepartment;
     const destinationSection = sectionsForDepartment(department).find((section) => section.name === sectionName);
     const isWorkplace = Boolean(destinationSection);
-    const noGoWorkplaces = [employee?.noGoWorkplace1, employee?.noGoWorkplace2].filter(Boolean);
-
-    if (isWorkplace && noGoWorkplaces.includes(sectionName)) {
-      window.alert(`${employeeName} darf laut Mitarbeiterstamm nicht bei ${sectionName} eingeteilt werden.`);
-      return false;
-    }
-
-    if (isWorkplace && !isEmployeeAllowedInSection(employeeName, destinationSection)) {
-      window.alert(`${employeeName} ist für ${sectionName} nicht freigegeben.`);
-      return false;
-    }
 
     if (isWorkplace && employee && !isEmployeeWithinWeeklyDayLimit(employee, personalDate)) {
       const assignedDates = [...getEmployeeAssignedWorkDates(employeeName, personalDate)].sort();
@@ -2913,25 +2902,6 @@ const tourColumns = Object.entries(
         + `Trotzdem am ${new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT")} einteilen?`
       );
       if (!confirmed) return false;
-    }
-
-    const hasTimingStatus = (statusKey) => ["waescherei", "putzerei"].some((planDepartment) => (
-      PERSONNEL_SHIFTS.some((shift) => (
-        (personalPlan[getPersonalKey(personalDate, shift.key, planDepartment)]?.[statusKey] || []).includes(employeeName)
-      ))
-    ));
-
-    if (isWorkplace && targetShift === "07-12" && hasTimingStatus("start12")) {
-      window.alert(`${employeeName} ist mit Start 12 Uhr eingetragen und kann nicht in der ersten Schicht eingesetzt werden.`);
-      return false;
-    }
-    if (isWorkplace && targetShift !== "07-12" && hasTimingStatus("end12")) {
-      window.alert(`${employeeName} ist mit Ende 12 Uhr eingetragen und kann nur in der ersten Schicht eingesetzt werden.`);
-      return false;
-    }
-    if (isWorkplace && targetShift === "15-schluss" && hasTimingStatus("end15")) {
-      window.alert(`${employeeName} ist mit Ende 15 Uhr eingetragen und kann nicht in der dritten Schicht eingesetzt werden.`);
-      return false;
     }
 
     if (["start12", "end12", "end15", "end18"].includes(sectionName)) {
@@ -3488,22 +3458,6 @@ const tourColumns = Object.entries(
     if (!draggedEmployee?.name || !draggedEmployee?.department) return false;
     const sourceDepartment = draggedEmployee.department;
     const destinationDepartment = targetDepartment || sourceDepartment;
-    const destinationSection = sectionsForDepartment(destinationDepartment).find((section) => section.name === sectionName);
-    const employee = [
-      ...(personnelEmployeesByDept.waescherei || []),
-      ...(personnelEmployeesByDept.putzerei || []),
-    ].find((entry) => entry.name === draggedEmployee.name);
-    const noGoWorkplaces = [employee?.noGoWorkplace1, employee?.noGoWorkplace2].filter(Boolean);
-
-    if (destinationSection && noGoWorkplaces.includes(sectionName)) {
-      window.alert(`${draggedEmployee.name} darf laut Mitarbeiterstamm nicht bei ${sectionName} eingeteilt werden.`);
-      return false;
-    }
-
-    if (destinationSection && !isEmployeeAllowedInSection(draggedEmployee.name, destinationSection)) {
-      window.alert(`${draggedEmployee.name} ist für ${sectionName} nicht freigegeben.`);
-      return false;
-    }
 
     if (sourceDepartment !== destinationDepartment) {
       if (!setEmployeeToSection(draggedEmployee.name, destinationDepartment, personalShift, sourceDepartment)) return false;
@@ -3749,11 +3703,7 @@ const tourColumns = Object.entries(
           next[key] = {};
           Object.entries(plan || {}).forEach(([section, names]) => {
             const renamedNames = (names || []).map((assignedName) => assignedName === editingEmployeeName ? name : assignedName);
-            const isNoGoSection = key.startsWith(`${personalDepartment}_`)
-              && [savedEmployee.noGoWorkplace1, savedEmployee.noGoWorkplace2].filter(Boolean).includes(section);
-            next[key][section] = isNoGoSection
-              ? renamedNames.filter((assignedName) => assignedName !== name)
-              : renamedNames;
+            next[key][section] = renamedNames;
           });
         });
         return next;
@@ -3877,11 +3827,6 @@ const tourColumns = Object.entries(
           delete nextPlan[oldName];
         });
         deletedNames.forEach((deletedName) => delete nextPlan[deletedName]);
-        cleaned.forEach((section) => {
-          if (!section.restrictedEmployees || !Array.isArray(nextPlan[section.name])) return;
-          const allowed = new Set(section.allowedEmployeeNames);
-          nextPlan[section.name] = nextPlan[section.name].filter((name) => allowed.has(name));
-        });
         next[key] = nextPlan;
       });
       return next;
@@ -6302,6 +6247,10 @@ const tourColumns = Object.entries(
                   </label>
                 </div>
 
+                <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-900">
+                  Prioritäten, No-Gos, Stammtage und Stammschichten gelten nur für den KI-Vorschlag. Manuell kann jede Person beliebig eingeteilt werden.
+                </div>
+
                 <fieldset className="mt-5">
                   <legend className="mb-2 text-sm font-black">Stammschichten</legend>
                   <div className="grid gap-2 sm:grid-cols-3">
@@ -6443,7 +6392,7 @@ const tourColumns = Object.entries(
                         <span>
                           Nur ausgewählte Mitarbeiter zulassen
                           <span className="mt-0.5 block text-xs font-semibold text-blue-800">
-                            Gilt für KI-Vorschlag, Anklicken und Verschieben.
+                            Gilt ausschließlich für den KI-Vorschlag. Manuelles Anklicken und Verschieben bleibt immer möglich.
                           </span>
                         </span>
                       </label>
