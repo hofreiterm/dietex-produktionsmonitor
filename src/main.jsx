@@ -4641,7 +4641,7 @@ const tourColumns = Object.entries(
 
   const createPersonnelOverviewCanvas = async (shiftKey) => {
     const canvasWidth = 2400;
-    const headerHeight = 270;
+    const headerHeight = 400;
     const floorHeight = Math.round(canvasWidth * 2274 / 4638);
     const canvas = document.createElement("canvas");
     canvas.width = canvasWidth;
@@ -4658,11 +4658,12 @@ const tourColumns = Object.entries(
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#0f172a";
-    context.font = "900 48px Arial";
-    context.fillText("DieTex Personalübersicht Wäscherei + Putzerei", 48, 62);
+    context.font = "900 42px Arial";
+    context.fillText("DieTex Personalübersicht", 48, 58);
+    context.fillText("Wäscherei + Putzerei", 48, 106);
     context.fillStyle = "#475569";
-    context.font = "700 30px Arial";
-    context.fillText(`${displayDate}   |   ${shiftLabel}`, 48, 112);
+    context.font = "700 27px Arial";
+    context.fillText(`${displayDate}   |   ${shiftLabel}`, 48, 150);
 
     const floorPlanImage = await new Promise((resolve, reject) => {
       const image = new Image();
@@ -4820,7 +4821,7 @@ const tourColumns = Object.entries(
     const panelY = 44;
     const panelWidth = 1450;
     const cellWidth = panelWidth / 5;
-    const cellHeight = 105;
+    const cellHeight = 165;
     const statusRowCount = Math.ceil(statusRows.length / 5);
     context.fillStyle = "rgba(255,255,255,0.96)";
     context.fillRect(panelX - 12, panelY - 42, panelWidth + 24, cellHeight * statusRowCount + 58);
@@ -4842,21 +4843,21 @@ const tourColumns = Object.entries(
       context.fillStyle = "#0f172a";
       context.font = "900 18px Arial";
       context.fillText(`${status.title} (${status.names.length})`, x + 16, y + 26);
-      context.font = "900 18px Arial";
+      context.font = "900 16px Arial";
       const words = (status.names.length ? status.names.join(", ") : "-").split(" ");
       let line = "";
       let lineIndex = 0;
       words.forEach((word) => {
         const candidate = line ? `${line} ${word}` : word;
-        if (line && context.measureText(candidate).width > cellWidth - 32 && lineIndex < 2) {
-          context.fillText(line, x + 16, y + 52 + lineIndex * 23);
+        if (line && context.measureText(candidate).width > cellWidth - 32) {
+          context.fillText(line, x + 16, y + 52 + lineIndex * 20);
           line = word;
           lineIndex += 1;
         } else {
           line = candidate;
         }
       });
-      if (lineIndex < 3) context.fillText(line, x + 16, y + 52 + lineIndex * 23);
+      if (line) context.fillText(line, x + 16, y + 52 + lineIndex * 20);
     });
 
     return canvas;
