@@ -12,10 +12,32 @@ const control = "rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm
 const action = "rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50";
 const weekday = new Intl.DateTimeFormat("de-AT", { weekday: "short", timeZone: "UTC" });
 const monthLabel = new Intl.DateTimeFormat("de-AT", { month: "long", timeZone: "UTC" });
+const shortMonth = new Intl.DateTimeFormat("de-AT", { month: "short", timeZone: "UTC" });
 const emptyRows = [];
 const rowDivider = "border-b border-b-slate-400/70";
 const selectionOutline = { boxShadow: "inset 0 0 0 2px #0f172a, inset 0 0 0 3px #fff" };
 const datesForEdit = (edit) => edit ? edit.dates ?? leaveDaysBetween(edit.from, edit.to) : emptyRows;
+const calendarYears = [2026, 2027];
+const nameWidth = 160;
+const dateOverscan = 6;
+const calendarDays = calendarYears.flatMap((year) =>
+  Array.from({ length: 12 }, (_, month) => leaveMonthDays(year, month)).flat()
+).map((day) => {
+  const date = new Date(day);
+  const dayOfWeek = date.getUTCDay();
+  const startsMonth = date.getUTCDate() === 1;
+  return {
+    day,
+    monthKey: day.slice(0, 7),
+    label: startsMonth ? shortMonth.format(date) : weekday.format(date),
+    holiday: austrianHoliday(day),
+    weekend: dayOfWeek === 0 || dayOfWeek === 6,
+    divider: (dayOfWeek === 0 ? "border-r-2 border-r-slate-500" : "border-r border-r-slate-300")
+      + (startsMonth ? " border-l-2 border-l-blue-500" : ""),
+  };
+});
+const calendarDayIndex = new Map(calendarDays.map(({ day }, index) => [day, index]));
+const firstDayOfMonth = (year, month) => `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
 export function useLeaveAccess(client, enabled) {
   const [userId, setUserId] = useState(undefined);
@@ -84,34 +106,40 @@ export function useLeaveRows(client, userId, from, to, revision, autoRefresh = t
 }
 
 export default function PersonnelLeave({ client, access, employeesByDept, today, revision, onChange, portalHref }) {
-  const [year, setYear] = useState(() => String(Math.max(2026, Math.min(2027, Number(today.slice(0, 4))))));
-  const [month, setMonth] = useState(() => Number(today.slice(5, 7)) - 1);
+  const [firstVisible, setFirstVisible] = useState(() => {
+    const year = Math.max(calendarYears[0], Math.min(calendarYears.at(-1), Number(today.slice(0, 4))));
+    return calendarDayIndex.get(`${year}-${today.slice(5, 7)}-01`) ?? 0;
+  });
+  const monthKey = calendarDays[firstVisible].monthKey;
+  const year = monthKey.slice(0, 4);
+  const month = Number(monthKey.slice(5)) - 1;
+  const [frameDays, setFrameDays] = useState(() => leaveMonthDays(Number(year), month).length);
+  const scrollAnchor = useRef(firstVisible);
+  const columnWidth = useRef(22);
   const [department, setDepartment] = useState("all");
   const [onlyWithLeave, setOnlyWithLeave] = useState(false);
   const [edit, setEdit] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const dragRef = useRef(null);
+  const scrollFrame = useRef(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
   const [reportRange, setReportRange] = useState(null);
   const [calendarHeight, setCalendarHeight] = useState(null);
+  const [calendarWidth, setCalendarWidth] = useState(0);
   const [calendarFullscreen, setCalendarFullscreen] = useState(false);
   const calendarSection = useRef(null);
   const calendar = useRef(null);
-  const days = useMemo(() => leaveMonthDays(Number(year), month).map((day) => {
-    const date = new Date(day);
-    const dayOfWeek = date.getUTCDay();
-    return {
-      day,
-      label: weekday.format(date),
-      holiday: austrianHoliday(day),
-      weekend: dayOfWeek === 0 || dayOfWeek === 6,
-      divider: dayOfWeek === 0 ? "border-r-2 border-r-slate-500" : "border-r border-r-slate-300",
-    };
-  }), [year, month]);
+  const dayWidth = Math.max(22, Math.floor((calendarWidth - nameWidth) / frameDays));
+  const visibleCount = calendarWidth > nameWidth ? Math.max(1, Math.floor((calendarWidth - nameWidth) / dayWidth)) : frameDays;
+  const lastVisible = Math.min(calendarDays.length - 1, firstVisible + visibleCount - 1);
+  const lastMonthKey = calendarDays[lastVisible].monthKey;
+  const renderStart = Math.max(0, firstVisible - dateOverscan);
+  const renderEnd = Math.min(calendarDays.length, lastVisible + dateOverscan + 1);
+  const days = calendarDays.slice(renderStart, renderEnd);
   const userId = access.state === "allowed" ? access.userId : null;
-  const data = useLeaveRows(client, userId, days[0]?.day, days.at(-1)?.day, revision);
+  const data = useLeaveRows(client, userId, calendarDays[0].day, calendarDays.at(-1).day, revision);
   const reportData = useLeaveRows(client, reportRange ? userId : null, reportRange?.from, reportRange?.to,
     `${revision}:${reportRange?.request ?? 0}`, false);
   const loadReportRange = (range) => setReportRange((prev) => ({ ...range, request: (prev?.request ?? 0) + 1 }));
@@ -121,10 +149,12 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
     const measure = () => {
       const gridTop = container.getBoundingClientRect().top + (document.fullscreenElement ? 0 : window.scrollY);
       setCalendarHeight(Math.max(180, Math.floor(window.innerHeight - gridTop - 20)));
+      setCalendarWidth(container.clientWidth);
     };
     measure();
     const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
     observer?.observe(container.parentElement);
+    observer?.observe(container);
     window.addEventListener("resize", measure);
     document.addEventListener("fullscreenchange", measure);
     return () => {
@@ -133,6 +163,34 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
       document.removeEventListener("fullscreenchange", measure);
     };
   }, [data.state, access.state]);
+  const syncScroll = (container) => {
+    const position = Math.max(0, container.scrollLeft / columnWidth.current);
+    scrollAnchor.current = position;
+    setFirstVisible(Math.min(calendarDays.length - 1, Math.floor(position + 0.0001)));
+  };
+  useLayoutEffect(() => {
+    const container = calendar.current;
+    if (!container) return;
+    columnWidth.current = dayWidth;
+    container.scrollLeft = Math.round(scrollAnchor.current * dayWidth);
+    syncScroll(container);
+  }, [data.state, dayWidth, frameDays]);
+  useEffect(() => () => {
+    if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current);
+  }, []);
+  const jumpToMonth = (nextYear, nextMonth) => {
+    const anchor = calendarDayIndex.get(firstDayOfMonth(nextYear, nextMonth));
+    if (anchor === undefined) return;
+    const frame = leaveMonthDays(Number(nextYear), nextMonth).length;
+    scrollAnchor.current = anchor;
+    setFirstVisible(anchor);
+    setEdit(null);
+    if (frame !== frameDays) setFrameDays(frame);
+    else if (calendar.current) {
+      calendar.current.scrollLeft = anchor * columnWidth.current;
+      syncScroll(calendar.current);
+    }
+  };
   useEffect(() => {
     const updateFullscreen = () => setCalendarFullscreen(document.fullscreenElement === calendarSection.current && !!calendarSection.current);
     document.addEventListener("fullscreenchange", updateFullscreen);
@@ -152,15 +210,20 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
         statuses.get(id).set(row.day, row.status);
       }
     }
-    return {
-      employees: [...employees.entries()].filter(([id, row]) =>
-        (department === "all" || department === row.department) && (!onlyWithLeave || statuses.has(id))),
-      statuses,
-    };
-  }, [directory, data.rows, department, onlyWithLeave]);
+    return { employees, statuses };
+  }, [directory, data.rows]);
+  const visibleEmployees = useMemo(() => [...grid.employees.entries()].filter(([id, person]) => {
+    if (department !== "all" && department !== person.department) return false;
+    if (id === edit?.id || id === dragRange?.id || (!onlyWithLeave && identities.has(id))) return true;
+    for (const day of grid.statuses.get(id)?.keys() || []) {
+      const key = day.slice(0, 7);
+      if (key >= monthKey && key <= lastMonthKey) return true;
+    }
+    return false;
+  }), [grid, identities, department, onlyWithLeave, monthKey, lastMonthKey, edit?.id, dragRange?.id]);
   const groupCount = department === "all" ? 2 : 1;
   const rowHeight = calendarHeight === null ? 16
-    : Math.max(12, Math.min(18, Math.floor((calendarHeight - 34) / (grid.employees.length + groupCount))));
+    : Math.max(12, Math.min(18, Math.floor((calendarHeight - 34) / (visibleEmployees.length + groupCount))));
 
   const selectedDates = useMemo(() => new Set(datesForEdit(edit)), [edit]);
   const nonContiguous = edit?.dates && selectedDates.size !== leaveDaysBetween(edit.from, edit.to).length;
@@ -174,7 +237,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
     }
   };
   const selectDays = (personId, from, to, toggleSingle = false) => {
-    const person = grid.employees.find(([id]) => id === personId)?.[1];
+    const person = grid.employees.get(personId);
     if (!person) return;
     const firstDay = from < to ? from : to;
     const lastDay = from < to ? to : from;
@@ -202,25 +265,68 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
     const cell = event.target.closest("button[data-leave-day]");
     if (!cell || cell.disabled) return;
     const { leavePerson: id, leaveDay: from } = cell.dataset;
-    dragRef.current = { id, from, to: from, pointerId: event.pointerId, moved: false };
+    dragRef.current = {
+      id, from, to: from, pointerId: event.pointerId, moved: false,
+      x: event.clientX, startX: event.clientX,
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
+    scrollFrame.current = window.requestAnimationFrame(autoScrollDrag);
   };
 
-  const moveDayDrag = (event) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const day = document.elementFromPoint(event.clientX, event.clientY)
-      ?.closest("[data-leave-day]")?.dataset.leaveDay;
-    if (!day || drag.to === day) return;
+  const dragBounds = (container) => {
+    const firstColumn = container.getBoundingClientRect().left + container.clientLeft;
+    return { left: firstColumn + nameWidth, right: firstColumn + container.clientWidth };
+  };
+
+  const updateDragTarget = (drag, container) => {
+    const { left, right } = dragBounds(container);
+    if (right <= left) return;
+    const offset = Math.max(0, Math.min(drag.x - left, right - left - 1));
+    const index = Math.floor((container.scrollLeft + offset) / columnWidth.current);
+    const origin = calendarDayIndex.get(drag.from);
+    const bounded = Math.max(0, origin - 365, Math.min(index, origin + 365, calendarDays.length - 1));
+    const day = calendarDays[bounded].day;
+    if (drag.to === day) return;
     drag.to = day;
     drag.moved = true;
     setDragRange({ id: drag.id, from: drag.from < day ? drag.from : day, to: drag.from < day ? day : drag.from });
+  };
+
+  function autoScrollDrag() {
+    const drag = dragRef.current;
+    const container = calendar.current;
+    if (!drag || !container) {
+      scrollFrame.current = null;
+      return;
+    }
+    if (Math.abs(drag.x - drag.startX) > 3 || drag.moved) {
+      const { left, right } = dragBounds(container);
+      const edge = Math.min(40, (right - left) / 4);
+      const rightPressure = drag.x - (right - edge);
+      const leftPressure = left + edge - drag.x;
+      if (rightPressure > 0 || leftPressure > 0) {
+        const pressure = rightPressure > 0 ? rightPressure : leftPressure;
+        container.scrollLeft += (rightPressure > 0 ? 1 : -1) * Math.min(16, Math.ceil(pressure / 3));
+        updateDragTarget(drag, container);
+      }
+    }
+    scrollFrame.current = window.requestAnimationFrame(autoScrollDrag);
+  }
+
+  const moveDayDrag = (event) => {
+    const drag = dragRef.current;
+    const container = calendar.current;
+    if (!drag || drag.pointerId !== event.pointerId || !container) return;
+    drag.x = event.clientX;
+    updateDragTarget(drag, container);
   };
 
   const finishDayDrag = (event) => {
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     dragRef.current = null;
+    if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current);
+    scrollFrame.current = null;
     setDragRange(null);
     if (event.type === "pointerup" && !busy) selectDays(drag.id, drag.from, drag.to, !drag.moved);
   };
@@ -325,10 +431,10 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
     <section ref={calendarSection} aria-label="Urlaubsliste" className={`space-y-2 ${calendarFullscreen ? "overflow-auto bg-slate-50 p-2" : ""}`}>
       <header className="flex flex-wrap items-center gap-2 border-b bg-white px-3 py-2">
         <h2 className="mr-auto text-xl font-black">Urlaubsliste</h2>
-        <select aria-label="Jahr" className={control} disabled={busy} value={year} onChange={(event) => { setYear(event.target.value); setEdit(null); }}>
-          <option>2026</option><option>2027</option>
+        <select aria-label="Jahr" className={control} disabled={busy} value={year} onChange={(event) => jumpToMonth(event.target.value, month)}>
+          {calendarYears.map((item) => <option key={item}>{item}</option>)}
         </select>
-        <select aria-label="Monat" className={control} disabled={busy} value={month} onChange={(event) => { setMonth(Number(event.target.value)); setEdit(null); }}>
+        <select aria-label="Monat" className={control} disabled={busy} value={month} onChange={(event) => jumpToMonth(year, Number(event.target.value))}>
           {Array.from({ length: 12 }, (_, index) => (
             <option key={index} value={index}>{monthLabel.format(new Date(Date.UTC(2026, index, 1)))}</option>
           ))}
@@ -414,10 +520,15 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
         </section>
       )}
       {data.state !== "ready" ? <p role="status" className="p-3 text-sm">{data.state === "error" ? "Monatsliste konnte nicht geladen werden." : "Monatsliste wird geladen…"}</p> : (
-        <div ref={calendar} className="overflow-auto border border-slate-300 bg-white"
+        <div ref={calendar} className="overflow-auto border border-slate-300 bg-white" tabIndex={0} aria-label="Kalenderraster"
+          onScroll={(event) => {
+            syncScroll(event.currentTarget);
+            if (dragRef.current) updateDragTarget(dragRef.current, event.currentTarget);
+          }}
           style={{ maxHeight: calendarHeight ?? "70vh", "--leave-row-height": `${rowHeight}px`, "--leave-cell-height": `${rowHeight - 1}px` }}>
           <table
-            className="w-full min-w-[860px] table-fixed select-none border-separate border-spacing-0 text-[11px] leading-none"
+            className="table-fixed select-none border-separate border-spacing-0 text-[11px] leading-none"
+            style={{ width: nameWidth + calendarDays.length * dayWidth }}
             onPointerDown={startDayDrag}
             onPointerMove={moveDayDrag}
             onPointerUp={finishDayDrag}
@@ -425,30 +536,37 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
             onLostPointerCapture={finishDayDrag}
           >
             <colgroup>
-              <col className="w-40" />
-              {days.map(({ day }) => <col key={day} />)}
+              <col style={{ width: nameWidth }} />
+              {renderStart > 0 && <col style={{ width: renderStart * dayWidth }} />}
+              {days.map(({ day }) => <col key={day} style={{ width: dayWidth }} />)}
+              {renderEnd < calendarDays.length && <col style={{ width: (calendarDays.length - renderEnd) * dayWidth }} />}
             </colgroup>
             <thead className="sticky top-0 z-20">
               <tr>
                 <th className={`sticky left-0 z-10 border-r bg-slate-100 px-2 py-1 text-left ${rowDivider}`} scope="col">Mitarbeiter</th>
+                {renderStart > 0 && <th aria-hidden="true" className={`bg-slate-100 ${rowDivider}`} />}
                 {days.map(({ day, label, holiday, weekend, divider }) => (
-                  <th key={day} title={holiday} scope="col" className={`py-1 text-center ${rowDivider} ${divider} ${holiday ? "bg-yellow-300 text-yellow-950" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
+                  <th key={day} title={holiday || day} scope="col" data-calendar-day={day} className={`py-1 text-center ${rowDivider} ${divider} ${holiday ? "bg-yellow-300 text-yellow-950" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
                     <div>{day.slice(8)}</div><div className="text-[10px] font-medium">{label}</div>
                   </th>
                 ))}
+                {renderEnd < calendarDays.length && <th aria-hidden="true" className={`bg-slate-100 ${rowDivider}`} />}
               </tr>
             </thead>
             <tbody>
               {Object.entries(LEAVE_DEPARTMENTS).filter(([key]) => department === "all" || department === key).map(([key, label]) => (
                 <React.Fragment key={key}>
                   <tr className="h-6 md:h-[var(--leave-row-height)]"><th scope="rowgroup" className={`sticky left-0 bg-slate-200 px-2 py-0 text-left ${rowDivider}`}>{label}</th>
+                    {renderStart > 0 && <td aria-hidden="true" className={`bg-slate-200 p-0 ${rowDivider}`} />}
                     {days.map(({ day, holiday, divider }) => (
                       <td key={day} className={`p-0 ${rowDivider} ${divider} ${holiday ? "bg-yellow-200" : "bg-slate-200"}`} />
                     ))}
+                    {renderEnd < calendarDays.length && <td aria-hidden="true" className={`bg-slate-200 p-0 ${rowDivider}`} />}
                   </tr>
-                  {grid.employees.filter(([, row]) => row.department === key).sort((a, b) => sortNames(a[1], b[1])).map(([id, row]) => (
+                  {visibleEmployees.filter(([, row]) => row.department === key).sort((a, b) => sortNames(a[1], b[1])).map(([id, row]) => (
                     <tr key={id} className="h-6 md:h-[var(--leave-row-height)]">
                       <th scope="row" title={row.employee_name} className={`sticky left-0 z-10 truncate border-r bg-white px-2 py-0 text-left ${rowDivider}`}>{row.employee_name}</th>
+                      {renderStart > 0 && <td aria-hidden="true" className={`p-0 ${rowDivider}`} />}
                       {days.map(({ day, holiday, weekend, divider }) => {
                         const status = grid.statuses.get(id)?.get(day);
                         const type = LEAVE_TYPES[status];
@@ -466,11 +584,14 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
                           >{type?.short ?? ""}</button>
                         </td>;
                       })}
+                      {renderEnd < calendarDays.length && <td aria-hidden="true" className={`p-0 ${rowDivider}`} />}
                     </tr>
                   ))}
                 </React.Fragment>
               ))}
-              {!grid.employees.length && <tr><td colSpan={days.length + 1} className="p-3 text-slate-500">Keine Einträge in dieser Auswahl.</td></tr>}
+              {!visibleEmployees.length && <tr><td colSpan={days.length + 1 + Number(renderStart > 0) + Number(renderEnd < calendarDays.length)} className="p-3 text-slate-500">
+                <span className="sticky left-3">Keine Einträge in dieser Auswahl.</span>
+              </td></tr>}
             </tbody>
           </table>
         </div>
