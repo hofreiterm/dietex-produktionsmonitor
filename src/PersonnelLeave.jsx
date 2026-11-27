@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FileUp } from "lucide-react";
 import {
   austrianHoliday, LEAVE_DEPARTMENTS, LEAVE_TYPES, leaveDaysBetween,
@@ -12,6 +12,8 @@ const action = "rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white ho
 const weekday = new Intl.DateTimeFormat("de-AT", { weekday: "short", timeZone: "UTC" });
 const monthLabel = new Intl.DateTimeFormat("de-AT", { month: "long", timeZone: "UTC" });
 const emptyRows = [];
+const selectionOutline = { boxShadow: "inset 0 0 0 2px #0f172a, inset 0 0 0 3px #fff" };
+const datesForEdit = (edit) => edit ? edit.dates ?? leaveDaysBetween(edit.from, edit.to) : emptyRows;
 
 export function useLeaveAccess(client, enabled) {
   const [userId, setUserId] = useState(undefined);
@@ -85,11 +87,23 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
   const [department, setDepartment] = useState("all");
   const [onlyWithLeave, setOnlyWithLeave] = useState(false);
   const [edit, setEdit] = useState(null);
+  const [dragRange, setDragRange] = useState(null);
+  const dragRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
-  const days = useMemo(() => leaveMonthDays(Number(year), month), [year, month]);
-  const data = useLeaveRows(client, access.state === "allowed" ? access.userId : null, days[0], days.at(-1), revision);
+  const days = useMemo(() => leaveMonthDays(Number(year), month).map((day) => {
+    const date = new Date(day);
+    const dayOfWeek = date.getUTCDay();
+    return {
+      day,
+      label: weekday.format(date),
+      holiday: austrianHoliday(day),
+      weekend: dayOfWeek === 0 || dayOfWeek === 6,
+      divider: dayOfWeek === 0 ? "border-r-2 border-r-slate-500" : "border-r border-r-slate-300",
+    };
+  }), [year, month]);
+  const data = useLeaveRows(client, access.state === "allowed" ? access.userId : null, days[0]?.day, days.at(-1)?.day, revision);
   const directory = useMemo(() => Object.entries(LEAVE_DEPARTMENTS).flatMap(([dept]) => (employeesByDept[dept] || [])
     .map(({ name }) => ({ department: dept, employee_name: name }))), [employeesByDept]);
   const identities = useMemo(() => new Set(directory.map((row) => leaveIdentity(row.department, row.employee_name))), [directory]);
@@ -111,12 +125,66 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
     };
   }, [directory, data.rows, department, onlyWithLeave]);
 
+  const selectedDates = useMemo(() => new Set(datesForEdit(edit)), [edit]);
+  const nonContiguous = edit?.dates && selectedDates.size !== leaveDaysBetween(edit.from, edit.to).length;
   const result = (message, error = false) => setNotice({ message, error });
+  const selectDays = (personId, from, to, toggleSingle = false) => {
+    const person = grid.employees.find(([id]) => id === personId)?.[1];
+    if (!person) return;
+    const firstDay = from < to ? from : to;
+    const lastDay = from < to ? to : from;
+    setNotice(null);
+    setEdit((prev) => {
+      const samePerson = prev?.id === personId;
+      const dates = new Set(samePerson ? datesForEdit(prev) : []);
+      if (toggleSingle && dates.has(from)) dates.delete(from);
+      else leaveDaysBetween(firstDay, lastDay).forEach((day) => dates.add(day));
+      if (!dates.size) return null;
+      const sorted = [...dates].sort();
+      return {
+        ...person,
+        id: personId,
+        dates: sorted,
+        from: sorted[0],
+        to: sorted.at(-1),
+        status: samePerson ? prev.status : grid.statuses.get(personId)?.get(from) || "urlaub",
+      };
+    });
+  };
+
+  const startDayDrag = (event) => {
+    if (busy || event.button !== 0 || !event.isPrimary || event.pointerType === "touch") return;
+    const cell = event.target.closest("button[data-leave-day]");
+    if (!cell || cell.disabled) return;
+    const { leavePerson: id, leaveDay: from } = cell.dataset;
+    dragRef.current = { id, from, to: from, pointerId: event.pointerId, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const moveDayDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const day = document.elementFromPoint(event.clientX, event.clientY)
+      ?.closest("[data-leave-day]")?.dataset.leaveDay;
+    if (!day || drag.to === day) return;
+    drag.to = day;
+    drag.moved = true;
+    setDragRange({ id: drag.id, from: drag.from < day ? drag.from : day, to: drag.from < day ? day : drag.from });
+  };
+
+  const finishDayDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setDragRange(null);
+    if (event.type === "pointerup" && !busy) selectDays(drag.id, drag.from, drag.to, !drag.moved);
+  };
+
   const saveRange = async (event) => {
     event.preventDefault();
-    const range = leaveDaysBetween(edit.from, edit.to);
-    if (!range.length) return result("Bitte einen gültigen Zeitraum von höchstens 366 Tagen wählen.", true);
-    if (!edit.status && !window.confirm("Abwesenheiten für diesen Zeitraum entfernen?")) return;
+    const range = datesForEdit(edit);
+    if (!range.length || range.length > 366) return result("Bitte höchstens 366 gültige Tage auswählen.", true);
+    if (!edit.status && !window.confirm("Abwesenheiten an den ausgewählten Tagen entfernen?")) return;
     setBusy(true);
     try {
       const { error } = edit.status
@@ -124,7 +192,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
           department: edit.department, employee_name: edit.employee_name, day, status: edit.status,
         })), { onConflict: "day,department,employee_name" })
         : await client.from(table).delete().eq("department", edit.department).eq("employee_name", edit.employee_name)
-          .gte("day", edit.from).lte("day", edit.to);
+          .in("day", range);
       if (error) throw error;
       onChange();
       setEdit(null);
@@ -212,20 +280,20 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
     <section aria-label="Urlaubsliste" className="space-y-3">
       <header className="flex flex-wrap items-center gap-2 border-b bg-white p-3">
         <h2 className="mr-auto text-xl font-black">Urlaubsliste</h2>
-        <select aria-label="Jahr" className={control} value={year} onChange={(event) => { setYear(event.target.value); setEdit(null); }}>
+        <select aria-label="Jahr" className={control} disabled={busy} value={year} onChange={(event) => { setYear(event.target.value); setEdit(null); }}>
           <option>2026</option><option>2027</option>
         </select>
-        <select aria-label="Monat" className={control} value={month} onChange={(event) => { setMonth(Number(event.target.value)); setEdit(null); }}>
+        <select aria-label="Monat" className={control} disabled={busy} value={month} onChange={(event) => { setMonth(Number(event.target.value)); setEdit(null); }}>
           {Array.from({ length: 12 }, (_, index) => (
             <option key={index} value={index}>{monthLabel.format(new Date(Date.UTC(2026, index, 1)))}</option>
           ))}
         </select>
-        <select aria-label="Bereich" className={control} value={department} onChange={(event) => setDepartment(event.target.value)}>
+        <select aria-label="Bereich" className={control} disabled={busy} value={department} onChange={(event) => { setDepartment(event.target.value); setEdit(null); }}>
           <option value="all">Beide Bereiche</option>
           {Object.entries(LEAVE_DEPARTMENTS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
         </select>
         <label className="flex items-center gap-1.5 text-sm">
-          <input type="checkbox" checked={onlyWithLeave} onChange={(event) => setOnlyWithLeave(event.target.checked)} />
+          <input type="checkbox" disabled={busy} checked={onlyWithLeave} onChange={(event) => { setOnlyWithLeave(event.target.checked); setEdit(null); }} />
           Nur mit Eintrag
         </label>
         <label className={`relative inline-flex cursor-pointer items-center gap-2 ${control}`}>
@@ -237,14 +305,16 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
         {Object.entries(LEAVE_TYPES).map(([key, type]) => (
           <span className={`rounded px-2 py-1 font-bold ${type.classes}`} key={key}>{type.short} · {type.label}</span>
         ))}
-        <span className="rounded bg-yellow-200 px-2 py-1 font-bold">Feiertag</span>
+        <span className="rounded bg-yellow-300 px-2 py-1 font-bold text-yellow-950">Feiertag</span>
       </div>
       {notice && <p role={notice.error ? "alert" : "status"} className={notice.error ? "text-sm font-bold text-red-700" : "text-sm font-bold text-emerald-800"}>{notice.message}</p>}
       {edit && (
         <form className="flex flex-wrap items-end gap-2 border-y bg-white p-3" onSubmit={saveRange}>
-          <strong className="mr-auto self-center text-sm">{edit.employee_name} · {LEAVE_DEPARTMENTS[edit.department]}</strong>
-          <label className="grid gap-1 text-xs">Von<input className={control} required type="date" value={edit.from} onChange={(e) => setEdit({ ...edit, from: e.target.value })} /></label>
-          <label className="grid gap-1 text-xs">Bis<input className={control} required type="date" value={edit.to} onChange={(e) => setEdit({ ...edit, to: e.target.value })} /></label>
+          <strong className="mr-auto self-center text-sm">
+            {edit.employee_name} · {LEAVE_DEPARTMENTS[edit.department]} · {selectedDates.size} {selectedDates.size === 1 ? "Tag" : "Tage"}
+          </strong>
+          <label className="grid gap-1 text-xs">Von<input className={control} disabled={busy || nonContiguous} required type="date" value={nonContiguous ? "" : edit.from} onChange={(e) => setEdit({ ...edit, dates: null, from: e.target.value })} /></label>
+          <label className="grid gap-1 text-xs">Bis<input className={control} disabled={busy || nonContiguous} required type="date" value={nonContiguous ? "" : edit.to} onChange={(e) => setEdit({ ...edit, dates: null, to: e.target.value })} /></label>
           <label className="grid gap-1 text-xs">Status<select aria-label="Status" className={control} value={edit.status} onChange={(e) => setEdit({ ...edit, status: e.target.value })}>
             <option value="">Kein Eintrag</option>
             {Object.entries(LEAVE_TYPES).map(([key, type]) => <option value={key} key={key}>{type.label}</option>)}
@@ -286,38 +356,49 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
       )}
       {data.state !== "ready" ? <p role="status" className="p-3 text-sm">{data.state === "error" ? "Monatsliste konnte nicht geladen werden." : "Monatsliste wird geladen…"}</p> : (
         <div className="max-h-[70vh] overflow-auto border border-slate-300 bg-white">
-          <table className="w-full border-separate border-spacing-0 text-xs">
+          <table
+            className="w-full select-none border-separate border-spacing-0 text-xs"
+            onPointerDown={startDayDrag}
+            onPointerMove={moveDayDrag}
+            onPointerUp={finishDayDrag}
+            onPointerCancel={finishDayDrag}
+            onLostPointerCapture={finishDayDrag}
+          >
             <thead className="sticky top-0 z-20">
               <tr>
                 <th className="sticky left-0 z-10 min-w-44 border-b border-r bg-slate-100 px-2 py-2 text-left" scope="col">Mitarbeiter</th>
-                {days.map((day) => {
-                  const value = new Date(day);
-                  const holiday = austrianHoliday(day);
-                  const weekend = [0, 6].includes(value.getUTCDay());
-                  return <th key={day} title={holiday} scope="col" className={`min-w-8 border-b border-r px-1 py-1 text-center ${holiday ? "bg-yellow-200" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
-                    <div>{day.slice(8)}</div><div className="text-[10px] font-medium">{weekday.format(value)}</div>
-                  </th>;
-                })}
+                {days.map(({ day, label, holiday, weekend, divider }) => (
+                  <th key={day} title={holiday} scope="col" className={`min-w-8 border-b px-1 py-1 text-center ${divider} ${holiday ? "bg-yellow-300 text-yellow-950" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
+                    <div>{day.slice(8)}</div><div className="text-[10px] font-medium">{label}</div>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {Object.entries(LEAVE_DEPARTMENTS).filter(([key]) => department === "all" || department === key).map(([key, label]) => (
                 <React.Fragment key={key}>
                   <tr><th scope="rowgroup" className="sticky left-0 border-b bg-slate-200 px-2 py-1.5 text-left">{label}</th>
-                    <td colSpan={days.length} className="border-b bg-slate-200" /></tr>
+                    {days.map(({ day, holiday, divider }) => (
+                      <td key={day} className={`border-b ${divider} ${holiday ? "bg-yellow-200" : "bg-slate-200"}`} />
+                    ))}
+                  </tr>
                   {grid.employees.filter(([, row]) => row.department === key).sort((a, b) => sortNames(a[1], b[1])).map(([id, row]) => (
                     <tr key={id}>
                       <th scope="row" className="sticky left-0 z-10 border-b border-r bg-white px-2 py-1 text-left">{row.employee_name}</th>
-                      {days.map((day) => {
+                      {days.map(({ day, holiday, weekend, divider }) => {
                         const status = grid.statuses.get(id)?.get(day);
                         const type = LEAVE_TYPES[status];
-                        const holiday = austrianHoliday(day);
-                        const weekend = [0, 6].includes(new Date(day).getUTCDay());
+                        const selected = (edit?.id === id && selectedDates.has(day))
+                          || (dragRange?.id === id && day >= dragRange.from && day <= dragRange.to);
                         const labelText = `${row.employee_name} · ${day} · ${type?.label || holiday || "Kein Eintrag"}`;
-                        return <td className="border-b border-r p-0" key={day}>
-                          <button type="button" disabled={busy} aria-label={labelText} title={labelText}
-                            className={`h-7 w-full min-w-8 font-black hover:ring-2 hover:ring-inset hover:ring-blue-500 ${type?.classes || (holiday ? "bg-yellow-50" : weekend ? "bg-slate-50" : "")}`}
-                            onClick={() => { setNotice(null); setEdit({ ...row, from: day, to: day, status: status || "urlaub" }); }}
+                        return <td className={`border-b p-0 ${divider}`} key={day}>
+                          <button type="button" disabled={busy} aria-label={labelText} aria-pressed={selected} title={labelText}
+                            data-leave-day={day} data-leave-person={id}
+                            style={selected ? selectionOutline : undefined}
+                            className={`block h-7 w-full min-w-8 font-black hover:ring-2 hover:ring-inset hover:ring-blue-500 ${type?.classes || (holiday ? "bg-yellow-100" : weekend ? "bg-slate-50" : "")}`}
+                            onClick={(event) => {
+                              if (event.detail === 0 || event.nativeEvent.pointerType === "touch") selectDays(id, day, day, true);
+                            }}
                           >{type?.short ?? ""}</button>
                         </td>;
                       })}
