@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FileText, FileUp, Maximize, Minimize, Trash2 } from "lucide-react";
+import { ClipboardPaste, Copy, FileText, FileUp, Maximize, Minimize, Trash2 } from "lucide-react";
 import PersonnelLeaveReport, { previousLeaveWeek } from "./PersonnelLeaveReport.jsx";
 import {
   austrianHoliday, LEAVE_DEPARTMENTS, LEAVE_TYPES, leaveDaysBetween,
@@ -7,7 +7,6 @@ import {
 } from "./personnel-leave.js";
 
 const table = "personnel_leave_days";
-const leaveClipboardType = "application/x-dietex-leave-selection";
 const sortNames = (a, b) => a.employee_name.localeCompare(b.employee_name, "de-AT");
 const control = "rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm";
 const action = "rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50";
@@ -123,6 +122,7 @@ export default function PersonnelLeave({
   const [department, setDepartment] = useState("all");
   const [onlyWithLeave, setOnlyWithLeave] = useState(false);
   const [edit, setEdit] = useState(null);
+  const [copiedSelection, setCopiedSelection] = useState(null);
   const [dragRange, setDragRange] = useState(null);
   const dragRef = useRef(null);
   const scrollFrame = useRef(null);
@@ -143,6 +143,7 @@ export default function PersonnelLeave({
   const renderEnd = Math.min(calendarDays.length, lastVisible + dateOverscan + 1);
   const days = calendarDays.slice(renderStart, renderEnd);
   const userId = access.state === "allowed" ? access.userId : null;
+  const copiedDays = copiedSelection && copiedSelection.userId === userId ? copiedSelection.days : null;
   const data = useLeaveRows(client, userId, calendarDays[0].day, calendarDays.at(-1).day, revision);
   const reportData = useLeaveRows(client, reportRange ? userId : null, reportRange?.from, reportRange?.to,
     `${revision}:${reportRange?.request ?? 0}`, false);
@@ -269,7 +270,6 @@ export default function PersonnelLeave({
     if (busy || event.button !== 0 || !event.isPrimary || event.pointerType === "touch") return;
     const cell = event.target.closest("button[data-leave-day]");
     if (!cell || cell.disabled) return;
-    calendar.current?.focus({ preventScroll: true });
     const { leavePerson: id, leaveDay: from } = cell.dataset;
     dragRef.current = {
       id, from, to: from, pointerId: event.pointerId, moved: false,
@@ -334,7 +334,10 @@ export default function PersonnelLeave({
     if (scrollFrame.current !== null) window.cancelAnimationFrame(scrollFrame.current);
     scrollFrame.current = null;
     setDragRange(null);
-    if (event.type === "pointerup" && !busy) selectDays(drag.id, drag.from, drag.to, !drag.moved);
+    if (event.type === "pointerup" && !busy) {
+      calendar.current?.focus({ preventScroll: true });
+      selectDays(drag.id, drag.from, drag.to, !drag.moved);
+    }
   };
 
   const saveRange = async (event) => {
@@ -361,9 +364,8 @@ export default function PersonnelLeave({
     }
   };
 
-  const copyDays = (event) => {
-    if (!edit || busy || !event.clipboardData) return;
-    event.preventDefault();
+  const copyDays = () => {
+    if (!edit || busy || data.state !== "ready") return;
     const start = calendarDayIndex.get(edit.from);
     const end = calendarDayIndex.get(edit.to);
     if (start === undefined || end === undefined || end < start || end - start >= 366) {
@@ -374,30 +376,24 @@ export default function PersonnelLeave({
       .map(({ day }) => selectedDates.has(day) ? statuses?.get(day) || null : null);
     const count = pattern.filter(Boolean).length;
     if (!count) return result("In der Auswahl sind keine Einträge zum Kopieren.", true);
-    event.clipboardData.setData(leaveClipboardType, JSON.stringify(pattern));
-    event.clipboardData.setData("text/plain", "DieTex Urlaubsliste");
+    setCopiedSelection({ userId, days: pattern });
+    calendar.current?.focus({ preventScroll: true });
     setEdit(null);
     result(count === 1 ? "1 Eintrag kopiert." : `${count} Einträge kopiert.`);
   };
 
-  const pasteDays = async (event) => {
-    const raw = event.clipboardData?.getData(leaveClipboardType);
-    if (!raw || !edit || busy) return;
-    event.preventDefault();
-    let pattern;
-    try { pattern = raw.length <= 8192 && JSON.parse(raw); } catch { return; }
-    if (!Array.isArray(pattern) || !pattern.length || pattern.length > 366
-      || !pattern.some(Boolean) || !pattern.every((status) => status === null
-        || (typeof status === "string" && Object.hasOwn(LEAVE_TYPES, status)))) return;
+  const pasteDays = async () => {
+    if (!edit || busy || data.state !== "ready") return;
+    if (!copiedDays) return result("Bitte zuerst Einträge in der Urlaubsliste kopieren.", true);
     const start = calendarDayIndex.get(edit.from);
-    const end = start + pattern.length - 1;
+    const end = start + copiedDays.length - 1;
     if (start === undefined || end >= calendarDays.length) return result("Die kopierten Tage passen nicht in den Kalender.", true);
-    if (selectedDates.size > 1 && (nonContiguous || selectedDates.size !== pattern.length)) {
-      return result("Bitte den ersten Zieltag oder einen gleich langen Zeitraum auswählen.", true);
+    if (selectedDates.size > 1 && (nonContiguous || selectedDates.size < copiedDays.length)) {
+      return result("Bitte den ersten Zieltag oder einen ausreichend langen Zeitraum auswählen.", true);
     }
     const destination = calendarDays.slice(start, end + 1);
-    const entries = destination.flatMap(({ day }, index) => pattern[index]
-      ? [{ day, status: pattern[index], department: edit.department, employee_name: edit.employee_name }] : []);
+    const entries = destination.flatMap(({ day }, index) => copiedDays[index]
+      ? [{ day, status: copiedDays[index], department: edit.department, employee_name: edit.employee_name }] : []);
     setBusy(true);
     try {
       const { data: occupied, error: checkError } = await client.from(table).select("day")
@@ -422,6 +418,17 @@ export default function PersonnelLeave({
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleCalendarShortcut = (event) => {
+    if (!edit || event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey
+      || event.target.closest('input, select, textarea, [contenteditable]:not([contenteditable="false"])')) return;
+    const key = event.key.toLowerCase();
+    if (key !== "c" && key !== "v") return;
+    event.preventDefault();
+    if (event.repeat) return;
+    if (key === "c") copyDays();
+    else pasteDays();
   };
 
   const removeEmployee = async (id, person) => {
@@ -562,7 +569,7 @@ export default function PersonnelLeave({
       </div>
       {notice && <p role={notice.error ? "alert" : "status"} className={notice.error ? "text-sm font-bold text-red-700" : "text-sm font-bold text-emerald-800"}>{notice.message}</p>}
       {edit && (
-        <form className="flex flex-wrap items-end gap-2 border-y bg-white p-3" onSubmit={saveRange}>
+        <form className="flex flex-wrap items-end gap-2 border-y bg-white p-3" onSubmit={saveRange} onKeyDown={handleCalendarShortcut}>
           <strong className="mr-auto self-center text-sm">
             {edit.employee_name} · {LEAVE_DEPARTMENTS[edit.department]} · {selectedDates.size} {selectedDates.size === 1 ? "Tag" : "Tage"}
           </strong>
@@ -572,6 +579,14 @@ export default function PersonnelLeave({
             <option value="">Kein Eintrag</option>
             {Object.entries(LEAVE_TYPES).map(([key, type]) => <option value={key} key={key}>{type.label}</option>)}
           </select></label>
+          <button type="button" className={`inline-flex items-center gap-1.5 disabled:opacity-50 ${control}`}
+            onClick={copyDays} disabled={busy || data.state !== "ready"} aria-keyshortcuts="Control+C Meta+C">
+            <Copy size={15} aria-hidden="true" /> Kopieren
+          </button>
+          <button type="button" className={`inline-flex items-center gap-1.5 disabled:opacity-50 ${control}`}
+            onClick={pasteDays} disabled={busy || data.state !== "ready" || !copiedDays} aria-keyshortcuts="Control+V Meta+V">
+            <ClipboardPaste size={15} aria-hidden="true" /> Einfügen
+          </button>
           <button type="submit" className={action} disabled={busy}>Speichern</button>
           <button type="button" className={control} disabled={busy} onClick={() => setEdit(null)}>Abbrechen</button>
         </form>
@@ -609,7 +624,7 @@ export default function PersonnelLeave({
       )}
       {data.state !== "ready" ? <p role="status" className="p-3 text-sm">{data.state === "error" ? "Monatsliste konnte nicht geladen werden." : "Monatsliste wird geladen…"}</p> : (
         <div ref={calendar} className="overflow-auto border border-slate-300 bg-white" tabIndex={0} aria-label="Kalenderraster"
-          onCopy={copyDays} onPaste={pasteDays}
+          onKeyDown={handleCalendarShortcut}
           onScroll={(event) => {
             syncScroll(event.currentTarget);
             if (dragRef.current) updateDragTarget(dragRef.current, event.currentTarget);
