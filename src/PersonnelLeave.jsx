@@ -340,28 +340,33 @@ export default function PersonnelLeave({
     }
   };
 
-  const saveRange = async (event) => {
-    event.preventDefault();
+  const persistRange = async (status) => {
+    if (!edit || busy || data.state !== "ready") return;
     const range = datesForEdit(edit);
     if (!range.length || range.length > 366) return result("Bitte höchstens 366 gültige Tage auswählen.", true);
-    if (!edit.status && !window.confirm("Abwesenheiten an den ausgewählten Tagen entfernen?")) return;
+    if (!status && !window.confirm(`Abwesenheitseinträge für ${edit.employee_name} an den ausgewählten Tagen entfernen?`)) return;
     setBusy(true);
     try {
-      const { error } = edit.status
+      const { error } = status
         ? await client.from(table).upsert(range.map((day) => ({
-          department: edit.department, employee_name: edit.employee_name, day, status: edit.status,
+          department: edit.department, employee_name: edit.employee_name, day, status,
         })), { onConflict: "day,department,employee_name" })
         : await client.from(table).delete().eq("department", edit.department).eq("employee_name", edit.employee_name)
           .in("day", range);
       if (error) throw error;
       onChange();
       setEdit(null);
-      result("Gespeichert.");
+      result(status ? "Gespeichert." : "Markierte Einträge entfernt.");
     } catch {
       result("Nicht gespeichert. Bitte Zugriff oder Verbindung prüfen.", true);
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveRange = (event) => {
+    event.preventDefault();
+    persistRange(edit?.status);
   };
 
   const copyDays = () => {
@@ -421,13 +426,16 @@ export default function PersonnelLeave({
   };
 
   const handleCalendarShortcut = (event) => {
-    if (!edit || event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey
+    if (!edit || event.defaultPrevented || event.altKey || event.shiftKey
       || event.target.closest('input, select, textarea, [contenteditable]:not([contenteditable="false"])')) return;
     const key = event.key.toLowerCase();
-    if (key !== "c" && key !== "v") return;
+    const command = event.ctrlKey || event.metaKey;
+    const remove = key === "delete" && !command;
+    if (!remove && !(command && (key === "c" || key === "v"))) return;
     event.preventDefault();
     if (event.repeat) return;
-    if (key === "c") copyDays();
+    if (remove) persistRange("");
+    else if (key === "c") copyDays();
     else pasteDays();
   };
 
@@ -623,7 +631,7 @@ export default function PersonnelLeave({
         </section>
       )}
       {data.state !== "ready" ? <p role="status" className="p-3 text-sm">{data.state === "error" ? "Monatsliste konnte nicht geladen werden." : "Monatsliste wird geladen…"}</p> : (
-        <div ref={calendar} className="overflow-auto border border-slate-300 bg-white" tabIndex={0} aria-label="Kalenderraster"
+        <div ref={calendar} className="overflow-auto border border-slate-300 bg-white" tabIndex={0} aria-label="Kalenderraster" aria-keyshortcuts="Delete"
           onKeyDown={handleCalendarShortcut}
           onScroll={(event) => {
             syncScroll(event.currentTarget);
