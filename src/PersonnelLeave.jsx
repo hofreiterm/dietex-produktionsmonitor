@@ -21,7 +21,7 @@ const calendarYears = [2026, 2027];
 const nameWidth = 160;
 const dateOverscan = 6;
 const calendarDays = calendarYears.flatMap((year) =>
-  Array.from({ length: 12 }, (_, month) => leaveMonthDays(year, month)).flat()
+  Array.from({ length: 12 }, (_, month) => month).flatMap((month) => leaveMonthDays(year, month))
 ).map((day) => {
   const date = new Date(day);
   const dayOfWeek = date.getUTCDay();
