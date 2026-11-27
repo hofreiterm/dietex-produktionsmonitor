@@ -1,11 +1,11 @@
 import * as XLSX from "xlsx";
 
 export const LEAVE_TYPES = {
-  urlaub: { label: "Urlaub", short: "U", classes: "bg-red-100 text-red-900" },
-  za: { label: "Zeitausgleich", short: "ZA", classes: "bg-lime-100 text-lime-950" },
-  krank: { label: "Krankenstand", short: "K", classes: "bg-sky-100 text-sky-950" },
-  sonstiges: { label: "Büro/Tour/Sonstiges", short: "S", classes: "bg-amber-100 text-amber-950" },
-  angefragt: { label: "Gewünschter Urlaub", short: "W", classes: "bg-violet-100 text-violet-950" },
+  urlaub: { label: "Urlaub", short: "U", classes: "bg-red-700 text-white" },
+  za: { label: "Zeitausgleich", short: "ZA", classes: "bg-green-700 text-white" },
+  krank: { label: "Krankenstand", short: "K", classes: "bg-blue-700 text-white" },
+  sonstiges: { label: "Büro/Tour/Sonstiges", short: "S", classes: "bg-gray-600 text-white" },
+  angefragt: { label: "Gewünschter Urlaub", short: "W", classes: "bg-purple-700 text-white" },
 };
 
 export const LEAVE_DEPARTMENTS = { waescherei: "Wäscherei", putzerei: "Putzerei" };
