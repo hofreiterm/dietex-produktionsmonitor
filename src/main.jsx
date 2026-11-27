@@ -3511,31 +3511,6 @@ const tourColumns = Object.entries(
     return "border-green-300 bg-green-50";
   };
 
-  const getEmployeeStatus = (name) => employeeStatus[`${personalDepartment}_${name}`] || "anwesend";
-
-  const cycleEmployeeStatus = (name) => {
-    const values = ["anwesend", "krank", "urlaub", "frei"];
-    const current = getEmployeeStatus(name);
-    const next = values[(values.indexOf(current) + 1) % values.length];
-    setEmployeeStatus((prev) => ({ ...prev, [`${personalDepartment}_${name}`]: next }));
-  };
-
-  const getPersonalWeekday = () => new Date(`${personalDate}T12:00:00`).getDay();
-
-  const isEmployeeRegularDay = (employee) => {
-    const days = Array.isArray(employee.regularDays) ? employee.regularDays : [1, 2, 3, 4, 5];
-    return days.includes(getPersonalWeekday());
-  };
-
-  const isEmployeeRegularShift = (employee) => {
-    const shifts = Array.isArray(employee.regularShifts) ? employee.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key);
-    return shifts.includes(personalShift);
-  };
-
-  const getActiveEmployees = () => currentEmployees().filter(
-    (employee) => getEmployeeStatus(employee.name) === "anwesend"
-  );
-
   const getSortedEmployees = (list) =>
     [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), "de", { numeric: true }));
 
@@ -3559,7 +3534,7 @@ const tourColumns = Object.entries(
       ...(personalShift === "15-schluss" ? plan.end15 || [] : []),
     ]);
     return getSortedEmployees(
-      getActiveEmployees().filter((employee) => (
+      currentEmployees().filter((employee) => (
         !assignedNames.has(employee.name) && !unavailableNames.has(employee.name)
       ))
     );
@@ -4125,6 +4100,7 @@ const tourColumns = Object.entries(
     const targetShift = options?.shift || personalShift;
     const targetSections = sectionsForDepartment(targetDepartment);
     const targetEmployees = employeesForDepartment(targetDepartment, targetShift);
+    const targetWeekday = new Date(`${personalDate}T12:00:00`).getDay();
     const currentKey = getPersonalKey(personalDate, targetShift, targetDepartment);
     const currentPlan = personalPlan[currentKey] || {};
     const start12Names = targetDepartment === "waescherei"
@@ -4192,14 +4168,16 @@ const tourColumns = Object.entries(
       })
       .map(({ section }) => section);
 
-    const eligibleEmployeesForSection = (section) => targetEmployees
+    const eligibleEmployees = targetEmployees
       .filter((emp) => (employeeStatus[`${targetDepartment}_${emp.name}`] || "anwesend") === "anwesend")
-      .filter((emp) => isEmployeeRegularDay(emp))
-      .filter((emp) => !getEmployeeWeeklyDayOverage(emp))
       .filter((emp) => {
-        const shifts = Array.isArray(emp.regularShifts) ? emp.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key);
-        return shifts.includes(targetShift);
+        const days = Array.isArray(emp.regularDays) ? emp.regularDays : EMPTY_EMPLOYEE_FORM.regularDays;
+        const shifts = Array.isArray(emp.regularShifts) ? emp.regularShifts : EMPTY_EMPLOYEE_FORM.regularShifts;
+        return days.includes(targetWeekday) && shifts.includes(targetShift);
       })
+      .filter((emp) => !unavailable.has(emp.name) && !getEmployeeWeeklyDayOverage(emp));
+
+    const eligibleEmployeesForSection = (section) => eligibleEmployees
       .filter((emp) => !assigned.has(emp.name))
       .filter((emp) => emp.noGoWorkplace1 !== section.name && emp.noGoWorkplace2 !== section.name)
       .filter((emp) => isEmployeeAllowedInSection(emp.name, section));
@@ -5157,7 +5135,7 @@ const tourColumns = Object.entries(
       ]);
       const employees = personnelEmployeesByDept[department] || PERSONNEL_DEPARTMENTS[department]?.employees || [];
       return employees
-        .filter((employee) => (employeeStatus[`${department}_${employee.name}`] || "anwesend") === "anwesend")
+        .filter((employee) => assignmentsEditable || (employeeStatus[`${department}_${employee.name}`] || "anwesend") === "anwesend")
         .filter((employee) => !assignedNames.has(employee.name) && !unavailableNames.has(employee.name))
         .map((employee) => employee.name);
     };
