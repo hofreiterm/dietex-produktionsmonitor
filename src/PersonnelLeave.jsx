@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FileText, FileUp, Maximize, Minimize } from "lucide-react";
+import { FileText, FileUp, Maximize, Minimize, Trash2 } from "lucide-react";
 import PersonnelLeaveReport, { previousLeaveWeek } from "./PersonnelLeaveReport.jsx";
 import {
   austrianHoliday, LEAVE_DEPARTMENTS, LEAVE_TYPES, leaveDaysBetween,
@@ -7,6 +7,7 @@ import {
 } from "./personnel-leave.js";
 
 const table = "personnel_leave_days";
+const leaveClipboardType = "application/x-dietex-leave-selection";
 const sortNames = (a, b) => a.employee_name.localeCompare(b.employee_name, "de-AT");
 const control = "rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm";
 const action = "rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50";
@@ -105,7 +106,10 @@ export function useLeaveRows(client, userId, from, to, revision, autoRefresh = t
   return snapshot?.key === key && key ? snapshot : { rows: emptyRows, state: key ? "loading" : "idle" };
 }
 
-export default function PersonnelLeave({ client, access, employeesByDept, today, revision, onChange, portalHref }) {
+export default function PersonnelLeave({
+  client, access, employeesByDept, removedEmployees = emptyRows, directoryReady = true, onRemoveEmployee,
+  today, revision, onChange, portalHref,
+}) {
   const [firstVisible, setFirstVisible] = useState(() => {
     const year = Math.max(calendarYears[0], Math.min(calendarYears.at(-1), Number(today.slice(0, 4))));
     return calendarDayIndex.get(`${year}-${today.slice(5, 7)}-01`) ?? 0;
@@ -199,10 +203,11 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
   const directory = useMemo(() => Object.entries(LEAVE_DEPARTMENTS).flatMap(([dept]) => (employeesByDept[dept] || [])
     .map(({ name }) => ({ department: dept, employee_name: name }))), [employeesByDept]);
   const identities = useMemo(() => new Set(directory.map((row) => leaveIdentity(row.department, row.employee_name))), [directory]);
+  const removedIdentities = useMemo(() => new Set(removedEmployees.map((row) => leaveIdentity(row.department, row.employee_name))), [removedEmployees]);
   const grid = useMemo(() => {
     const employees = new Map();
     const statuses = new Map();
-    for (const row of [...directory, ...data.rows]) {
+    for (const row of [...directory, ...removedEmployees, ...data.rows]) {
       const id = leaveIdentity(row.department, row.employee_name);
       employees.set(id, { department: row.department, employee_name: row.employee_name });
       if (row.day) {
@@ -211,16 +216,16 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
       }
     }
     return { employees, statuses };
-  }, [directory, data.rows]);
+  }, [directory, removedEmployees, data.rows]);
   const visibleEmployees = useMemo(() => [...grid.employees.entries()].filter(([id, person]) => {
     if (department !== "all" && department !== person.department) return false;
-    if (id === edit?.id || id === dragRange?.id || (!onlyWithLeave && identities.has(id))) return true;
+    if (id === edit?.id || id === dragRange?.id || (!onlyWithLeave && (identities.has(id) || removedIdentities.has(id)))) return true;
     for (const day of grid.statuses.get(id)?.keys() || []) {
       const key = day.slice(0, 7);
       if (key >= monthKey && key <= lastMonthKey) return true;
     }
     return false;
-  }), [grid, identities, department, onlyWithLeave, monthKey, lastMonthKey, edit?.id, dragRange?.id]);
+  }), [grid, identities, removedIdentities, department, onlyWithLeave, monthKey, lastMonthKey, edit?.id, dragRange?.id]);
   const groupCount = department === "all" ? 2 : 1;
   const rowHeight = calendarHeight === null ? 16
     : Math.max(12, Math.min(18, Math.floor((calendarHeight - 34) / (visibleEmployees.length + groupCount))));
@@ -264,6 +269,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
     if (busy || event.button !== 0 || !event.isPrimary || event.pointerType === "touch") return;
     const cell = event.target.closest("button[data-leave-day]");
     if (!cell || cell.disabled) return;
+    calendar.current?.focus({ preventScroll: true });
     const { leavePerson: id, leaveDay: from } = cell.dataset;
     dragRef.current = {
       id, from, to: from, pointerId: event.pointerId, moved: false,
@@ -350,6 +356,88 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
       result("Gespeichert.");
     } catch {
       result("Nicht gespeichert. Bitte Zugriff oder Verbindung prüfen.", true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyDays = (event) => {
+    if (!edit || busy || !event.clipboardData) return;
+    event.preventDefault();
+    const start = calendarDayIndex.get(edit.from);
+    const end = calendarDayIndex.get(edit.to);
+    if (start === undefined || end === undefined || end < start || end - start >= 366) {
+      return result("Bitte einen gültigen Zeitraum zum Kopieren wählen.", true);
+    }
+    const statuses = grid.statuses.get(edit.id);
+    const pattern = calendarDays.slice(start, end + 1)
+      .map(({ day }) => selectedDates.has(day) ? statuses?.get(day) || null : null);
+    const count = pattern.filter(Boolean).length;
+    if (!count) return result("In der Auswahl sind keine Einträge zum Kopieren.", true);
+    event.clipboardData.setData(leaveClipboardType, JSON.stringify(pattern));
+    event.clipboardData.setData("text/plain", "DieTex Urlaubsliste");
+    setEdit(null);
+    result(count === 1 ? "1 Eintrag kopiert." : `${count} Einträge kopiert.`);
+  };
+
+  const pasteDays = async (event) => {
+    const raw = event.clipboardData?.getData(leaveClipboardType);
+    if (!raw || !edit || busy) return;
+    event.preventDefault();
+    let pattern;
+    try { pattern = raw.length <= 8192 && JSON.parse(raw); } catch { return; }
+    if (!Array.isArray(pattern) || !pattern.length || pattern.length > 366
+      || !pattern.some(Boolean) || !pattern.every((status) => status === null
+        || (typeof status === "string" && Object.hasOwn(LEAVE_TYPES, status)))) return;
+    const start = calendarDayIndex.get(edit.from);
+    const end = start + pattern.length - 1;
+    if (start === undefined || end >= calendarDays.length) return result("Die kopierten Tage passen nicht in den Kalender.", true);
+    if (selectedDates.size > 1 && (nonContiguous || selectedDates.size !== pattern.length)) {
+      return result("Bitte den ersten Zieltag oder einen gleich langen Zeitraum auswählen.", true);
+    }
+    const destination = calendarDays.slice(start, end + 1);
+    const entries = destination.flatMap(({ day }, index) => pattern[index]
+      ? [{ day, status: pattern[index], department: edit.department, employee_name: edit.employee_name }] : []);
+    setBusy(true);
+    try {
+      const { data: occupied, error: checkError } = await client.from(table).select("day")
+        .eq("department", edit.department).eq("employee_name", edit.employee_name)
+        .gte("day", destination[0].day).lte("day", destination.at(-1).day)
+        .order("day").range(0, 0);
+      if (checkError) throw checkError;
+      if (occupied.length) return result("Der Zielzeitraum ist nicht leer. Bestehende Einträge bleiben unverändert.", true);
+      const { count, error } = await client.from(table).upsert(entries, {
+        onConflict: "day,department,employee_name", ignoreDuplicates: true, count: "exact",
+      });
+      if (error) throw error;
+      onChange();
+      setEdit(null);
+      if (count != null && count !== entries.length) {
+        result(`${count} von ${entries.length} Einträgen eingefügt. Inzwischen belegte Tage blieben unverändert.`, true);
+      } else {
+        result(entries.length === 1 ? "1 Eintrag eingefügt." : `${entries.length} Einträge eingefügt.`);
+      }
+    } catch {
+      result("Einträge konnten nicht eingefügt werden. Bitte Zugriff oder Verbindung prüfen.", true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeEmployee = async (id, person) => {
+    if (busy || !directoryReady || identities.has(id) || !onRemoveEmployee) return;
+    if (!window.confirm(`${person.employee_name} aus der Urlaubsliste löschen? Alle Abwesenheitseinträge dieser Person in ${LEAVE_DEPARTMENTS[person.department]} werden dauerhaft gelöscht.`)) return;
+    setBusy(true);
+    try {
+      const { error } = await client.from(table).delete()
+        .eq("department", person.department).eq("employee_name", person.employee_name);
+      if (error) throw error;
+      onRemoveEmployee(person);
+      onChange();
+      if (edit?.id === id) setEdit(null);
+      result("Mitarbeiter aus der Urlaubsliste gelöscht.");
+    } catch {
+      result("Mitarbeiter konnte nicht gelöscht werden. Bitte Zugriff oder Verbindung prüfen.", true);
     } finally {
       setBusy(false);
     }
@@ -521,6 +609,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
       )}
       {data.state !== "ready" ? <p role="status" className="p-3 text-sm">{data.state === "error" ? "Monatsliste konnte nicht geladen werden." : "Monatsliste wird geladen…"}</p> : (
         <div ref={calendar} className="overflow-auto border border-slate-300 bg-white" tabIndex={0} aria-label="Kalenderraster"
+          onCopy={copyDays} onPaste={pasteDays}
           onScroll={(event) => {
             syncScroll(event.currentTarget);
             if (dragRef.current) updateDragTarget(dragRef.current, event.currentTarget);
@@ -563,9 +652,22 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
                     ))}
                     {renderEnd < calendarDays.length && <td aria-hidden="true" className={`bg-slate-200 p-0 ${rowDivider}`} />}
                   </tr>
-                  {visibleEmployees.filter(([, row]) => row.department === key).sort((a, b) => sortNames(a[1], b[1])).map(([id, row]) => (
-                    <tr key={id} className="h-6 md:h-[var(--leave-row-height)]">
-                      <th scope="row" title={row.employee_name} className={`sticky left-0 z-10 truncate border-r bg-white px-2 py-0 text-left ${rowDivider}`}>{row.employee_name}</th>
+                  {visibleEmployees.filter(([, row]) => row.department === key).sort((a, b) => sortNames(a[1], b[1])).map(([id, row]) => {
+                    const inactive = directoryReady && !identities.has(id);
+                    return <tr key={id} className="h-6 md:h-[var(--leave-row-height)]">
+                      <th scope="row" aria-label={row.employee_name} className={`sticky left-0 z-10 border-r bg-white px-2 py-0 text-left ${rowDivider}`}>
+                        <div className="flex items-center justify-between gap-1">
+                          <span title={inactive ? `${row.employee_name} (nicht im Mitarbeiterstamm)` : row.employee_name}
+                            className={`truncate ${inactive ? "text-slate-600 line-through" : ""}`}>{row.employee_name}</span>
+                          {inactive && onRemoveEmployee && (
+                            <button type="button" disabled={busy} className="grid h-6 w-5 shrink-0 place-items-center text-slate-600 hover:bg-red-50 hover:text-red-700 md:h-[var(--leave-cell-height)]"
+                              aria-label={`${row.employee_name} aus der Urlaubsliste löschen`} title="Aus Urlaubsliste löschen"
+                              onClick={() => removeEmployee(id, row)}>
+                              <Trash2 size={11} aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
+                      </th>
                       {renderStart > 0 && <td aria-hidden="true" className={`p-0 ${rowDivider}`} />}
                       {days.map(({ day, holiday, weekend, divider }) => {
                         const status = grid.statuses.get(id)?.get(day);
@@ -585,8 +687,8 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
                         </td>;
                       })}
                       {renderEnd < calendarDays.length && <td aria-hidden="true" className={`p-0 ${rowDivider}`} />}
-                    </tr>
-                  ))}
+                    </tr>;
+                  })}
                 </React.Fragment>
               ))}
               {!visibleEmployees.length && <tr><td colSpan={days.length + 1 + Number(renderStart > 0) + Number(renderEnd < calendarDays.length)} className="p-3 text-slate-500">
