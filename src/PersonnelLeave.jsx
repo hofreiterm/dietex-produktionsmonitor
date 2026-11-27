@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FileUp } from "lucide-react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FileText, FileUp, Maximize, Minimize } from "lucide-react";
+import PersonnelLeaveReport, { previousLeaveWeek } from "./PersonnelLeaveReport.jsx";
 import {
   austrianHoliday, LEAVE_DEPARTMENTS, LEAVE_TYPES, leaveDaysBetween,
   leaveIdentity, leaveMonthDays, readLeaveWorkbook,
@@ -39,7 +40,7 @@ export function useLeaveAccess(client, enabled) {
   return userId && permission?.userId === userId ? permission : { state: "loading" };
 }
 
-export function useLeaveRows(client, userId, from, to, revision) {
+export function useLeaveRows(client, userId, from, to, revision, autoRefresh = true) {
   const [snapshot, setSnapshot] = useState(null);
   const key = userId && from && to ? JSON.stringify([userId, from, to, revision]) : null;
   useEffect(() => {
@@ -71,14 +72,14 @@ export function useLeaveRows(client, userId, from, to, revision) {
     };
     load();
     const refresh = () => { if (document.visibilityState === "visible") load(); };
-    const interval = window.setInterval(refresh, 15000);
-    window.addEventListener("focus", refresh);
+    const interval = autoRefresh ? window.setInterval(refresh, 15000) : null;
+    if (autoRefresh) window.addEventListener("focus", refresh);
     return () => {
       active = false;
-      window.clearInterval(interval);
+      if (interval !== null) window.clearInterval(interval);
       window.removeEventListener("focus", refresh);
     };
-  }, [client, key, from, to]);
+  }, [client, key, from, to, autoRefresh]);
   return snapshot?.key === key && key ? snapshot : { rows: emptyRows, state: key ? "loading" : "idle" };
 }
 
@@ -93,6 +94,11 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [reportWeek, setReportWeek] = useState(null);
+  const [calendarHeight, setCalendarHeight] = useState(null);
+  const [calendarFullscreen, setCalendarFullscreen] = useState(false);
+  const calendarSection = useRef(null);
+  const calendar = useRef(null);
   const days = useMemo(() => leaveMonthDays(Number(year), month).map((day) => {
     const date = new Date(day);
     const dayOfWeek = date.getUTCDay();
@@ -104,7 +110,32 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
       divider: dayOfWeek === 0 ? "border-r-2 border-r-slate-500" : "border-r border-r-slate-300",
     };
   }), [year, month]);
-  const data = useLeaveRows(client, access.state === "allowed" ? access.userId : null, days[0]?.day, days.at(-1)?.day, revision);
+  const userId = access.state === "allowed" ? access.userId : null;
+  const data = useLeaveRows(client, userId, days[0]?.day, days.at(-1)?.day, revision);
+  const reportData = useLeaveRows(client, reportWeek ? userId : null, reportWeek?.from, reportWeek?.to, revision, false);
+  useLayoutEffect(() => {
+    const container = calendar.current;
+    if (!container) return;
+    const measure = () => {
+      const gridTop = container.getBoundingClientRect().top + (document.fullscreenElement ? 0 : window.scrollY);
+      setCalendarHeight(Math.max(180, Math.floor(window.innerHeight - gridTop - 20)));
+    };
+    measure();
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
+    observer?.observe(container.parentElement);
+    window.addEventListener("resize", measure);
+    document.addEventListener("fullscreenchange", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+      document.removeEventListener("fullscreenchange", measure);
+    };
+  }, [data.state, access.state]);
+  useEffect(() => {
+    const updateFullscreen = () => setCalendarFullscreen(document.fullscreenElement === calendarSection.current && !!calendarSection.current);
+    document.addEventListener("fullscreenchange", updateFullscreen);
+    return () => document.removeEventListener("fullscreenchange", updateFullscreen);
+  }, []);
   const directory = useMemo(() => Object.entries(LEAVE_DEPARTMENTS).flatMap(([dept]) => (employeesByDept[dept] || [])
     .map(({ name }) => ({ department: dept, employee_name: name }))), [employeesByDept]);
   const identities = useMemo(() => new Set(directory.map((row) => leaveIdentity(row.department, row.employee_name))), [directory]);
@@ -125,10 +156,21 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
       statuses,
     };
   }, [directory, data.rows, department, onlyWithLeave]);
+  const groupCount = department === "all" ? 2 : 1;
+  const rowHeight = calendarHeight === null ? 16
+    : Math.max(12, Math.min(18, Math.floor((calendarHeight - 34) / (grid.employees.length + groupCount))));
 
   const selectedDates = useMemo(() => new Set(datesForEdit(edit)), [edit]);
   const nonContiguous = edit?.dates && selectedDates.size !== leaveDaysBetween(edit.from, edit.to).length;
   const result = (message, error = false) => setNotice({ message, error });
+  const toggleCalendarFullscreen = async () => {
+    try {
+      if (calendarFullscreen) await document.exitFullscreen();
+      else await calendarSection.current.requestFullscreen();
+    } catch {
+      result("Vollbild konnte nicht geöffnet werden.", true);
+    }
+  };
   const selectDays = (personId, from, to, toggleSingle = false) => {
     const person = grid.employees.find(([id]) => id === personId)?.[1];
     if (!person) return;
@@ -278,8 +320,8 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
   );
 
   return (
-    <section aria-label="Urlaubsliste" className="space-y-3">
-      <header className="flex flex-wrap items-center gap-2 border-b bg-white p-3">
+    <section ref={calendarSection} aria-label="Urlaubsliste" className={`space-y-2 ${calendarFullscreen ? "overflow-auto bg-slate-50 p-2" : ""}`}>
+      <header className="flex flex-wrap items-center gap-2 border-b bg-white px-3 py-2">
         <h2 className="mr-auto text-xl font-black">Urlaubsliste</h2>
         <select aria-label="Jahr" className={control} disabled={busy} value={year} onChange={(event) => { setYear(event.target.value); setEdit(null); }}>
           <option>2026</option><option>2027</option>
@@ -301,7 +343,20 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
           <FileUp size={16} aria-hidden="true" /> Excel importieren
           <input disabled={busy} type="file" accept=".xlsx" multiple className="absolute inset-0 w-full cursor-pointer opacity-0" onChange={openImport} />
         </label>
+        <button type="button" disabled={busy} className={`inline-flex items-center gap-2 font-bold ${control}`}
+          onClick={() => setReportWeek(previousLeaveWeek())}>
+          <FileText size={16} aria-hidden="true" /> Wochenbericht
+        </button>
+        {document.fullscreenEnabled && (
+          <button type="button" className="grid size-8 place-items-center rounded-md border border-slate-300 bg-white"
+            aria-label={calendarFullscreen ? "Vollbild verlassen" : "Urlaubsliste im Vollbild"}
+            title={calendarFullscreen ? "Vollbild verlassen" : "Urlaubsliste im Vollbild"}
+            onClick={toggleCalendarFullscreen}>
+            {calendarFullscreen ? <Minimize size={16} aria-hidden="true" /> : <Maximize size={16} aria-hidden="true" />}
+          </button>
+        )}
       </header>
+      {reportWeek && <PersonnelLeaveReport week={reportWeek} data={reportData} onClose={() => setReportWeek(null)} />}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {Object.entries(LEAVE_TYPES).map(([key, type]) => (
           <span className={`rounded px-2 py-1 font-bold ${type.classes}`} key={key}>{type.short} · {type.label}</span>
@@ -356,20 +411,25 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
         </section>
       )}
       {data.state !== "ready" ? <p role="status" className="p-3 text-sm">{data.state === "error" ? "Monatsliste konnte nicht geladen werden." : "Monatsliste wird geladen…"}</p> : (
-        <div className="max-h-[70vh] overflow-auto border border-slate-300 bg-white">
+        <div ref={calendar} className="overflow-auto border border-slate-300 bg-white"
+          style={{ maxHeight: calendarHeight ?? "70vh", "--leave-row-height": `${rowHeight}px`, "--leave-cell-height": `${rowHeight - 1}px` }}>
           <table
-            className="w-full select-none border-separate border-spacing-0 text-xs"
+            className="w-full min-w-[860px] table-fixed select-none border-separate border-spacing-0 text-[11px] leading-none"
             onPointerDown={startDayDrag}
             onPointerMove={moveDayDrag}
             onPointerUp={finishDayDrag}
             onPointerCancel={finishDayDrag}
             onLostPointerCapture={finishDayDrag}
           >
+            <colgroup>
+              <col className="w-40" />
+              {days.map(({ day }) => <col key={day} />)}
+            </colgroup>
             <thead className="sticky top-0 z-20">
               <tr>
-                <th className={`sticky left-0 z-10 min-w-44 border-r bg-slate-100 px-2 py-2 text-left ${rowDivider}`} scope="col">Mitarbeiter</th>
+                <th className={`sticky left-0 z-10 border-r bg-slate-100 px-2 py-1 text-left ${rowDivider}`} scope="col">Mitarbeiter</th>
                 {days.map(({ day, label, holiday, weekend, divider }) => (
-                  <th key={day} title={holiday} scope="col" className={`min-w-8 px-1 py-1 text-center ${rowDivider} ${divider} ${holiday ? "bg-yellow-300 text-yellow-950" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
+                  <th key={day} title={holiday} scope="col" className={`py-1 text-center ${rowDivider} ${divider} ${holiday ? "bg-yellow-300 text-yellow-950" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
                     <div>{day.slice(8)}</div><div className="text-[10px] font-medium">{label}</div>
                   </th>
                 ))}
@@ -378,14 +438,14 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
             <tbody>
               {Object.entries(LEAVE_DEPARTMENTS).filter(([key]) => department === "all" || department === key).map(([key, label]) => (
                 <React.Fragment key={key}>
-                  <tr><th scope="rowgroup" className={`sticky left-0 bg-slate-200 px-2 py-1.5 text-left ${rowDivider}`}>{label}</th>
+                  <tr className="h-6 md:h-[var(--leave-row-height)]"><th scope="rowgroup" className={`sticky left-0 bg-slate-200 px-2 py-0 text-left ${rowDivider}`}>{label}</th>
                     {days.map(({ day, holiday, divider }) => (
-                      <td key={day} className={`${rowDivider} ${divider} ${holiday ? "bg-yellow-200" : "bg-slate-200"}`} />
+                      <td key={day} className={`p-0 ${rowDivider} ${divider} ${holiday ? "bg-yellow-200" : "bg-slate-200"}`} />
                     ))}
                   </tr>
                   {grid.employees.filter(([, row]) => row.department === key).sort((a, b) => sortNames(a[1], b[1])).map(([id, row]) => (
-                    <tr key={id}>
-                      <th scope="row" className={`sticky left-0 z-10 border-r bg-white px-2 py-1 text-left ${rowDivider}`}>{row.employee_name}</th>
+                    <tr key={id} className="h-6 md:h-[var(--leave-row-height)]">
+                      <th scope="row" title={row.employee_name} className={`sticky left-0 z-10 truncate border-r bg-white px-2 py-0 text-left ${rowDivider}`}>{row.employee_name}</th>
                       {days.map(({ day, holiday, weekend, divider }) => {
                         const status = grid.statuses.get(id)?.get(day);
                         const type = LEAVE_TYPES[status];
@@ -396,7 +456,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
                           <button type="button" disabled={busy} aria-label={labelText} aria-pressed={selected} title={labelText}
                             data-leave-day={day} data-leave-person={id}
                             style={selected ? selectionOutline : undefined}
-                            className={`block h-7 w-full min-w-8 font-black hover:ring-2 hover:ring-inset hover:ring-blue-500 ${type?.classes || (holiday ? "bg-yellow-100" : weekend ? "bg-slate-50" : "")}`}
+                            className={`block h-[23px] w-full font-black hover:ring-2 hover:ring-inset hover:ring-blue-500 md:h-[var(--leave-cell-height)] ${type?.classes || (holiday ? "bg-yellow-100" : weekend ? "bg-slate-50" : "")}`}
                             onClick={(event) => {
                               if (event.detail === 0 || event.nativeEvent.pointerType === "touch") selectDays(id, day, day, true);
                             }}
