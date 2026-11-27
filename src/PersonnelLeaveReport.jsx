@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Download, X } from "lucide-react";
 import { jsPDF } from "jspdf";
-import { LEAVE_DEPARTMENTS, LEAVE_TYPES } from "./personnel-leave.js";
+import { LEAVE_DEPARTMENTS, LEAVE_TYPES, leaveDaysBetween } from "./personnel-leave.js";
 
 const partsInVienna = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" });
 const displayDate = new Intl.DateTimeFormat("de-AT", { timeZone: "UTC", day: "2-digit", month: "2-digit", year: "numeric" });
 const displayDay = new Intl.DateTimeFormat("de-AT", { timeZone: "UTC", day: "2-digit", month: "2-digit" });
 const reportStatuses = ["urlaub", "za", "krank", "sonstiges"];
+const dayMillis = 86400000;
+const emptyMessage = "Keine bestätigten Abwesenheiten in diesem Zeitraum.";
 
 export function previousLeaveWeek(now = new Date()) {
   const parts = Object.fromEntries(partsInVienna.formatToParts(now).map(({ type, value }) => [type, value]));
@@ -19,7 +21,19 @@ export function previousLeaveWeek(now = new Date()) {
   return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
-function groupAbsences(rows) {
+function dateLabels(dates, includeYear) {
+  const sorted = [...dates].sort();
+  const labels = [];
+  const format = (day) => (includeYear ? displayDate : displayDay).format(new Date(day));
+  for (let i = 0; i < sorted.length; i++) {
+    const first = sorted[i];
+    while (Date.parse(sorted[i + 1]) - Date.parse(sorted[i]) === dayMillis) i++;
+    labels.push(first === sorted[i] ? format(first) : `${format(first)} - ${format(sorted[i])}`);
+  }
+  return labels;
+}
+
+function groupAbsences(rows, includeYear) {
   const groups = new Map();
   for (const { department, employee_name, status, day } of rows) {
     if (!reportStatuses.includes(status) || !Object.hasOwn(LEAVE_DEPARTMENTS, department)) continue;
@@ -32,11 +46,28 @@ function groupAbsences(rows) {
     || reportStatuses.indexOf(a.status) - reportStatuses.indexOf(b.status)
   ).map(({ dates, ...row }) => ({
     ...row,
-    days: [...dates].sort().map((day) => displayDay.format(new Date(day))).join(", "),
+    days: dateLabels(dates, includeYear),
   }));
 }
 
-function downloadReport(week, period, rows) {
+function wrapDates(ctx, days, width) {
+  const lines = [];
+  let line = "";
+  days.forEach((day, i) => {
+    const token = i < days.length - 1 ? `${day},` : day;
+    const next = line ? `${line} ${token}` : token;
+    if (line && ctx.measureText(next).width > width) {
+      lines.push(line);
+      line = token;
+    } else {
+      line = next;
+    }
+  });
+  if (line) lines.push(line);
+  return lines;
+}
+
+function downloadReport(range, period, rows) {
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
   const canvas = document.createElement("canvas");
   canvas.width = 1120;
@@ -45,15 +76,32 @@ function downloadReport(week, period, rows) {
   if (!ctx) throw new Error("Canvas unavailable");
   const columns = [{ label: "Bereich", x: 66, width: 131 }, { label: "Mitarbeiter", x: 210, width: 244 },
     { label: "Status", x: 468, width: 226 }, { label: "Tage", x: 707, width: 350 }];
-  const rowsPerPage = 32;
-  const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
-  for (let page = 0; page < pageCount; page++) {
+  const bodyHeight = 1280;
+  const lineHeight = 24;
+  const maxLines = Math.floor((bodyHeight - 16) / lineHeight);
+  const pages = [[]];
+  let used = 0;
+  ctx.font = "19px Arial, sans-serif";
+  rows.forEach((row) => {
+    const lines = wrapDates(ctx, row.days, columns[3].width);
+    for (let i = 0; i < lines.length; i += maxLines) {
+      const chunk = lines.slice(i, i + maxLines);
+      const height = 16 + chunk.length * lineHeight;
+      if (used + height > bodyHeight) {
+        pages.push([]);
+        used = 0;
+      }
+      pages.at(-1).push({ row, lines: chunk, height });
+      used += height;
+    }
+  });
+  for (let page = 0; page < pages.length; page++) {
     if (page) pdf.addPage();
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#0f172a";
     ctx.font = "bold 38px Arial, sans-serif";
-    ctx.fillText("DieTex Wochenbericht", 58, 86);
+    ctx.fillText("DieTex Abwesenheitsbericht", 58, 86);
     ctx.font = "22px Arial, sans-serif";
     ctx.fillText(period, 58, 122);
     ctx.fillStyle = "#e2e8f0";
@@ -62,29 +110,45 @@ function downloadReport(week, period, rows) {
     ctx.font = "bold 19px Arial, sans-serif";
     columns.forEach(({ label, x }) => ctx.fillText(label, x, 180));
     ctx.font = "19px Arial, sans-serif";
-    if (!rows.length) ctx.fillText("Keine bestätigten Abwesenheiten in dieser Woche.", 66, 228);
-    rows.slice(page * rowsPerPage, (page + 1) * rowsPerPage).forEach((row, i) => {
-      const y = 193 + i * 40;
+    if (!rows.length) ctx.fillText(emptyMessage, 66, 228);
+    let y = 193;
+    pages[page].forEach(({ row, lines, height }, i) => {
       ctx.fillStyle = i % 2 ? "#f8fafc" : "#ffffff";
-      ctx.fillRect(58, y, 1004, 40);
+      ctx.fillRect(58, y, 1004, height);
       ctx.fillStyle = "#0f172a";
-      const values = [LEAVE_DEPARTMENTS[row.department], row.employee_name, LEAVE_TYPES[row.status].label, row.days];
-      columns.forEach(({ x, width }, col) => ctx.fillText(values[col], x, y + 26, width));
+      const values = [LEAVE_DEPARTMENTS[row.department], row.employee_name, LEAVE_TYPES[row.status].label];
+      values.forEach((value, col) => ctx.fillText(value, columns[col].x, y + 26, columns[col].width));
+      lines.forEach((line, index) => ctx.fillText(line, columns[3].x, y + 26 + lineHeight * index, columns[3].width));
+      y += height;
     });
     ctx.fillStyle = "#475569";
     ctx.font = "18px Arial, sans-serif";
-    ctx.fillText(`Seite ${page + 1} von ${pageCount}`, 58, 1532);
+    ctx.fillText(`Seite ${page + 1} von ${pages.length}`, 58, 1532);
     pdf.addImage(canvas.toDataURL("image/png"), "PNG", 0, 0, 210, 297);
   }
-  pdf.save(`dietex-wochenbericht-${week.from}.pdf`);
+  pdf.save(`dietex-abwesenheiten-${range.from}-bis-${range.to}.pdf`);
 }
 
-export default function PersonnelLeaveReport({ week, data, onClose }) {
+export default function PersonnelLeaveReport({ range, data, onChangeRange, onClose }) {
   const dialog = useRef(null);
+  const [draft, setDraft] = useState(() => ({ from: range.from, to: range.to }));
+  const [rangeError, setRangeError] = useState("");
   const [exportError, setExportError] = useState(false);
-  const absences = useMemo(() => groupAbsences(data.rows), [data.rows]);
-  const period = `${displayDate.format(new Date(week.from))} - ${displayDate.format(new Date(week.to))}`;
+  const includeYear = range.from.slice(0, 4) !== range.to.slice(0, 4);
+  const absences = useMemo(() => groupAbsences(data.rows, includeYear), [data.rows, includeYear]);
+  const period = `${displayDate.format(new Date(range.from))} - ${displayDate.format(new Date(range.to))}`;
+  const draftChanged = draft.from !== range.from || draft.to !== range.to;
   useEffect(() => { dialog.current?.showModal(); }, []);
+  const applyRange = (nextRange) => {
+    if (!leaveDaysBetween(nextRange.from, nextRange.to).length) {
+      setRangeError("Bitte einen gültigen Zeitraum von höchstens 366 Tagen eingeben.");
+      return;
+    }
+    setDraft(nextRange);
+    setRangeError("");
+    setExportError(false);
+    onChangeRange(nextRange);
+  };
 
   return (
     <dialog ref={dialog} onClose={onClose} aria-labelledby="leave-report-title"
@@ -94,9 +158,9 @@ export default function PersonnelLeaveReport({ week, data, onClose }) {
           <h2 id="leave-report-title" className="text-lg font-black">Wochenbericht</h2>
           <p className="text-sm text-slate-600">{period}</p>
         </div>
-        <button type="button" disabled={data.state !== "ready"} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-bold disabled:opacity-50"
+        <button type="button" disabled={data.state !== "ready" || draftChanged} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-2.5 py-1.5 text-sm font-bold disabled:opacity-50"
           onClick={() => {
-            try { downloadReport(week, period, absences); setExportError(false); }
+            try { downloadReport(range, period, absences); setExportError(false); }
             catch { setExportError(true); }
           }}>
           <Download size={16} aria-hidden="true" /> PDF herunterladen
@@ -106,11 +170,26 @@ export default function PersonnelLeaveReport({ week, data, onClose }) {
           <X size={16} aria-hidden="true" />
         </button>
       </header>
+      <form className="flex flex-wrap items-end gap-2 border-b bg-slate-50 px-3 py-2"
+        onSubmit={(event) => { event.preventDefault(); applyRange(draft); }}>
+        <label className="grid gap-1 text-xs font-bold">Von
+          <input type="date" required className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+            value={draft.from} onChange={(event) => { setDraft({ ...draft, from: event.target.value }); setRangeError(""); }} />
+        </label>
+        <label className="grid gap-1 text-xs font-bold">Bis
+          <input type="date" required className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+            value={draft.to} onChange={(event) => { setDraft({ ...draft, to: event.target.value }); setRangeError(""); }} />
+        </label>
+        <button type="submit" className="rounded-md bg-blue-700 px-3 py-1.5 text-sm font-bold text-white">Anzeigen</button>
+        <button type="button" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-bold"
+          onClick={() => applyRange(previousLeaveWeek())}>Vorwoche</button>
+      </form>
+      {rangeError && <p role="alert" className="px-3 pt-3 text-sm text-red-700">{rangeError}</p>}
       {exportError && <p role="alert" className="px-3 pt-3 text-sm text-red-700">PDF konnte nicht erstellt werden.</p>}
       {data.state !== "ready" ? (
         <p role="status" className="p-3 text-sm">{data.state === "error" ? "Bericht konnte nicht geladen werden." : "Bericht wird geladen…"}</p>
       ) : !absences.length ? (
-        <p className="p-3 text-sm">Keine bestätigten Abwesenheiten in dieser Woche.</p>
+        <p className="p-3 text-sm">{emptyMessage}</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] border-collapse text-left text-xs">
@@ -124,7 +203,7 @@ export default function PersonnelLeaveReport({ week, data, onClose }) {
                   <td className="px-3 py-2">{LEAVE_DEPARTMENTS[row.department]}</td>
                   <th scope="row" className="px-3 py-2">{row.employee_name}</th>
                   <td className="px-3 py-2">{LEAVE_TYPES[row.status].label}</td>
-                  <td className="px-3 py-2 tabular-nums">{row.days}</td>
+                  <td className="px-3 py-2 tabular-nums">{row.days.join(", ")}</td>
                 </tr>
               ))}
             </tbody>
