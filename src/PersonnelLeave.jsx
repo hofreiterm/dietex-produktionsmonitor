@@ -12,6 +12,7 @@ const action = "rounded-md bg-blue-700 px-3 py-2 text-sm font-bold text-white ho
 const weekday = new Intl.DateTimeFormat("de-AT", { weekday: "short", timeZone: "UTC" });
 const monthLabel = new Intl.DateTimeFormat("de-AT", { month: "long", timeZone: "UTC" });
 const emptyRows = [];
+const rowDivider = "border-b border-b-slate-400/70";
 const selectionOutline = { boxShadow: "inset 0 0 0 2px #0f172a, inset 0 0 0 3px #fff" };
 const datesForEdit = (edit) => edit ? edit.dates ?? leaveDaysBetween(edit.from, edit.to) : emptyRows;
 
@@ -366,9 +367,9 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
           >
             <thead className="sticky top-0 z-20">
               <tr>
-                <th className="sticky left-0 z-10 min-w-44 border-b border-r bg-slate-100 px-2 py-2 text-left" scope="col">Mitarbeiter</th>
+                <th className={`sticky left-0 z-10 min-w-44 border-r bg-slate-100 px-2 py-2 text-left ${rowDivider}`} scope="col">Mitarbeiter</th>
                 {days.map(({ day, label, holiday, weekend, divider }) => (
-                  <th key={day} title={holiday} scope="col" className={`min-w-8 border-b px-1 py-1 text-center ${divider} ${holiday ? "bg-yellow-300 text-yellow-950" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
+                  <th key={day} title={holiday} scope="col" className={`min-w-8 px-1 py-1 text-center ${rowDivider} ${divider} ${holiday ? "bg-yellow-300 text-yellow-950" : weekend ? "bg-slate-200" : "bg-slate-100"}`}>
                     <div>{day.slice(8)}</div><div className="text-[10px] font-medium">{label}</div>
                   </th>
                 ))}
@@ -377,21 +378,21 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
             <tbody>
               {Object.entries(LEAVE_DEPARTMENTS).filter(([key]) => department === "all" || department === key).map(([key, label]) => (
                 <React.Fragment key={key}>
-                  <tr><th scope="rowgroup" className="sticky left-0 border-b bg-slate-200 px-2 py-1.5 text-left">{label}</th>
+                  <tr><th scope="rowgroup" className={`sticky left-0 bg-slate-200 px-2 py-1.5 text-left ${rowDivider}`}>{label}</th>
                     {days.map(({ day, holiday, divider }) => (
-                      <td key={day} className={`border-b ${divider} ${holiday ? "bg-yellow-200" : "bg-slate-200"}`} />
+                      <td key={day} className={`${rowDivider} ${divider} ${holiday ? "bg-yellow-200" : "bg-slate-200"}`} />
                     ))}
                   </tr>
                   {grid.employees.filter(([, row]) => row.department === key).sort((a, b) => sortNames(a[1], b[1])).map(([id, row]) => (
                     <tr key={id}>
-                      <th scope="row" className="sticky left-0 z-10 border-b border-r bg-white px-2 py-1 text-left">{row.employee_name}</th>
+                      <th scope="row" className={`sticky left-0 z-10 border-r bg-white px-2 py-1 text-left ${rowDivider}`}>{row.employee_name}</th>
                       {days.map(({ day, holiday, weekend, divider }) => {
                         const status = grid.statuses.get(id)?.get(day);
                         const type = LEAVE_TYPES[status];
                         const selected = (edit?.id === id && selectedDates.has(day))
                           || (dragRange?.id === id && day >= dragRange.from && day <= dragRange.to);
                         const labelText = `${row.employee_name} · ${day} · ${type?.label || holiday || "Kein Eintrag"}`;
-                        return <td className={`border-b p-0 ${divider}`} key={day}>
+                        return <td className={`p-0 ${rowDivider} ${divider}`} key={day}>
                           <button type="button" disabled={busy} aria-label={labelText} aria-pressed={selected} title={labelText}
                             data-leave-day={day} data-leave-person={id}
                             style={selected ? selectionOutline : undefined}
