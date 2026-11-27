@@ -5,6 +5,8 @@ import { createClient } from "@supabase/supabase-js";
 import { MessageCircle, Mic, Phone } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
+import PersonnelLeave, { useLeaveAccess, useLeaveRows } from "./PersonnelLeave.jsx";
+import { LEAVE_TYPES, leaveIdentity, mergeLeaveStatuses } from "./personnel-leave.js";
 import personnelFloorPlanUrl from "./assets/plan-waescherei-putzerei.jpg";
 
 const supabase = createClient(
@@ -1067,6 +1069,23 @@ function App() {
   const [departmentDraft, setDepartmentDraft] = useState([]);
   const [personnelNoteDraft, setPersonnelNoteDraft] = useState([]);
   const [personnelSyncStatus, setPersonnelSyncStatus] = useState("loading");
+  const [leaveRevision, setLeaveRevision] = useState(0);
+  const leaveAccess = useLeaveAccess(supabase, !fixedView);
+  const useLeaveInPlanning = leaveAccess.state === "allowed" && (view === "personalplanung" || view === "personalmonitor");
+  const selectedLeave = useLeaveRows(supabase, useLeaveInPlanning ? leaveAccess.userId : null, personalDate, personalDate, leaveRevision);
+  const leaveByDepartment = useMemo(() => {
+    const byDepartment = { waescherei: [], putzerei: [] };
+    const knownEmployees = new Set(Object.entries(personnelEmployeesByDept).flatMap(([department, employees]) =>
+      (employees || []).map(({ name }) => leaveIdentity(department, name))
+    ));
+    for (const entry of selectedLeave.rows) {
+      if (knownEmployees.has(leaveIdentity(entry.department, entry.employee_name))) byDepartment[entry.department].push(entry);
+    }
+    return byDepartment;
+  }, [selectedLeave.rows, personnelEmployeesByDept]);
+  const leaveStatusByEmployee = useMemo(() => new Map(Object.values(leaveByDepartment).flat()
+    .filter((entry) => entry.status !== "angefragt")
+    .map((entry) => [leaveIdentity(entry.department, entry.employee_name), entry.status])), [leaveByDepartment]);
   const [personnelVoiceListening, setPersonnelVoiceListening] = useState(false);
   const [personnelVoiceStatus, setPersonnelVoiceStatus] = useState("");
 
@@ -2779,7 +2798,20 @@ const tourColumns = Object.entries(
 
     return resolved;
   };
-  const planForDepartment = (department, shift = personalShift) => personalPlan[getPersonalKey(personalDate, shift, department)] || {};
+  const rawPlanForDepartment = (department, shift = personalShift) => personalPlan[getPersonalKey(personalDate, shift, department)] || {};
+  const planForDepartment = (department, shift = personalShift) =>
+    mergeLeaveStatuses(rawPlanForDepartment(department, shift), leaveByDepartment[department] || []);
+  const leaveConflicts = () => {
+    if (!leaveStatusByEmployee.size) return [];
+    return Object.keys(PERSONNEL_DEPARTMENTS).flatMap((department) => {
+      const plan = rawPlanForDepartment(department);
+      const assigned = new Set(sectionsForDepartment(department).flatMap((section) => plan[section.name] || []));
+      return employeesForDepartment(department).flatMap((employee) => {
+        const status = leaveStatusByEmployee.get(leaveIdentity(employee.borrowedFrom || department, employee.name));
+        return status && assigned.has(employee.name) ? [`${employee.name} (${LEAVE_TYPES[status].label})`] : [];
+      });
+    });
+  };
   const sectionTargetForDepartment = (section, department, shift = personalShift) => {
     if (!section) return null;
     const minimum = section.priority === "must" ? 1 : 0;
@@ -2868,7 +2900,7 @@ const tourColumns = Object.entries(
     return names || [];
   };
 
-  const getCurrentPersonalPlan = () => personalPlan[getPersonalKey()] || {};
+  const getCurrentPersonalPlan = () => planForDepartment(personalDepartment);
 
   const getEmployeesInSection = (sectionName) => getCurrentPersonalPlan()[sectionName] || [];
 
@@ -3306,7 +3338,7 @@ const tourColumns = Object.entries(
     };
   };
 
-  const applyPersonnelVoiceCommand = (transcript, interpretedCommand = null) => {
+  const applyPersonnelVoiceCommand = async (transcript, interpretedCommand = null) => {
     const command = interpretedCommand || interpretPersonnelVoiceCommand(transcript);
     if (!command) {
       setPersonnelVoiceStatus(`Nicht eindeutig erkannt: „${transcript.trim()}“`);
@@ -3345,7 +3377,10 @@ const tourColumns = Object.entries(
 
     if (command.type === "suggestion") {
       setPersonalDepartment(command.department);
-      applyPersonnelSuggestions({ department: command.department, shift: command.shift });
+      if (!await applyPersonnelSuggestions({ department: command.department, shift: command.shift })) {
+        setPersonnelVoiceStatus("KI-Vorschlag konnte nicht erstellt werden.");
+        return;
+      }
       const departmentLabel = PERSONNEL_DEPARTMENTS[command.department]?.label || command.department;
       setPersonnelVoiceStatus(`KI-Vorschlag erstellt: ${departmentLabel} · ${getPersonnelShiftLabel(command.shift)}`);
       return;
@@ -4095,7 +4130,22 @@ const tourColumns = Object.entries(
     "putzerei",
   ];
 
-  const applyPersonnelSuggestions = (options = {}) => {
+  const applyPersonnelSuggestions = async (options = {}) => {
+    if (useLeaveInPlanning && selectedLeave.state !== "ready") {
+      window.alert("Die Urlaubsliste konnte für diesen Tag noch nicht geladen werden. Bitte erneut versuchen.");
+      return null;
+    }
+    if (!useLeaveInPlanning) {
+      const { data: leaveRequired, error } = await supabase.rpc("personnel_leave_planning_required");
+      if (leaveRequired) {
+        window.alert("Für den KI-Vorschlag bitte mit einem für die Urlaubsliste freigegebenen Konto anmelden.");
+        return null;
+      }
+      if (error && error.code !== "PGRST202") {
+        window.alert("Die Freigabe für den KI-Vorschlag konnte nicht geprüft werden. Bitte erneut versuchen.");
+        return null;
+      }
+    }
     const targetDepartment = typeof options === "string" ? options : options?.department || personalDepartment;
     const targetShift = options?.shift || personalShift;
     const targetSections = sectionsForDepartment(targetDepartment);
@@ -4170,6 +4220,7 @@ const tourColumns = Object.entries(
 
     const eligibleEmployees = targetEmployees
       .filter((emp) => (employeeStatus[`${targetDepartment}_${emp.name}`] || "anwesend") === "anwesend")
+      .filter((emp) => !leaveStatusByEmployee.has(leaveIdentity(emp.borrowedFrom || targetDepartment, emp.name)))
       .filter((emp) => {
         const days = Array.isArray(emp.regularDays) ? emp.regularDays : EMPTY_EMPLOYEE_FORM.regularDays;
         const shifts = Array.isArray(emp.regularShifts) ? emp.regularShifts : EMPTY_EMPLOYEE_FORM.regularShifts;
@@ -4769,8 +4820,8 @@ const tourColumns = Object.entries(
     });
 
     const plans = {
-      waescherei: planForDepartment("waescherei", shiftKey),
-      putzerei: planForDepartment("putzerei", shiftKey),
+      waescherei: rawPlanForDepartment("waescherei", shiftKey),
+      putzerei: rawPlanForDepartment("putzerei", shiftKey),
     };
     const start12Names = personalPlan[getPersonalKey(personalDate, "07-12", "waescherei")]?.start12 || [];
     const assignedNames = new Set(["waescherei", "putzerei"].flatMap((department) => [
@@ -6681,11 +6732,31 @@ const tourColumns = Object.entries(
               </Button>
             ))}
             {!takeoverMode && !expeditMode && (
+              <Button active={view === "urlaubsliste"} onClick={() => goToView("urlaubsliste")}>Urlaubsliste</Button>
+            )}
+            {!takeoverMode && !expeditMode && (
               <Button onClick={() => window.location.assign(externalAccessPortal ? "/pflegehilfe?portal=personalplanung" : "/pflegehilfe")}>
                 Pflegehilfe
               </Button>
             )}
           </nav>
+        )}
+
+        {view === "urlaubsliste" && !fixedView && (
+          <PersonnelLeave
+            client={supabase}
+            access={leaveAccess}
+            employeesByDept={personnelEmployeesByDept}
+            today={personalDate}
+            revision={leaveRevision}
+            onChange={() => setLeaveRevision((revision) => revision + 1)}
+            portalHref="/?portal=personalplanung&view=urlaubsliste"
+          />
+        )}
+        {useLeaveInPlanning && leaveConflicts().length > 0 && (
+          <p role="status" className="mb-2 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm font-bold text-amber-950">
+            Abwesend und in dieser Schicht eingeteilt: {leaveConflicts().join(" · ")}
+          </p>
         )}
 
         {view === "annahme" && (
