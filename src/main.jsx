@@ -2847,12 +2847,15 @@ const tourColumns = Object.entries(
 
     return assignedDates;
   };
-  const isEmployeeWithinWeeklyDayLimit = (employee, date = personalDate) => {
+  const getEmployeeWeeklyDayOverage = (employee, date = personalDate) => {
     const limit = Number(employee?.maxWorkDaysPerWeek);
-    if (!Number.isInteger(limit) || limit < 1) return true;
+    if (!Number.isInteger(limit) || limit < 1) return null;
     const assignedDates = getEmployeeAssignedWorkDates(employee.name, date);
-    return assignedDates.has(date) || assignedDates.size < limit;
+    if (assignedDates.has(date) || assignedDates.size < limit) return null;
+    return { name: employee.name, limit, total: assignedDates.size + 1 };
   };
+  const formatWeeklyDayOverage = ({ name, limit, total }) =>
+    `${name}: ${total} Arbeitstage in dieser Kalenderwoche (maximal ${limit}).`;
   const isPersonnelOverviewStatusVisible = (zoneKey, shift = personalShift) => {
     if (zoneKey === "end15") return shift !== "07-12";
     if (zoneKey === "end18") return shift === "15-schluss";
@@ -2877,7 +2880,9 @@ const tourColumns = Object.entries(
     return null;
   };
 
-  const setEmployeeToSection = (employeeName, sectionName, targetShift = personalShift, department = personalDepartment) => {
+  const setEmployeeToSection = (
+    employeeName, sectionName, targetShift = personalShift, department = personalDepartment, sourceDepartment = department
+  ) => {
     const departmentEmployees = personnelEmployeesByDept[department] || PERSONNEL_DEPARTMENTS[department]?.employees || [];
     const counterpartDepartment = department === "putzerei" ? "waescherei" : "putzerei";
     const counterpartEmployees = personnelEmployeesByDept[counterpartDepartment] || PERSONNEL_DEPARTMENTS[counterpartDepartment]?.employees || [];
@@ -2889,23 +2894,17 @@ const tourColumns = Object.entries(
     const destinationSection = sectionsForDepartment(department).find((section) => section.name === sectionName);
     const isWorkplace = Boolean(destinationSection);
 
-    if (isWorkplace && employee && !isEmployeeWithinWeeklyDayLimit(employee, personalDate)) {
-      const assignedDates = [...getEmployeeAssignedWorkDates(employeeName, personalDate)].sort();
-      const formattedDates = assignedDates.map((date) => new Date(`${date}T12:00:00`).toLocaleDateString("de-AT", {
-        weekday: "short",
-        day: "2-digit",
-        month: "2-digit",
-      }));
-      const confirmed = window.confirm(
-        `${employeeName} ist in dieser Kalenderwoche bereits an ${assignedDates.length} Tagen eingeteilt `
-        + `(${formattedDates.join(", ")}). Das eingestellte Wochenkontingent von ${employee.maxWorkDaysPerWeek} Tagen ist erreicht.\n\n`
-        + `Trotzdem am ${new Date(`${personalDate}T12:00:00`).toLocaleDateString("de-AT")} einteilen?`
-      );
-      if (!confirmed) return false;
+    const overage = isWorkplace ? getEmployeeWeeklyDayOverage(employee) : null;
+    if (overage && !window.confirm(
+      `Wochenlimit wird überschritten!\n\n${formatWeeklyDayOverage(overage)}\n\nTrotzdem einteilen?`
+    )) return false;
+    if (sectionName === "start12" && department !== "waescherei") return false;
+
+    if (sourceDepartment !== department) {
+      if (!setEmployeeToSection(employeeName, department, targetShift, sourceDepartment)) return false;
     }
 
     if (["start12", "end12", "end15", "end18"].includes(sectionName)) {
-      if (sectionName === "start12" && department !== "waescherei") return false;
       const allowedShiftsByTimingZone = {
         start12: new Set(["12-15", "15-schluss"]),
         end12: new Set(["07-12"]),
@@ -3456,14 +3455,10 @@ const tourColumns = Object.entries(
 
   const moveOverviewEmployee = (draggedEmployee, targetDepartment, sectionName) => {
     if (!draggedEmployee?.name || !draggedEmployee?.department) return false;
-    const sourceDepartment = draggedEmployee.department;
-    const destinationDepartment = targetDepartment || sourceDepartment;
-
-    if (sourceDepartment !== destinationDepartment) {
-      if (!setEmployeeToSection(draggedEmployee.name, destinationDepartment, personalShift, sourceDepartment)) return false;
-    }
-
-    const moved = setEmployeeToSection(draggedEmployee.name, sectionName, personalShift, destinationDepartment);
+    const destinationDepartment = targetDepartment || draggedEmployee.department;
+    const moved = setEmployeeToSection(
+      draggedEmployee.name, sectionName, personalShift, destinationDepartment, draggedEmployee.department
+    );
     if (moved) {
       setPersonalDepartment(destinationDepartment);
       setSelectedPersonnelEmployee(null);
@@ -3892,7 +3887,22 @@ const tourColumns = Object.entries(
     }
 
     const copiedLabels = sourceDepartments.map(({ label }) => label).join(" und ");
-    if (!window.confirm(`Kompletten Tag vom ${sourceDate} auf ${personalDate} kopieren? Für ${copiedLabels} werden alle drei Zielschichten ersetzt.`)) return false;
+    const copiedNames = new Set(sourceDepartments.flatMap(({ department, plans }) =>
+      Object.values(plans).flatMap((plan) =>
+        sectionsForDepartment(department).flatMap((section) => plan?.[section.name] || [])
+      )
+    ));
+    const overages = getAllPersonnelEmployees()
+      .filter((employee) => copiedNames.has(employee.name))
+      .map((employee) => getEmployeeWeeklyDayOverage(employee))
+      .filter(Boolean);
+    const weeklyWarning = overages.length
+      ? `\n\nWochenlimit wird überschritten!\n${overages.map(formatWeeklyDayOverage).join("\n")}\n\nTrotzdem kopieren?`
+      : "";
+    if (!window.confirm(
+      `Kompletten Tag vom ${sourceDate} auf ${personalDate} kopieren? Für ${copiedLabels} werden alle drei Zielschichten ersetzt.`
+      + weeklyWarning
+    )) return false;
     setCopyPersonalDate(sourceDate);
 
     setPersonalPlan((prev) => {
@@ -4185,7 +4195,7 @@ const tourColumns = Object.entries(
     const eligibleEmployeesForSection = (section) => targetEmployees
       .filter((emp) => (employeeStatus[`${targetDepartment}_${emp.name}`] || "anwesend") === "anwesend")
       .filter((emp) => isEmployeeRegularDay(emp))
-      .filter((emp) => isEmployeeWithinWeeklyDayLimit(emp, personalDate))
+      .filter((emp) => !getEmployeeWeeklyDayOverage(emp))
       .filter((emp) => {
         const shifts = Array.isArray(emp.regularShifts) ? emp.regularShifts : PERSONNEL_SHIFTS.map((shift) => shift.key);
         return shifts.includes(targetShift);
