@@ -94,7 +94,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
-  const [reportWeek, setReportWeek] = useState(null);
+  const [reportRange, setReportRange] = useState(null);
   const [calendarHeight, setCalendarHeight] = useState(null);
   const [calendarFullscreen, setCalendarFullscreen] = useState(false);
   const calendarSection = useRef(null);
@@ -112,7 +112,9 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
   }), [year, month]);
   const userId = access.state === "allowed" ? access.userId : null;
   const data = useLeaveRows(client, userId, days[0]?.day, days.at(-1)?.day, revision);
-  const reportData = useLeaveRows(client, reportWeek ? userId : null, reportWeek?.from, reportWeek?.to, revision, false);
+  const reportData = useLeaveRows(client, reportRange ? userId : null, reportRange?.from, reportRange?.to,
+    `${revision}:${reportRange?.request ?? 0}`, false);
+  const loadReportRange = (range) => setReportRange((prev) => ({ ...range, request: (prev?.request ?? 0) + 1 }));
   useLayoutEffect(() => {
     const container = calendar.current;
     if (!container) return;
@@ -344,7 +346,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
           <input disabled={busy} type="file" accept=".xlsx" multiple className="absolute inset-0 w-full cursor-pointer opacity-0" onChange={openImport} />
         </label>
         <button type="button" disabled={busy} className={`inline-flex items-center gap-2 font-bold ${control}`}
-          onClick={() => setReportWeek(previousLeaveWeek())}>
+          onClick={() => loadReportRange(previousLeaveWeek())}>
           <FileText size={16} aria-hidden="true" /> Wochenbericht
         </button>
         {document.fullscreenEnabled && (
@@ -356,7 +358,8 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
           </button>
         )}
       </header>
-      {reportWeek && <PersonnelLeaveReport week={reportWeek} data={reportData} onClose={() => setReportWeek(null)} />}
+      {reportRange && <PersonnelLeaveReport range={reportRange} data={reportData}
+        onChangeRange={loadReportRange} onClose={() => setReportRange(null)} />}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {Object.entries(LEAVE_TYPES).map(([key, type]) => (
           <span className={`rounded px-2 py-1 font-bold ${type.classes}`} key={key}>{type.short} · {type.label}</span>
