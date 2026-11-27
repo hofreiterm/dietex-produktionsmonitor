@@ -464,7 +464,7 @@ export default function PersonnelLeave({ client, access, employeesByDept, today,
           </button>
         )}
       </header>
-      {reportRange && <PersonnelLeaveReport range={reportRange} data={reportData}
+      {reportRange && <PersonnelLeaveReport range={reportRange} data={reportData} directory={directory}
         onChangeRange={loadReportRange} onClose={() => setReportRange(null)} />}
       <div className="flex flex-wrap items-center gap-2 text-xs">
         {Object.entries(LEAVE_TYPES).map(([key, type]) => (
