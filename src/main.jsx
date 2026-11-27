@@ -1102,9 +1102,9 @@ function App() {
     }
     return byDepartment;
   }, [selectedLeave.rows, personnelEmployeesByDept]);
-  const leaveStatusByEmployee = useMemo(() => new Map(Object.values(leaveByDepartment).flat()
+  const leaveStatusByEmployee = useMemo(() => new Map(Object.values(leaveByDepartment).flatMap((entries) => entries
     .filter((entry) => entry.status !== "angefragt")
-    .map((entry) => [leaveIdentity(entry.department, entry.employee_name), entry.status])), [leaveByDepartment]);
+    .map((entry) => [leaveIdentity(entry.department, entry.employee_name), entry.status]))), [leaveByDepartment]);
   const [personnelVoiceListening, setPersonnelVoiceListening] = useState(false);
   const [personnelVoiceStatus, setPersonnelVoiceStatus] = useState("");
 
