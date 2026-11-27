@@ -6,7 +6,7 @@ import { MessageCircle, Mic, Phone } from "lucide-react";
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import PersonnelLeave, { useLeaveAccess, useLeaveRows } from "./PersonnelLeave.jsx";
-import { LEAVE_TYPES, leaveIdentity, mergeLeaveStatuses } from "./personnel-leave.js";
+import { LEAVE_DEPARTMENTS, LEAVE_TYPES, leaveIdentity, mergeLeaveStatuses } from "./personnel-leave.js";
 import personnelFloorPlanUrl from "./assets/plan-waescherei-putzerei.jpg";
 
 const supabase = createClient(
@@ -320,8 +320,20 @@ function normalizePersonnelEmployee(employee) {
 }
 
 function normalizePersonnelEmployees(employees, fallback) {
-  const source = Array.isArray(employees) && employees.length ? employees : fallback;
+  const source = Array.isArray(employees) ? employees : fallback;
   return source.map(normalizePersonnelEmployee);
+}
+
+function normalizeRemovedLeaveEmployees(employees) {
+  if (!Array.isArray(employees)) return [];
+  const people = new Map();
+  for (const row of employees) {
+    if (!row || typeof row.employee_name !== "string" || !row.employee_name.trim()
+      || !Object.prototype.hasOwnProperty.call(LEAVE_DEPARTMENTS, row.department)) continue;
+    const { department, employee_name } = row;
+    people.set(leaveIdentity(department, employee_name), { department, employee_name });
+  }
+  return [...people.values()];
 }
 
 const PERSONNEL_DEPARTMENTS = {
@@ -1069,6 +1081,13 @@ function App() {
   const [departmentDraft, setDepartmentDraft] = useState([]);
   const [personnelNoteDraft, setPersonnelNoteDraft] = useState([]);
   const [personnelSyncStatus, setPersonnelSyncStatus] = useState("loading");
+  const [removedLeaveEmployees, setRemovedLeaveEmployees] = useState(() => {
+    try {
+      return normalizeRemovedLeaveEmployees(JSON.parse(localStorage.getItem("dietexRemovedLeaveEmployees") || "[]"));
+    } catch {
+      return [];
+    }
+  });
   const [leaveRevision, setLeaveRevision] = useState(0);
   const leaveAccess = useLeaveAccess(supabase, !fixedView);
   const useLeaveInPlanning = leaveAccess.state === "allowed" && (view === "personalplanung" || view === "personalmonitor");
@@ -1121,6 +1140,7 @@ function App() {
     plan: personalPlan,
     employeeStatus,
     employeesByDept: personnelEmployeesByDept,
+    removedLeaveEmployees,
     sectionsByDept: personnelSectionsByDept,
     dayStrengthByDate: personnelDayStrengthByDate,
     floorPlanZones: personnelFloorPlanZones,
@@ -1128,6 +1148,10 @@ function App() {
     shiftLabels: personnelShiftLabels,
     startTimesByDate: personnelStartTimesByDate,
   });
+  const latestPersonnelState = useRef(null);
+  latestPersonnelState.current = createPersonnelStatePayload();
+  const hasUnsavedPersonnelChanges = () => personnelSyncReady.current && !personnelDisplayMode
+    && JSON.stringify(latestPersonnelState.current) !== lastPersonnelStateJson.current;
 
   const applyRemotePersonnelState = (remoteState) => {
     if (!remoteState || typeof remoteState !== "object") return;
@@ -1139,6 +1163,7 @@ function App() {
         waescherei: normalizePersonnelEmployees(remoteState.employeesByDept?.waescherei, PERSONNEL_EMPLOYEES),
         putzerei: normalizePersonnelEmployees(remoteState.employeesByDept?.putzerei, PUTZEREI_EMPLOYEES),
       },
+      removedLeaveEmployees: normalizeRemovedLeaveEmployees(remoteState.removedLeaveEmployees),
       sectionsByDept: {
         waescherei: normalizePersonnelSections(remoteState.sectionsByDept?.waescherei, PERSONNEL_SECTIONS),
         putzerei: normalizePersonnelSections(remoteState.sectionsByDept?.putzerei, PUTZEREI_SECTIONS),
@@ -1156,6 +1181,7 @@ function App() {
     setPersonalPlan(nextState.plan);
     setEmployeeStatus(nextState.employeeStatus);
     setPersonnelEmployeesByDept(nextState.employeesByDept);
+    setRemovedLeaveEmployees(nextState.removedLeaveEmployees);
     setPersonnelSectionsByDept(nextState.sectionsByDept);
     setPersonnelDayStrengthByDate(nextState.dayStrengthByDate);
     setPersonnelFloorPlanZones(nextState.floorPlanZones);
@@ -1185,10 +1211,7 @@ function App() {
 
       personnelSyncAvailable.current = true;
       if (data?.state) {
-        const hasUnsavedLocalChanges = personnelSyncReady.current
-          && !personnelDisplayMode
-          && JSON.stringify(createPersonnelStatePayload()) !== lastPersonnelStateJson.current;
-        if (hasUnsavedLocalChanges) return;
+        if (hasUnsavedPersonnelChanges()) return;
         applyRemotePersonnelState(data.state);
         personnelSyncReady.current = true;
         return;
@@ -1199,7 +1222,7 @@ function App() {
         return;
       }
 
-      const localState = createPersonnelStatePayload();
+      const localState = latestPersonnelState.current;
       const localJson = JSON.stringify(localState);
       const { error: insertError } = await supabase.from("personnel_planning_state").upsert({
         id: "main",
@@ -1225,7 +1248,7 @@ function App() {
         table: "personnel_planning_state",
         filter: "id=eq.main",
       }, (payload) => {
-        if (payload.new?.state) {
+        if (payload.new?.state && !hasUnsavedPersonnelChanges()) {
           applyRemotePersonnelState(payload.new.state);
           personnelSyncAvailable.current = true;
           personnelSyncReady.current = true;
@@ -1287,7 +1310,7 @@ function App() {
     return () => {
       if (personnelSaveTimer.current) window.clearTimeout(personnelSaveTimer.current);
     };
-  }, [personalPlan, employeeStatus, personnelEmployeesByDept, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones, personnelFloorPlanNotes, personnelShiftLabels, personnelStartTimesByDate]);
+  }, [personalPlan, employeeStatus, personnelEmployeesByDept, removedLeaveEmployees, personnelSectionsByDept, personnelDayStrengthByDate, personnelFloorPlanZones, personnelFloorPlanNotes, personnelShiftLabels, personnelStartTimesByDate]);
 
   useEffect(() => {
     if (personnelDisplayMode) return undefined;
@@ -1381,6 +1404,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("dietexPersonnelEmployeesByDept", JSON.stringify(personnelEmployeesByDept));
   }, [personnelEmployeesByDept]);
+
+  useEffect(() => {
+    localStorage.setItem("dietexRemovedLeaveEmployees", JSON.stringify(removedLeaveEmployees));
+  }, [removedLeaveEmployees]);
 
   useEffect(() => {
     localStorage.setItem("dietexPersonnelSectionsByDept", JSON.stringify(personnelSectionsByDept));
@@ -3687,6 +3714,7 @@ const tourColumns = Object.entries(
         : [...existing, savedEmployee];
       return { ...prev, [personalDepartment]: getSortedEmployees(next) };
     });
+    forgetRemovedLeaveEmployee({ department: personalDepartment, employee_name: name });
 
     if (editingEmployeeName) {
       if (editingEmployeeName !== name) {
@@ -3972,6 +4000,7 @@ const tourColumns = Object.entries(
         String(a.name).localeCompare(String(b.name), "de", { numeric: true })
       ),
     }));
+    forgetRemovedLeaveEmployee({ department: personalDepartment, employee_name: name });
 
     setNewEmployeeName("");
     setNewEmployeeHours("");
@@ -4036,9 +4065,18 @@ const tourColumns = Object.entries(
     });
   };
 
+  const forgetRemovedLeaveEmployee = ({ department, employee_name }) => {
+    setRemovedLeaveEmployees((prev) => prev.some((row) => row.department === department && row.employee_name === employee_name)
+      ? prev.filter((row) => row.department !== department || row.employee_name !== employee_name)
+      : prev);
+  };
+
   const deletePersonnelEmployee = (name) => {
     if (!window.confirm(`${name} wirklich löschen?`)) return;
 
+    setRemovedLeaveEmployees((prev) => normalizeRemovedLeaveEmployees([
+      ...prev, { department: personalDepartment, employee_name: name },
+    ]));
     setPersonnelEmployeesByDept((prev) => ({
       ...prev,
       [personalDepartment]: (prev[personalDepartment] || []).filter((e) => e.name !== name),
@@ -6747,6 +6785,9 @@ const tourColumns = Object.entries(
             client={supabase}
             access={leaveAccess}
             employeesByDept={personnelEmployeesByDept}
+            removedEmployees={removedLeaveEmployees}
+            directoryReady={personnelSyncStatus === "connected"}
+            onRemoveEmployee={forgetRemovedLeaveEmployee}
             today={personalDate}
             revision={leaveRevision}
             onChange={() => setLeaveRevision((revision) => revision + 1)}
